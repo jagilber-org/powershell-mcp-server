@@ -7,7 +7,6 @@ export declare class VSCodePowerShellMcpServer {
     private executePowerShellScript;
     private executePowerShellFile;
     private checkPowerShellSyntax;
-    start(): Promise<void>;
-    stop(): Promise<void>;
+    run(): Promise<void>;
 }
 //# sourceMappingURL=vscode-server.d.ts.map

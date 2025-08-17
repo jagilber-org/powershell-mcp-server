@@ -21,27 +21,19 @@ function sanitizeMetadata(metadata) {
     if (!metadata)
         return undefined;
     const sanitized = {};
-    for (const [key, value] of Object.entries(metadata)) {
+    Object.keys(metadata).forEach(key => {
+        const value = metadata[key];
         if (typeof value === 'string') {
-            // Truncate long strings but preserve structure info
-            if (value.length > 100) {
-                sanitized[key] = `[STRING:${value.length}chars]${value.substring(0, 50)}...${value.substring(value.length - 20)}`;
-            }
-            else if (key.toLowerCase().includes('path') && value.includes('\\')) {
-                // Sanitize file paths - keep structure but remove user-specific parts
-                sanitized[key] = value.replace(/\\Users\\[^\\]+/g, '\\Users\\[USER]');
-            }
-            else {
-                sanitized[key] = value;
-            }
+            // Limit string length to prevent log spam
+            sanitized[key] = value.length > 100 ? value.substring(0, 100) + '...' : value;
         }
-        else if (typeof value === 'number' || typeof value === 'boolean') {
+        else if (typeof value === 'object' && value !== null) {
+            sanitized[key] = '[Object]';
+        }
+        else {
             sanitized[key] = value;
         }
-        else if (value && typeof value === 'object') {
-            sanitized[key] = '[OBJECT]';
-        }
-    }
+    });
     return sanitized;
 }
 // PowerShell command execution schema
@@ -80,7 +72,7 @@ export class VSCodePowerShellMcpServer {
     server;
     constructor() {
         this.server = new Server({
-            name: 'vscode-powershell-mcp-server',
+            name: 'powershell-my-mcp-server',
             version: '1.0.0',
         }, {
             capabilities: {
@@ -90,21 +82,21 @@ export class VSCodePowerShellMcpServer {
         this.setupHandlers();
     }
     classifyCommandSafety(command) {
-        const lowerCommand = command.toLowerCase();
+        const upperCommand = command.toUpperCase();
         // Check for safe commands
-        if (SAFE_COMMANDS.some(safe => lowerCommand.includes(safe.toLowerCase()))) {
+        if (SAFE_COMMANDS.some(safeCmd => upperCommand.includes(safeCmd.toUpperCase()))) {
             return 'safe';
         }
         // Check for risky commands
-        if (RISKY_COMMANDS.some(risky => lowerCommand.includes(risky.toLowerCase()))) {
+        if (RISKY_COMMANDS.some(riskyCmd => upperCommand.includes(riskyCmd.toUpperCase()))) {
             return 'risky';
         }
         // Check for dangerous patterns
-        if (lowerCommand.includes('rm -rf') ||
-            lowerCommand.includes('del /f') ||
-            lowerCommand.includes('format') ||
-            lowerCommand.includes('shutdown') ||
-            lowerCommand.includes('restart')) {
+        if (upperCommand.includes('FORMAT C:') ||
+            upperCommand.includes('DEL /') ||
+            upperCommand.includes('RMDIR /') ||
+            upperCommand.includes('SHUTDOWN') ||
+            upperCommand.includes('RESTART-COMPUTER')) {
             return 'dangerous';
         }
         return 'risky'; // Default to risky for unknown commands
@@ -142,6 +134,12 @@ export class VSCodePowerShellMcpServer {
         // Handle tool execution
         this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const { name, arguments: args } = request.params;
+            // Log MCP request for debugging
+            auditLog('INFO', 'MCP_REQUEST', `MCP tool request: ${name}`, {
+                toolName: name,
+                hasArguments: !!args
+            });
+            console.log(`[MCP-REQUEST] ${new Date().toISOString()} - Tool: ${name}, Args: ${JSON.stringify(args)}`);
             try {
                 switch (name) {
                     case 'powershell-command': {
@@ -150,8 +148,8 @@ export class VSCodePowerShellMcpServer {
                         return {
                             content: [{
                                     type: 'text',
-                                    text: JSON.stringify(result, null, 2) + `\n\n[AUDIT-LOG] ${new Date().toISOString()} - Command executed successfully`
-                                }],
+                                    text: JSON.stringify(result, null, 2)
+                                }]
                         };
                     }
                     case 'powershell-script': {
@@ -160,8 +158,8 @@ export class VSCodePowerShellMcpServer {
                         return {
                             content: [{
                                     type: 'text',
-                                    text: JSON.stringify(result, null, 2) + `\n\n[AUDIT-LOG] ${new Date().toISOString()} - Command executed successfully`
-                                }],
+                                    text: JSON.stringify(result, null, 2)
+                                }]
                         };
                     }
                     case 'powershell-file': {
@@ -170,8 +168,8 @@ export class VSCodePowerShellMcpServer {
                         return {
                             content: [{
                                     type: 'text',
-                                    text: JSON.stringify(result, null, 2) + `\n\n[AUDIT-LOG] ${new Date().toISOString()} - Command executed successfully`
-                                }],
+                                    text: JSON.stringify(result, null, 2)
+                                }]
                         };
                     }
                     case 'powershell-syntax-check': {
@@ -182,8 +180,8 @@ export class VSCodePowerShellMcpServer {
                         return {
                             content: [{
                                     type: 'text',
-                                    text: JSON.stringify(result, null, 2) + `\n\n[AUDIT-LOG] ${new Date().toISOString()} - Command executed successfully`
-                                }],
+                                    text: JSON.stringify(result, null, 2)
+                                }]
                         };
                     }
                     default:
@@ -191,23 +189,26 @@ export class VSCodePowerShellMcpServer {
                 }
             }
             catch (error) {
-                if (error instanceof McpError) {
-                    throw error;
+                auditLog('ERROR', 'MCP_ERROR', `Tool execution failed: ${name}`, {
+                    error: error instanceof Error ? error.message : String(error)
+                });
+                if (error instanceof z.ZodError) {
+                    throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.message}`);
                 }
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                throw new McpError(ErrorCode.InternalError, `Tool execution failed: ${errorMessage}`);
+                throw error;
             }
         });
     }
     async executePowerShellCommand(command, timeout = 30000, workingDirectory) {
-        console.log(`[MCP-AUDIT] ${new Date().toISOString()} - Command execution started: ${command.substring(0, 50)}${command.length > 50 ? "..." : ""}`);
-        auditLog('INFO', 'COMMAND_START', 'PowerShell command execution started', {
-            command: command.length > 50 ? command.substring(0, 50) + '...' : command,
-            timeout: timeout,
-            workingDirectory: workingDirectory || 'default'
-        });
         return new Promise((resolve, reject) => {
             const safety = this.classifyCommandSafety(command);
+            auditLog('INFO', 'COMMAND_START', 'PowerShell command execution started', {
+                command: command.length > 50 ? command.substring(0, 50) + '...' : command,
+                timeout: timeout,
+                safety: safety,
+                workingDirectory: workingDirectory
+            });
+            console.log(`[MCP-AUDIT] ${new Date().toISOString()} - Command execution started: ${command.substring(0, 50)}${command.length > 50 ? "..." : ""}`);
             const options = {
                 shell: false,
                 stdio: ['pipe', 'pipe', 'pipe'],
@@ -239,22 +240,26 @@ export class VSCodePowerShellMcpServer {
                     success: code === 0,
                     safety,
                     timestamp: new Date().toISOString(),
-                    workingDirectory: workingDirectory || process.cwd(),
+                    workingDirectory: workingDirectory || process.cwd()
                 };
+                auditLog('INFO', 'COMMAND_COMPLETE', 'PowerShell command execution completed', {
+                    exitCode: code,
+                    success: code === 0,
+                    safety: safety
+                });
+                console.log(`[AUDIT-LOG] ${new Date().toISOString()} - Command executed successfully`);
                 resolve(result);
             });
             ps.on('error', (error) => {
                 clearTimeout(timer);
-                reject(new Error(`Process spawn error: ${error.message}`));
+                auditLog('ERROR', 'COMMAND_ERROR', 'PowerShell command execution failed', {
+                    error: error.message
+                });
+                reject(error);
             });
         });
     }
     async executePowerShellScript(script, timeout = 30000, workingDirectory) {
-        auditLog('INFO', 'COMMAND_START', 'PowerShell command execution started', {
-            command: command.length > 50 ? command.substring(0, 50) + '...' : command,
-            timeout: timeout,
-            workingDirectory: workingDirectory || 'default'
-        });
         return new Promise((resolve, reject) => {
             const safety = this.classifyCommandSafety(script);
             const options = {
@@ -264,7 +269,7 @@ export class VSCodePowerShellMcpServer {
             if (workingDirectory) {
                 options.cwd = workingDirectory;
             }
-            const ps = spawn('pwsh', ['-Command', '-'], options);
+            const ps = spawn('pwsh', ['-Command', script], options);
             let stdout = '';
             let stderr = '';
             ps.stdout?.on('data', (data) => {
@@ -279,65 +284,80 @@ export class VSCodePowerShellMcpServer {
             }, timeout);
             ps.on('close', (code) => {
                 clearTimeout(timer);
-                const result = {
+                resolve({
                     method: 'vscode-powershell-script',
-                    script: script.substring(0, 100) + (script.length > 100 ? '...' : ''),
+                    script: script.length > 100 ? script.substring(0, 100) + '...' : script,
                     exitCode: code,
                     stdout: stdout.trim(),
                     stderr: stderr.trim(),
                     success: code === 0,
                     safety,
                     timestamp: new Date().toISOString(),
-                    workingDirectory: workingDirectory || process.cwd(),
-                };
-                resolve(result);
+                    workingDirectory: workingDirectory || process.cwd()
+                });
             });
             ps.on('error', (error) => {
                 clearTimeout(timer);
-                reject(new Error(`Script execution error: ${error.message}`));
+                reject(error);
             });
-            // Send script to PowerShell
-            ps.stdin?.write(script);
-            ps.stdin?.end();
         });
     }
     async executePowerShellFile(filePath, parameters, timeout = 30000, workingDirectory) {
-        let command = `& "${filePath}"`;
-        if (parameters) {
-            for (const [key, value] of Object.entries(parameters)) {
-                if (typeof value === 'string') {
-                    command += ` -${key} "${value}"`;
-                }
-                else {
-                    command += ` -${key} ${value}`;
-                }
+        return new Promise((resolve, reject) => {
+            let command = `& "${filePath}"`;
+            if (parameters) {
+                const paramString = Object.entries(parameters)
+                    .map(([key, value]) => `-${key} "${value}"`)
+                    .join(' ');
+                command += ` ${paramString}`;
             }
-        }
-        const result = await this.executePowerShellCommand(command, timeout, workingDirectory);
-        return {
-            ...result,
-            method: 'vscode-powershell-file',
-            filePath,
-            parameters,
-        };
+            const safety = 'risky'; // File execution is inherently risky
+            const options = {
+                shell: false,
+                stdio: ['pipe', 'pipe', 'pipe'],
+            };
+            if (workingDirectory) {
+                options.cwd = workingDirectory;
+            }
+            const ps = spawn('pwsh', ['-Command', command], options);
+            let stdout = '';
+            let stderr = '';
+            ps.stdout?.on('data', (data) => {
+                stdout += data.toString();
+            });
+            ps.stderr?.on('data', (data) => {
+                stderr += data.toString();
+            });
+            const timer = setTimeout(() => {
+                ps.kill();
+                reject(new Error(`File execution timed out after ${timeout}ms`));
+            }, timeout);
+            ps.on('close', (code) => {
+                clearTimeout(timer);
+                resolve({
+                    method: 'vscode-powershell-file',
+                    filePath,
+                    parameters,
+                    exitCode: code,
+                    stdout: stdout.trim(),
+                    stderr: stderr.trim(),
+                    success: code === 0,
+                    safety,
+                    timestamp: new Date().toISOString(),
+                    workingDirectory: workingDirectory || process.cwd()
+                });
+            });
+            ps.on('error', (error) => {
+                clearTimeout(timer);
+                reject(error);
+            });
+        });
     }
     async checkPowerShellSyntax(content) {
-        auditLog('INFO', 'COMMAND_START', 'PowerShell command execution started', {
-            command: command.length > 50 ? command.substring(0, 50) + '...' : command,
-            timeout: timeout,
-            workingDirectory: workingDirectory || 'default'
-        });
         return new Promise((resolve, reject) => {
-            const syntaxCheckCommand = `
-        try {
-          [System.Management.Automation.PSParser]::Tokenize(@"
+            const syntaxCheckCommand = `try { [System.Management.Automation.ScriptBlock]::Create($@'
 ${content}
-"@, [ref]$null) | Out-Null
-          Write-Output "Syntax OK"
-        } catch {
-          Write-Error $_.Exception.Message
-        }
-      `;
+'@); Write-Output "Syntax OK" } catch { Write-Error $_.Exception.Message }`;
             const ps = spawn('pwsh', ['-Command', syntaxCheckCommand], {
                 shell: false,
                 stdio: ['pipe', 'pipe', 'pipe'],
@@ -350,58 +370,28 @@ ${content}
             ps.stderr?.on('data', (data) => {
                 stderr += data.toString();
             });
-            const timer = setTimeout(() => {
-                ps.kill();
-                reject(new Error('Syntax check timed out'));
-            }, 10000);
             ps.on('close', (code) => {
-                clearTimeout(timer);
-                const result = {
+                const isValid = code === 0 && stdout.includes('Syntax OK');
+                resolve({
                     method: 'vscode-powershell-syntax-check',
-                    content: content.substring(0, 100) + (content.length > 100 ? '...' : ''),
+                    content: content.length > 100 ? content.substring(0, 100) + '...' : content,
+                    isValid,
                     exitCode: code,
                     stdout: stdout.trim(),
                     stderr: stderr.trim(),
-                    syntaxValid: code === 0 && stdout.includes('Syntax OK'),
-                    timestamp: new Date().toISOString(),
-                };
-                resolve(result);
+                    timestamp: new Date().toISOString()
+                });
             });
             ps.on('error', (error) => {
-                clearTimeout(timer);
-                reject(new Error(`Syntax check error: ${error.message}`));
+                reject(error);
             });
         });
     }
-    async start() {
-        // VS Code MCP servers use stdio transport
+    async run() {
         const transport = new StdioServerTransport();
         await this.server.connect(transport);
     }
-    async stop() {
-        // Clean shutdown
-        console.log('VS Code PowerShell MCP server stopping...');
-    }
 }
-// Entry point for VS Code MCP server
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1].endsWith('vscode-server.js')) {
-    const server = new VSCodePowerShellMcpServer();
-    server.start().catch((error) => {
-        console.error('Failed to start VS Code PowerShell MCP server:', error);
-        process.exit(1);
-    });
-    // Handle graceful shutdown
-    process.on('SIGINT', async () => {
-        console.log('\nReceived SIGINT, shutting down VS Code PowerShell MCP server gracefully...');
-        await server.stop();
-        process.exit(0);
-    });
-    process.on('SIGTERM', async () => {
-        console.log('\nReceived SIGTERM, shutting down VS Code PowerShell MCP server gracefully...');
-        await server.stop();
-        process.exit(0);
-    });
-}
+const server = new VSCodePowerShellMcpServer();
+server.run().catch(console.error);
 //# sourceMappingURL=vscode-server.js.map
-
-
