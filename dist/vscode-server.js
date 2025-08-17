@@ -14,7 +14,7 @@ function auditLog(level, category, message, metadata) {
         message,
         ...(metadata && { metadata: sanitizeMetadata(metadata) })
     };
-    console.log("[AUDIT] " + JSON.stringify(logEntry));
+    console.error("[AUDIT] " + JSON.stringify(logEntry));
 }
 // Sanitize metadata to remove PII and limit content length
 function sanitizeMetadata(metadata) {
@@ -139,7 +139,7 @@ export class VSCodePowerShellMcpServer {
                 toolName: name,
                 hasArguments: !!args
             });
-            console.log("[MCP-REQUEST] " + new Date().toISOString() + " - Tool: " + name + ", Args: " + JSON.stringify(args));
+            console.error("[MCP-REQUEST] " + new Date().toISOString() + " - Tool: " + name + ", Args: " + JSON.stringify(args));
             try {
                 switch (name) {
                     case 'powershell-command': {
@@ -208,7 +208,7 @@ export class VSCodePowerShellMcpServer {
                 safety: safety,
                 workingDirectory: workingDirectory
             });
-            console.log("[MCP-AUDIT] " + new Date().toISOString() + " - Command execution started: " + (command.length > 50 ? command.substring(0, 50) + "..." : command));
+            console.error("[MCP-AUDIT] " + new Date().toISOString() + " - Command execution started: " + (command.length > 50 ? command.substring(0, 50) + "..." : command));
             const options = {
                 shell: false,
                 stdio: ['pipe', 'pipe', 'pipe'],
@@ -247,7 +247,7 @@ export class VSCodePowerShellMcpServer {
                     success: code === 0,
                     safety: safety
                 });
-                console.log("[AUDIT-LOG] " + new Date().toISOString() + " - Command executed successfully");
+                console.error("[AUDIT-LOG] " + new Date().toISOString() + " - Command executed successfully");
                 resolve(result);
             });
             ps.on('error', (error) => {
