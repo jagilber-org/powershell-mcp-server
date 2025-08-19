@@ -1,1 +1,0 @@
-{"version":3,"file":"vscode-server.d.ts","sourceRoot":"","sources":["../src/vscode-server.ts"],"names":[],"mappings":"AAiFA,qBAAa,yBAAyB;IACpC,OAAO,CAAC,MAAM,CAAS;;IAkBvB,OAAO,CAAC,qBAAqB;IAyB7B,OAAO,CAAC,aAAa;YAuHP,wBAAwB;YA+ExB,uBAAuB;YAyDvB,qBAAqB;YAoErB,qBAAqB;IAyC7B,GAAG;CAIV"}

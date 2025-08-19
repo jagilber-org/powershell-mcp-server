@@ -6,8 +6,10 @@ yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
 
-# Compiled output
-dist/
+# Compiled output - ignore most but allow enterprise server
+dist/*
+!dist/vscode-server-enterprise.js
+!dist/vscode-server-enterprise.d.ts
 build/
 out/
 
@@ -89,7 +91,6 @@ web_modules/
 
 # Nuxt.js build / generate output
 .nuxt
-dist
 
 # Gatsby files
 .cache/
@@ -137,8 +138,7 @@ Thumbs.db
 Desktop.ini
 .BIN/
 
-# MCP Server specific
-# Keep dist/ out of repo since it's built from TypeScript
+# MCP Server specific  
 # Keep logs/ out since they contain runtime information
 # Keep any auth tokens or credentials out
 *.key
