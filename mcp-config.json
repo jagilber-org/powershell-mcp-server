@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "powershell-mcp-server": {
+      "command": "node",
+      "args": [
+        "dist/vscode-server-enterprise.js"
+      ],
+      "cwd": "c:\\github\\jagilber-pr\\powershell-mcp-server"
+    }
+  }
+}

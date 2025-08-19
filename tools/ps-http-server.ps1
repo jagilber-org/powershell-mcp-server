@@ -21,13 +21,122 @@ param(
     [int]$Port = 8383,  # Try alternate ports if blocked
     
     [Parameter(Mandatory=$false)]
-    [switch]$Terminate
+    [switch]$Terminate,
+    
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('Job', 'RestrictedRunspace', 'ScriptBlock')]
+    [string]$ExecutionMethod = 'Job'  # Default to Job execution for safety
 )
 
 # Generate random key if not provided
 if ([string]::IsNullOrEmpty($Key)) {
     $Key = -join ((1..8) | ForEach { [char]((65..90) + (97..122) + (48..57) | Get-Random) })
     Write-Host "🔑 Auto-generated key: $Key" -ForegroundColor Yellow
+}
+
+function Invoke-SafeRestrictedCommand {
+    param(
+        [string]$Command,
+        [int]$TimeoutSeconds = 300
+    )
+    
+    # Create a restricted runspace with limited capabilities
+    $sessionState = [System.Management.Automation.Runspaces.InitialSessionState]::CreateRestricted([System.Management.Automation.SessionCapabilities]::Language)
+    
+    # Allow only safe cmdlets (read-only operations)
+    $safeCmdlets = @(
+        'Get-*', 'Show-*', 'Find-*', 'Test-*', 'Measure-*', 'Compare-*', 
+        'Select-*', 'Where-*', 'Sort-*', 'Group-*', 'Format-*',
+        'ConvertTo-*', 'ConvertFrom-*', 'Out-String', 'Write-Output'
+    )
+    
+    foreach ($cmdletPattern in $safeCmdlets) {
+        $cmdlets = Get-Command -Name $cmdletPattern -ErrorAction SilentlyContinue
+        foreach ($cmdlet in $cmdlets) {
+            $sessionState.Commands.Add((New-Object System.Management.Automation.Runspaces.SessionStateCmdletEntry($cmdlet.Name, $cmdlet.ImplementingType, $null)))
+        }
+    }
+    
+    # Create and open the runspace
+    $runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace($sessionState)
+    $runspace.Open()
+    
+    try {
+        # Create PowerShell instance in the restricted runspace
+        $powershell = [System.Management.Automation.PowerShell]::Create()
+        $powershell.Runspace = $runspace
+        $powershell.AddScript($Command)
+        
+        # Execute with timeout
+        $asyncResult = $powershell.BeginInvoke()
+        $completed = $asyncResult.AsyncWaitHandle.WaitOne($TimeoutSeconds * 1000)
+        
+        if ($completed) {
+            $output = $powershell.EndInvoke($asyncResult)
+            $errors = $powershell.Streams.Error
+            
+            if ($errors.Count -gt 0) {
+                throw "Command execution errors: $($errors -join '; ')"
+            }
+            
+            return $output
+        } else {
+            $powershell.Stop()
+            throw "Command timed out after $TimeoutSeconds seconds"
+        }
+    }
+    finally {
+        if ($powershell) { $powershell.Dispose() }
+        if ($runspace) { $runspace.Dispose() }
+    }
+}
+
+function Test-CommandSyntax {
+    param([string]$Command)
+    
+    try {
+        # Parse the command to check for syntax errors without executing
+        $tokens = $null
+        $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($Command, [ref]$tokens, [ref]$errors)
+        
+        if ($errors.Count -gt 0) {
+            return @{
+                IsValid = $false
+                Errors = $errors | ForEach-Object { $_.Message }
+            }
+        }
+        
+        # Check for dangerous patterns in the AST
+        $dangerousPatterns = @(
+            'Invoke-Expression', 'iex', 'Invoke-Command',
+            'Start-Process', 'cmd.exe', 'powershell.exe',
+            'Add-Type', 'Reflection.Assembly',
+            'DownloadString', 'DownloadFile', 'WebClient',
+            'WScript.Shell', 'Shell.Application'
+        )
+        
+        $commandText = $Command.ToLower()
+        foreach ($pattern in $dangerousPatterns) {
+            if ($commandText -like "*$($pattern.ToLower())*") {
+                return @{
+                    IsValid = $false
+                    Errors = @("Command contains potentially dangerous pattern: $pattern")
+                }
+            }
+        }
+        
+        return @{
+            IsValid = $true
+            Errors = @()
+        }
+    }
+    catch {
+        return @{
+            IsValid = $false
+            Errors = @("Failed to parse command: $($_.Exception.Message)")
+        }
+    }
 }
 
 function Test-AutoExecutionSafety {
@@ -103,7 +212,8 @@ function Test-AutoExecutionSafety {
 function Start-PowerShellHttpServer {
     param(
         [int]$StartPort = 8383,
-        [string]$Key
+        [string]$Key,
+        [string]$ExecutionMethod = 'Job'
     )
     
     $listener = $null
@@ -240,40 +350,89 @@ function Start-PowerShellHttpServer {
                 
                 # Handle PowerShell command execution
                 if ($cmd) {
-                    # Check if command is safe for automatic execution
-                    $isSafeForAuto = Test-AutoExecutionSafety -Command $cmd
+                    # First, validate command syntax
+                    $syntaxCheck = Test-CommandSyntax -Command $cmd
                     
-                    if (-not $isSafeForAuto) {
-                        Write-Host "⚠️  Command requires confirmation: $cmd" -ForegroundColor Yellow
+                    if (-not $syntaxCheck.IsValid) {
+                        Write-Host "❌ Command syntax validation failed: $cmd" -ForegroundColor Red
                         
-                        $warningResponse = @{
+                        $syntaxErrorResponse = @{
                             command = $cmd
-                            warning = "Command potentially modifies system state and requires confirmation"
-                            suggestion = "Use safe read-only commands (Get-, Show-, Test-Path, etc.)"
-                            requires_confirmation = $true
-                            safe_alternatives = @(
-                                "Get-Process", "Get-Service", "Get-ChildItem", "Get-Date", "Test-Path"
-                            )
+                            error = "Syntax validation failed"
+                            details = $syntaxCheck.Errors
                             timestamp = (Get-Date).ToString('o')
-                            port = $actualPort
                         } | ConvertTo-Json
                         
-                        $buffer = [System.Text.Encoding]::UTF8.GetBytes($warningResponse)
-                        $response.StatusCode = 403  # Forbidden for safety
+                        $buffer = [System.Text.Encoding]::UTF8.GetBytes($syntaxErrorResponse)
+                        $response.StatusCode = 400  # Bad Request
                         $response.ContentLength64 = $buffer.Length
                         $response.OutputStream.Write($buffer, 0, $buffer.Length)
                         
-                        Write-Host "🛡️  Blocked potentially unsafe command for security" -ForegroundColor Red
+                        Write-Host "🛡️  Blocked syntactically invalid command" -ForegroundColor Red
                     }
+                    else {
+                        # Check if command is safe for automatic execution
+                        $isSafeForAuto = Test-AutoExecutionSafety -Command $cmd
+                        
+                        if (-not $isSafeForAuto) {
+                            Write-Host "⚠️  Command requires confirmation: $cmd" -ForegroundColor Yellow
+                            
+                            $warningResponse = @{
+                                command = $cmd
+                                warning = "Command potentially modifies system state and requires confirmation"
+                                suggestion = "Use safe read-only commands (Get-, Show-, Test-Path, etc.)"
+                                requires_confirmation = $true
+                                safe_alternatives = @(
+                                    "Get-Process", "Get-Service", "Get-ChildItem", "Get-Date", "Test-Path"
+                                )
+                                timestamp = (Get-Date).ToString('o')
+                                port = $actualPort
+                            } | ConvertTo-Json
+                            
+                            $buffer = [System.Text.Encoding]::UTF8.GetBytes($warningResponse)
+                            $response.StatusCode = 403  # Forbidden for safety
+                            $response.ContentLength64 = $buffer.Length
+                            $response.OutputStream.Write($buffer, 0, $buffer.Length)
+                            
+                            Write-Host "🛡️  Blocked potentially unsafe command for security" -ForegroundColor Red
+                        }
                     else {
                         Write-Host "⚡ Auto-executing safe command: $cmd" -ForegroundColor Yellow
                         
                         try {
                             $startTime = Get-Date
                             
-                            # Use PowerShell's scriptblock approach for safer execution
-                            $scriptBlock = [ScriptBlock]::Create($cmd)
-                            $output = & $scriptBlock 2>&1
+                            # Choose execution method based on parameter
+                            switch ($ExecutionMethod) {
+                                'RestrictedRunspace' {
+                                    Write-Host "🔒 Using Restricted Runspace execution" -ForegroundColor Cyan
+                                    $output = Invoke-SafeRestrictedCommand -Command $cmd -TimeoutSeconds 300
+                                }
+                                'Job' {
+                                    Write-Host "🔄 Using PowerShell Job execution" -ForegroundColor Cyan
+                                    # Use PowerShell Job for safer isolated execution
+                                    $job = Start-Job -ScriptBlock ([ScriptBlock]::Create($cmd)) -Name "SafeExec_$(Get-Date -Format 'HHmmss')"
+                                    
+                                    # Wait for job with timeout (300 seconds = 5 minutes)
+                                    $completed = Wait-Job -Job $job -Timeout 300
+                                    
+                                    if ($completed) {
+                                        $output = Receive-Job -Job $job 2>&1
+                                        Remove-Job -Job $job -Force
+                                    } else {
+                                        # Job timed out, kill it
+                                        Stop-Job -Job $job -Force
+                                        Remove-Job -Job $job -Force
+                                        throw "Command timed out after 300 seconds"
+                                    }
+                                }
+                                'ScriptBlock' {
+                                    Write-Host "📜 Using ScriptBlock execution" -ForegroundColor Cyan
+                                    # Use PowerShell's scriptblock approach (less secure but faster)
+                                    $scriptBlock = [ScriptBlock]::Create($cmd)
+                                    $output = & $scriptBlock 2>&1
+                                }
+                            }
                         
                         $endTime = Get-Date
                         $duration = ($endTime - $startTime).TotalMilliseconds
@@ -381,7 +540,7 @@ function Send-PowerShellHttpRequest {
         
         Write-Host "📤 Sending request to: $url" -ForegroundColor Cyan
         
-        $response = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 30
+        $response = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 300
         Write-Host "📥 Response received:" -ForegroundColor Green
         $response | ConvertTo-Json -Depth 10 | Write-Host
         
@@ -397,7 +556,8 @@ function Send-PowerShellHttpRequest {
 switch ($Mode.ToLower()) {
     'server' {
         Write-Host "🚀 Starting PowerShell HTTP Server..." -ForegroundColor Green
-        Start-PowerShellHttpServer -StartPort $Port -Key $Key
+        Write-Host "🔧 Execution Method: $ExecutionMethod" -ForegroundColor Yellow
+        Start-PowerShellHttpServer -StartPort $Port -Key $Key -ExecutionMethod $ExecutionMethod
     }
     
     'client' {
@@ -438,8 +598,10 @@ switch ($Mode.ToLower()) {
 }
 
 # Usage examples:
-# .\ps-http-server.ps1 -Mode server                                           # Start server (auto-generates key, finds available port)
-# .\ps-http-server.ps1 -Mode server -Key "mykey123" -Port 8383               # Start server with specific key and port
+# .\ps-http-server.ps1 -Mode server                                           # Start server (auto-generates key, finds available port, uses Job execution)
+# .\ps-http-server.ps1 -Mode server -Key "mykey123" -Port 8383 -ExecutionMethod "RestrictedRunspace"  # Start server with restricted runspace (most secure)
+# .\ps-http-server.ps1 -Mode server -ExecutionMethod "Job"                    # Use PowerShell Jobs (recommended for isolation)
+# .\ps-http-server.ps1 -Mode server -ExecutionMethod "ScriptBlock"            # Use ScriptBlocks (faster but less secure)
 # .\ps-http-server.ps1 -Mode client -ServerUrl "http://localhost:8384" -Key "abc123" -Command "Get-Date"  # Send command
 # .\ps-http-server.ps1 -Mode client -ServerUrl "http://localhost:8384" -Key "abc123" -Terminate          # Terminate server
 # .\ps-http-server.ps1 -Mode test -ServerUrl "http://localhost:8384" -Key "abc123"                       # Run tests
