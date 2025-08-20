@@ -257,15 +257,37 @@ function Find-RunningMCPServers {
                         # Method 2: If it's just "node dist/server.js", this is likely run from project root
                         elseif ($commandLine -match '^node\s+dist[/\\]server\.js') {
                             # For relative paths, we need to find which directories contain dist/server.js
-                            # Check common MCP server locations
-                            $possibleDirs = @(
-                                "c:\github\jagilber-pr\powershell-mcp-server",
-                                "c:\github\jagilber-pr\collectsfdata",
-                                "c:\github\jagilber-pr\mcp-pr",
-                                "c:\github\jagilber-pr\mcp-client"
-                            )
+                            # Dynamically search for MCP server directories instead of using hardcoded paths
+                            $possibleDirs = @()
                             
-                            foreach ($dir in $possibleDirs) {
+                            # Search common GitHub directories dynamically
+                            $githubRoots = @("C:\github", "C:\Users\$env:USERNAME\github", "C:\src", "C:\code")
+                            foreach ($githubRoot in $githubRoots) {
+                                if (Test-Path $githubRoot) {
+                                    # Find all directories that might contain MCP servers
+                                    $mcpDirs = Get-ChildItem $githubRoot -Directory -Recurse -Depth 2 -ErrorAction SilentlyContinue |
+                                        Where-Object { 
+                                            (Test-Path (Join-Path $_.FullName "dist\server.js")) -or 
+                                            (Test-Path (Join-Path $_.FullName "package.json")) -and
+                                            (Get-Content (Join-Path $_.FullName "package.json") -ErrorAction SilentlyContinue | Select-String "mcp")
+                                        } |
+                                        Select-Object -ExpandProperty FullName
+                                    $possibleDirs += $mcpDirs
+                                }
+                            }
+                            
+                            # Also check current directory and parent directories
+                            $currentPath = Get-Location
+                            for ($i = 0; $i -lt 3; $i++) {
+                                $testPath = $currentPath.Path
+                                for ($j = 0; $j -lt $i; $j++) { $testPath = Split-Path $testPath -Parent }
+                                if ($testPath -and (Test-Path (Join-Path $testPath "dist\server.js"))) {
+                                    $possibleDirs += $testPath
+                                }
+                            }
+                            
+                            # Find the directory with dist/server.js
+                            foreach ($dir in ($possibleDirs | Select-Object -Unique)) {
                                 $serverFile = Join-Path $dir "dist\server.js"
                                 if (Test-Path $serverFile) {
                                     $workingDir = $dir
@@ -316,12 +338,43 @@ function Find-MCPLogFiles {
         }
     }
     
-    # If no active servers found, exit - don't use fallback paths
+    # If no active servers found, try fallback search in common locations
     if ($searchPaths.Count -eq 0) {
-        Write-Host "    [!] No active MCP servers detected. Start an MCP server first." -ForegroundColor Red
-        Write-Host "Press any key to close..." -ForegroundColor Yellow
-        $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-        exit 1
+        Write-Host "    [!] No active MCP servers detected. Searching for existing log files..." -ForegroundColor Yellow
+        
+        # Fallback: search common GitHub locations dynamically
+        $fallbackPaths = @()
+        $githubRoots = @("C:\github", "C:\Users\$env:USERNAME\github", "C:\src", "C:\code")
+        
+        foreach ($githubRoot in $githubRoots) {
+            if (Test-Path $githubRoot) {
+                # Find directories with MCP-related files or logs
+                $mcpDirs = Get-ChildItem $githubRoot -Directory -Recurse -Depth 2 -ErrorAction SilentlyContinue |
+                    Where-Object { 
+                        (Test-Path (Join-Path $_.FullName "logs")) -or
+                        (Test-Path (Join-Path $_.FullName "dist\server.js")) -or
+                        (Test-Path (Join-Path $_.FullName "mcp-config.json")) -or
+                        (Test-Path (Join-Path $_.FullName "package.json")) -and
+                        (Get-Content (Join-Path $_.FullName "package.json") -ErrorAction SilentlyContinue | Select-String "mcp")
+                    } |
+                    Select-Object -ExpandProperty FullName
+                $fallbackPaths += $mcpDirs
+            }
+        }
+        
+        # Also include current directory
+        $fallbackPaths += (Get-Location).Path
+        
+        $searchPaths = $fallbackPaths | Select-Object -Unique
+        
+        if ($searchPaths.Count -eq 0) {
+            Write-Host "    [X] No MCP-related directories found. Please start an MCP server or specify a log path." -ForegroundColor Red
+            Write-Host "Press any key to close..." -ForegroundColor Yellow
+            $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+            exit 1
+        } else {
+            Write-Host "    [+] Found $($searchPaths.Count) potential MCP directories to search" -ForegroundColor Green
+        }
     }
     
     $foundLogs = @()

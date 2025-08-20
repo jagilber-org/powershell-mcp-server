@@ -13,7 +13,10 @@
     "start:enterprise": "node dist/server.js",
     "start:legacy": "node dist/vscode-server.js",
     "inspector": "npx @modelcontextprotocol/inspector node dist/index.js",
-    "clean": "rmdir /s /q dist 2>nul & mkdir dist"
+    "clean": "rmdir /s /q dist 2>nul & mkdir dist",
+    "compliance:check": "powershell -ExecutionPolicy Bypass -File Simple-MCPCheck.ps1",
+    "compliance:report": "powershell -ExecutionPolicy Bypass -File Check-MCPCompliance.ps1 -SaveReport",
+    "precommit": "npm run compliance:check && npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.6.0",
