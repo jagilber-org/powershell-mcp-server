@@ -113,6 +113,109 @@ const SAFE_PATTERNS = [
     '^Measure-Object'
 ];
 // ==============================================================================
+// POWERSHELL ALIAS DETECTION - Security threat analysis
+// ==============================================================================
+/** Common PowerShell aliases that could be security threats */
+const POWERSHELL_ALIAS_MAP = {
+    // File System Operations
+    'ls': { cmdlet: 'Get-ChildItem', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'dir': { cmdlet: 'Get-ChildItem', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'gci': { cmdlet: 'Get-ChildItem', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'cat': { cmdlet: 'Get-Content', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'type': { cmdlet: 'Get-Content', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'gc': { cmdlet: 'Get-Content', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'rm': { cmdlet: 'Remove-Item', risk: 'HIGH', category: 'FILE_OPERATION' },
+    'del': { cmdlet: 'Remove-Item', risk: 'HIGH', category: 'FILE_OPERATION' },
+    'erase': { cmdlet: 'Remove-Item', risk: 'HIGH', category: 'FILE_OPERATION' },
+    'rd': { cmdlet: 'Remove-Item', risk: 'HIGH', category: 'FILE_OPERATION' },
+    'ri': { cmdlet: 'Remove-Item', risk: 'HIGH', category: 'FILE_OPERATION' },
+    'cp': { cmdlet: 'Copy-Item', risk: 'MEDIUM', category: 'FILE_OPERATION' },
+    'copy': { cmdlet: 'Copy-Item', risk: 'MEDIUM', category: 'FILE_OPERATION' },
+    'cpi': { cmdlet: 'Copy-Item', risk: 'MEDIUM', category: 'FILE_OPERATION' },
+    'mv': { cmdlet: 'Move-Item', risk: 'MEDIUM', category: 'FILE_OPERATION' },
+    'move': { cmdlet: 'Move-Item', risk: 'MEDIUM', category: 'FILE_OPERATION' },
+    'mi': { cmdlet: 'Move-Item', risk: 'MEDIUM', category: 'FILE_OPERATION' },
+    'md': { cmdlet: 'New-Item -ItemType Directory', risk: 'LOW', category: 'FILE_OPERATION' },
+    'mkdir': { cmdlet: 'New-Item -ItemType Directory', risk: 'LOW', category: 'FILE_OPERATION' },
+    'ni': { cmdlet: 'New-Item', risk: 'MEDIUM', category: 'FILE_OPERATION' },
+    // Process Management  
+    'ps': { cmdlet: 'Get-Process', risk: 'LOW', category: 'PROCESS_MANAGEMENT' },
+    'gps': { cmdlet: 'Get-Process', risk: 'LOW', category: 'PROCESS_MANAGEMENT' },
+    'kill': { cmdlet: 'Stop-Process', risk: 'HIGH', category: 'PROCESS_MANAGEMENT' },
+    'spps': { cmdlet: 'Stop-Process', risk: 'HIGH', category: 'PROCESS_MANAGEMENT' },
+    'start': { cmdlet: 'Start-Process', risk: 'HIGH', category: 'PROCESS_MANAGEMENT' },
+    'saps': { cmdlet: 'Start-Process', risk: 'HIGH', category: 'PROCESS_MANAGEMENT' },
+    // Service Management
+    'gsv': { cmdlet: 'Get-Service', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'sasv': { cmdlet: 'Start-Service', risk: 'HIGH', category: 'SYSTEM_MODIFICATION' },
+    'spsv': { cmdlet: 'Stop-Service', risk: 'HIGH', category: 'SYSTEM_MODIFICATION' },
+    'rsv': { cmdlet: 'Restart-Service', risk: 'HIGH', category: 'SYSTEM_MODIFICATION' },
+    // Registry Operations
+    'gp': { cmdlet: 'Get-ItemProperty', risk: 'MEDIUM', category: 'REGISTRY_MODIFICATION' },
+    'sp': { cmdlet: 'Set-ItemProperty', risk: 'CRITICAL', category: 'REGISTRY_MODIFICATION' },
+    'rp': { cmdlet: 'Remove-ItemProperty', risk: 'CRITICAL', category: 'REGISTRY_MODIFICATION' },
+    // Network Operations
+    'nslookup': { cmdlet: 'Resolve-DnsName', risk: 'MEDIUM', category: 'INFORMATION_GATHERING' },
+    'ping': { cmdlet: 'Test-NetConnection', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'wget': { cmdlet: 'Invoke-WebRequest', risk: 'HIGH', category: 'REMOTE_MODIFICATION' },
+    'curl': { cmdlet: 'Invoke-WebRequest', risk: 'HIGH', category: 'REMOTE_MODIFICATION' },
+    'iwr': { cmdlet: 'Invoke-WebRequest', risk: 'HIGH', category: 'REMOTE_MODIFICATION' },
+    'irm': { cmdlet: 'Invoke-RestMethod', risk: 'HIGH', category: 'REMOTE_MODIFICATION' },
+    // Execution and Downloads (High Risk)
+    'iex': { cmdlet: 'Invoke-Expression', risk: 'CRITICAL', category: 'SECURITY_THREAT' },
+    'icm': { cmdlet: 'Invoke-Command', risk: 'CRITICAL', category: 'REMOTE_MODIFICATION' },
+    'sal': { cmdlet: 'Set-Alias', risk: 'HIGH', category: 'SYSTEM_MODIFICATION' },
+    'nal': { cmdlet: 'New-Alias', risk: 'HIGH', category: 'SYSTEM_MODIFICATION' },
+    // Text Processing
+    'select': { cmdlet: 'Select-Object', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'sort': { cmdlet: 'Sort-Object', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'where': { cmdlet: 'Where-Object', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'group': { cmdlet: 'Group-Object', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'measure': { cmdlet: 'Measure-Object', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'ft': { cmdlet: 'Format-Table', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'fl': { cmdlet: 'Format-List', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'fw': { cmdlet: 'Format-Wide', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    // Variables and Environment
+    'gv': { cmdlet: 'Get-Variable', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'sv': { cmdlet: 'Set-Variable', risk: 'MEDIUM', category: 'SYSTEM_MODIFICATION' },
+    'rv': { cmdlet: 'Remove-Variable', risk: 'MEDIUM', category: 'SYSTEM_MODIFICATION' },
+    'set': { cmdlet: 'Set-Variable', risk: 'MEDIUM', category: 'SYSTEM_MODIFICATION' },
+    // Dangerous CMD carryovers
+    'format': { cmdlet: 'Format-Volume', risk: 'CRITICAL', category: 'SYSTEM_DESTRUCTION' },
+    'cls': { cmdlet: 'Clear-Host', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'clear': { cmdlet: 'Clear-Host', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'echo': { cmdlet: 'Write-Output', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'man': { cmdlet: 'Get-Help', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+    'help': { cmdlet: 'Get-Help', risk: 'LOW', category: 'INFORMATION_GATHERING' },
+};
+/** Suspicious command patterns that might be disguised threats */
+const SUSPICIOUS_ALIAS_PATTERNS = [
+    // Base64 encoded commands
+    'powershell.*-enc.*[A-Za-z0-9+/=]{20,}',
+    'pwsh.*-enc.*[A-Za-z0-9+/=]{20,}',
+    // Hidden/window manipulation
+    '-windowstyle\\s+hidden',
+    '-w\\s+hidden',
+    '-noninteractive',
+    '-noni',
+    // Bypass execution policy
+    '-executionpolicy\\s+bypass',
+    '-ep\\s+bypass',
+    '-exec\\s+bypass',
+    // Download and execute patterns
+    '(iwr|wget|curl).*\\|.*iex',
+    'downloadstring.*invoke-expression',
+    'net\\.webclient.*downloadstring',
+    // Obfuscated commands
+    '\\$\\w+\\s*=\\s*[\'"][A-Za-z0-9+/=]{10,}[\'"]',
+    'invoke-expression.*frombase64string',
+    '\\[system\\.text\\.encoding\\].*getstring',
+    // Registry/system manipulation via aliases
+    'sp\\s+hklm:',
+    'sp\\s+hkcu:',
+    'ni.*-path.*registry',
+];
+// ==============================================================================
 // LOGGING INFRASTRUCTURE - Enterprise-grade audit system
 // ==============================================================================
 /** Logging directory and file setup */
@@ -290,6 +393,16 @@ class EnterprisePowerShellMCPServer {
     authKey;
     startTime;
     commandCount = 0;
+    // Threat tracking system
+    unknownThreats = new Map();
+    sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    threatStats = {
+        totalUnknownCommands: 0,
+        uniqueThreats: 0,
+        highRiskThreats: 0,
+        aliasesDetected: 0,
+        sessionsWithThreats: 0
+    };
     constructor(authKey) {
         this.authKey = authKey;
         this.startTime = new Date();
@@ -381,10 +494,131 @@ class EnterprisePowerShellMCPServer {
             connectionId: `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
         };
     }
-    /** Comprehensive command safety classification */
+    /** Detect and analyze PowerShell aliases for security threats */
+    detectPowerShellAlias(command) {
+        const commandParts = command.trim().split(/\s+/);
+        const firstCommand = commandParts[0].toLowerCase();
+        // Check if it's a known alias
+        if (POWERSHELL_ALIAS_MAP[firstCommand]) {
+            const aliasInfo = POWERSHELL_ALIAS_MAP[firstCommand];
+            this.threatStats.aliasesDetected++;
+            auditLog('WARNING', 'ALIAS_DETECTED', `PowerShell alias detected: ${firstCommand} -> ${aliasInfo.cmdlet}`, {
+                originalAlias: firstCommand,
+                resolvedCmdlet: aliasInfo.cmdlet,
+                riskLevel: aliasInfo.risk,
+                category: aliasInfo.category,
+                fullCommand: command,
+                sessionId: this.sessionId
+            });
+            return {
+                originalCommand: command,
+                resolvedCommand: aliasInfo.cmdlet,
+                isAlias: true,
+                aliasType: 'BUILTIN',
+                securityRisk: aliasInfo.risk,
+                reason: `Detected PowerShell alias '${firstCommand}' resolves to '${aliasInfo.cmdlet}' with ${aliasInfo.risk} risk`
+            };
+        }
+        // Check for suspicious patterns
+        for (const pattern of SUSPICIOUS_ALIAS_PATTERNS) {
+            if (new RegExp(pattern, 'i').test(command)) {
+                auditLog('CRITICAL', 'SUSPICIOUS_PATTERN', `Suspicious command pattern detected: ${pattern}`, {
+                    pattern: pattern,
+                    command: command,
+                    sessionId: this.sessionId,
+                    riskLevel: 'CRITICAL'
+                });
+                return {
+                    originalCommand: command,
+                    isAlias: false,
+                    aliasType: 'UNKNOWN',
+                    securityRisk: 'CRITICAL',
+                    reason: `Suspicious pattern detected: ${pattern} - possible obfuscated or malicious command`
+                };
+            }
+        }
+        // Not a known alias
+        return {
+            originalCommand: command,
+            isAlias: false,
+            aliasType: 'UNKNOWN',
+            securityRisk: 'LOW',
+            reason: 'Command is not a recognized PowerShell alias'
+        };
+    }
+    /** Track unknown or suspicious commands as potential threats */
+    trackUnknownThreat(command, assessment) {
+        const commandKey = command.toLowerCase().trim();
+        const now = new Date().toISOString();
+        if (this.unknownThreats.has(commandKey)) {
+            // Update existing threat
+            const existing = this.unknownThreats.get(commandKey);
+            existing.frequency++;
+            existing.lastSeen = now;
+            existing.riskAssessment = assessment;
+        }
+        else {
+            // New unknown threat
+            this.threatStats.totalUnknownCommands++;
+            this.threatStats.uniqueThreats++;
+            if (assessment.risk === 'HIGH' || assessment.risk === 'EXTREME') {
+                this.threatStats.highRiskThreats++;
+            }
+            // Analyze for possible aliases
+            const aliasDetection = this.detectPowerShellAlias(command);
+            const possibleAliases = aliasDetection.isAlias ? [aliasDetection.resolvedCommand || ''] : [];
+            const threatEntry = {
+                timestamp: now,
+                command: command,
+                frequency: 1,
+                firstSeen: now,
+                lastSeen: now,
+                possibleAliases: possibleAliases,
+                riskAssessment: assessment,
+                sessionId: this.sessionId
+            };
+            this.unknownThreats.set(commandKey, threatEntry);
+            // Log new unknown threat
+            auditLog('WARNING', 'UNKNOWN_THREAT', `New unknown command tracked as potential threat`, {
+                command: command,
+                riskLevel: assessment.risk,
+                category: assessment.category,
+                possibleAliases: possibleAliases,
+                sessionId: this.sessionId,
+                threatCount: this.threatStats.uniqueThreats
+            });
+        }
+    }
+    /** Get current threat tracking statistics */
+    getThreatStats() {
+        const recent = Array.from(this.unknownThreats.values())
+            .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime())
+            .slice(0, 10);
+        return {
+            ...this.threatStats,
+            recentThreats: recent
+        };
+    }
+    /** Comprehensive command safety classification with alias detection */
     classifyCommandSafety(command) {
         const upperCommand = command.toUpperCase();
         const lowerCommand = command.toLowerCase();
+        // First, detect aliases and suspicious patterns
+        const aliasDetection = this.detectPowerShellAlias(command);
+        // If it's a high-risk alias, factor that into the assessment
+        if (aliasDetection.isAlias && aliasDetection.securityRisk === 'CRITICAL') {
+            return {
+                level: 'CRITICAL',
+                risk: 'EXTREME',
+                reason: `${aliasDetection.reason} - Alias masks potentially dangerous command`,
+                color: 'RED',
+                blocked: true,
+                category: 'ALIAS_THREAT',
+                patterns: [aliasDetection.originalCommand],
+                recommendations: ['Use full cmdlet names instead of aliases', 'Review command for malicious intent']
+            };
+        }
+        // Continue with existing security patterns
         // 🚫 BLOCKED PATTERNS - These commands are completely blocked
         // Registry modifications
         for (const pattern of REGISTRY_MODIFICATION_PATTERNS) {
@@ -527,17 +761,20 @@ class EnterprisePowerShellMCPServer {
                 };
             }
         }
-        // 🔵 UNKNOWN - Default for unclassified commands
-        return {
+        // 🔵 UNKNOWN - Default for unclassified commands with threat tracking
+        const unknownAssessment = {
             level: 'UNKNOWN',
             risk: 'MEDIUM',
             reason: 'Unclassified command requiring confirmation for safety',
             color: 'CYAN',
             blocked: false,
             requiresPrompt: true,
-            category: 'INFORMATION_GATHERING',
+            category: 'UNKNOWN_COMMAND',
             recommendations: ['Add confirmed: true to proceed', 'Review command for safety']
         };
+        // Track this unknown command as a potential threat
+        this.trackUnknownThreat(command, unknownAssessment);
+        return unknownAssessment;
     }
     /** Execute PowerShell command with comprehensive security and error handling */
     async executePowerShellCommand(command, timeout = 300000, workingDirectory) {
@@ -1075,6 +1312,14 @@ Use the ai-agent-test tool to validate functionality:
                         description: 'Run comprehensive validation tests to verify MCP server functionality, security enforcement, and demonstrate capabilities for AI agents. Tests all security levels safely.',
                         inputSchema: zodToJsonSchema(AITestSchema),
                     },
+                    {
+                        name: 'threat-analysis',
+                        description: 'Get detailed threat tracking statistics including unknown commands, alias detection, and security threat analysis. Helps identify potential security risks and command patterns.',
+                        inputSchema: zodToJsonSchema(z.object({
+                            includeDetails: z.boolean().optional().describe('Include detailed threat entries in response'),
+                            resetStats: z.boolean().optional().describe('Reset threat tracking statistics after retrieval')
+                        })),
+                    },
                 ],
             };
         });
@@ -1318,6 +1563,71 @@ Use the ai-agent-test tool to validate functionality:
                             content: [{
                                     type: 'text',
                                     text: JSON.stringify(testResults, null, 2)
+                                }]
+                        };
+                    }
+                    case 'threat-analysis': {
+                        const validatedArgs = z.object({
+                            includeDetails: z.boolean().optional(),
+                            resetStats: z.boolean().optional()
+                        }).parse(args);
+                        console.error(`🔍 Generating Threat Analysis Report`);
+                        console.error(`📊 Include Details: ${validatedArgs.includeDetails || false}`);
+                        console.error(`🔄 Reset Stats: ${validatedArgs.resetStats || false}`);
+                        const threatStats = this.getThreatStats();
+                        const analysisReport = {
+                            timestamp: new Date().toISOString(),
+                            sessionId: this.sessionId,
+                            serverUptime: Date.now() - this.startTime.getTime(),
+                            commandsProcessed: this.commandCount,
+                            statistics: threatStats,
+                            assessment: {
+                                overallRisk: threatStats.highRiskThreats > 5 ? 'HIGH' :
+                                    threatStats.uniqueThreats > 10 ? 'MEDIUM' : 'LOW',
+                                threatLevel: threatStats.aliasesDetected > 0 ? 'ELEVATED' : 'NORMAL',
+                                recommendation: threatStats.highRiskThreats > 0 ?
+                                    'Review high-risk threats immediately' :
+                                    'Threat level within normal parameters'
+                            },
+                            details: validatedArgs.includeDetails ? {
+                                recentThreats: threatStats.recentThreats,
+                                knownAliases: Object.keys(POWERSHELL_ALIAS_MAP).length,
+                                suspiciousPatterns: SUSPICIOUS_ALIAS_PATTERNS.length
+                            } : undefined
+                        };
+                        // Reset statistics if requested
+                        if (validatedArgs.resetStats) {
+                            this.unknownThreats.clear();
+                            this.threatStats = {
+                                totalUnknownCommands: 0,
+                                uniqueThreats: 0,
+                                highRiskThreats: 0,
+                                aliasesDetected: 0,
+                                sessionsWithThreats: 0
+                            };
+                            console.error(`🔄 Threat tracking statistics have been reset`);
+                        }
+                        console.error(`✅ THREAT ANALYSIS COMPLETED [${requestId}]`);
+                        console.error(`⚠️  Risk Level: ${analysisReport.assessment.overallRisk}`);
+                        console.error(`🚨 Threat Level: ${analysisReport.assessment.threatLevel}`);
+                        console.error(`📊 Unique Threats: ${threatStats.uniqueThreats}`);
+                        console.error(`🔍 Aliases Detected: ${threatStats.aliasesDetected}`);
+                        console.error("─".repeat(50));
+                        auditLog('INFO', 'THREAT_ANALYSIS', 'Threat analysis report generated', {
+                            requestId,
+                            includeDetails: validatedArgs.includeDetails,
+                            resetStats: validatedArgs.resetStats,
+                            overallRisk: analysisReport.assessment.overallRisk,
+                            uniqueThreats: threatStats.uniqueThreats,
+                            highRiskThreats: threatStats.highRiskThreats,
+                            aliasesDetected: threatStats.aliasesDetected,
+                            clientPid: clientInfo.parentPid,
+                            serverPid: clientInfo.serverPid
+                        });
+                        return {
+                            content: [{
+                                    type: 'text',
+                                    text: JSON.stringify(analysisReport, null, 2)
                                 }]
                         };
                     }
