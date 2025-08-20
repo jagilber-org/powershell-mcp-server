@@ -35,7 +35,8 @@
 param(
     [string]$LogPath,
     [switch]$AutoDetect,
-    [switch]$NoNewWindow
+    [switch]$NoNewWindow,
+    [switch]$HideJson
 )
 
 # Launch in new window unless explicitly told not to
@@ -48,6 +49,9 @@ if (-not $NoNewWindow) {
     }
     if ($AutoDetect) {
         $arguments += @('-AutoDetect')
+    }
+    if ($HideJson) {
+        $arguments += @('-HideJson')
     }
     
     $argumentString = $arguments -join ' '
@@ -76,7 +80,7 @@ try {
 }
 
 function Show-PrettyLogEntry {
-    param($JsonData, $SourceWorkspace = "Unknown")
+    param($JsonData, $SourceWorkspace = "Unknown", $ShowFullJson = $false)
     
     $timestamp = ([DateTime]$JsonData.timestamp).ToString("HH:mm:ss.fff")
     
@@ -175,6 +179,17 @@ function Show-PrettyLogEntry {
             Write-Host "    $("[*]") Workspace: " -NoNewline -ForegroundColor DarkGray
             Write-Host "$shortPath" -ForegroundColor Blue
         }
+    }
+    
+    # Show full JSON if requested
+    if ($ShowFullJson) {
+        Write-Host "    [JSON] Full Request/Response Data:" -ForegroundColor DarkCyan
+        $jsonOutput = $JsonData | ConvertTo-Json -Depth 10 -Compress:$false
+        $jsonLines = $jsonOutput -split "`n"
+        foreach ($line in $jsonLines) {
+            Write-Host "    $line" -ForegroundColor Gray
+        }
+        Write-Host ""
     }
     
     Write-Host "" # Blank line for readability
@@ -471,16 +486,46 @@ if (Test-Path $logFileToMonitor) {
 try {
     Write-Host "$("[*]") Live monitoring active..." -ForegroundColor Green
     
+    # Buffer for multi-line JSON entries
+    $jsonBuffer = ""
+    $braceCount = 0
+    $inJsonEntry = $false
+    
     # Use Get-Content -Wait for robust real-time monitoring
     Get-Content $logFileToMonitor -Wait | ForEach-Object {
         $line = $_.Trim()
         if ($line -and $line.StartsWith('[AUDIT]')) {
-            try {
-                $jsonPart = $line.Substring(7)
-                $logData = $jsonPart | ConvertFrom-Json
-                Show-PrettyLogEntry $logData $workspaceName
-            } catch {
-                Write-Host "$([char]0x26A0)  Malformed log entry: $line" -ForegroundColor Yellow
+            # Start of new audit entry
+            $inJsonEntry = $true
+            $jsonBuffer = $line.Substring(7).Trim()
+            $braceCount = ($jsonBuffer.ToCharArray() | Where-Object { $_ -eq '{' }).Count - ($jsonBuffer.ToCharArray() | Where-Object { $_ -eq '}' }).Count
+            
+            # Check if it's a complete single-line JSON
+            if ($braceCount -eq 0 -and $jsonBuffer.StartsWith('{') -and $jsonBuffer.EndsWith('}')) {
+                try {
+                    $logData = $jsonBuffer | ConvertFrom-Json
+                    Show-PrettyLogEntry $logData $workspaceName (-not $HideJson)
+                } catch {
+                    Write-Host "$([char]0x26A0)  Malformed log entry: $line" -ForegroundColor Yellow
+                }
+                $inJsonEntry = $false
+                $jsonBuffer = ""
+            }
+        } elseif ($inJsonEntry -and $line) {
+            # Continue building multi-line JSON
+            $jsonBuffer += " " + $line
+            $braceCount += ($line.ToCharArray() | Where-Object { $_ -eq '{' }).Count - ($line.ToCharArray() | Where-Object { $_ -eq '}' }).Count
+            
+            # Check if JSON is now complete
+            if ($braceCount -eq 0 -and $jsonBuffer.StartsWith('{') -and $jsonBuffer.EndsWith('}')) {
+                try {
+                    $logData = $jsonBuffer | ConvertFrom-Json
+                    Show-PrettyLogEntry $logData $workspaceName (-not $HideJson)
+                } catch {
+                    Write-Host "$([char]0x26A0)  Malformed multi-line log entry: $jsonBuffer" -ForegroundColor Yellow
+                }
+                $inJsonEntry = $false
+                $jsonBuffer = ""
             }
         }
     }
