@@ -1680,7 +1680,15 @@ Use the ai-agent-test tool to validate functionality:
                 console.error(`📋 Arguments: ${JSON.stringify(args, null, 2)}`);
             }
 
-            auditLog('INFO', 'MCP_REQUEST', `Enterprise tool request: ${name}`, requestInfo);
+            // Enhanced request info including command details
+            const enhancedRequestInfo = {
+                ...requestInfo,
+                ...(args?.command && { command: args.command }),
+                ...(args?.script && { script: args.script.substring(0, 200) + (args.script.length > 200 ? '...' : '') }),
+                ...(args?.filePath && { filePath: args.filePath })
+            };
+
+            auditLog('INFO', 'MCP_REQUEST', `Enterprise tool request: ${name}`, enhancedRequestInfo);
 
             try {
                 // Validate authentication before processing any tool - support both 'key' and legacy 'authKey'
@@ -1784,12 +1792,15 @@ Use the ai-agent-test tool to validate functionality:
                         if (result.exitCode !== undefined) console.error(`🔢 Exit Code: ${result.exitCode}`);
                         console.error("─".repeat(50));
                         
-                        // Comprehensive audit logging
+                        // Comprehensive audit logging with ACTUAL COMMAND AND RESPONSE
                         auditLog('INFO', 'MCP_RESPONSE', `Enterprise tool response: ${name}`, {
                             requestId,
                             toolName: name,
+                            command: validatedArgs.command, // THE ACTUAL POWERSHELL COMMAND
                             success: result.success,
                             exitCode: result.exitCode,
+                            stdout: result.stdout, // THE ACTUAL COMMAND OUTPUT
+                            stderr: result.stderr, // THE ACTUAL ERROR OUTPUT
                             outputLength: result.stdout?.length || 0,
                             errorLength: result.stderr?.length || 0,
                             duration_ms: result.duration_ms,
@@ -1797,7 +1808,8 @@ Use the ai-agent-test tool to validate functionality:
                             riskLevel: securityAssessment.risk,
                             category: securityAssessment.category,
                             clientPid: clientInfo.parentPid,
-                            serverPid: clientInfo.serverPid
+                            serverPid: clientInfo.serverPid,
+                            workingDirectory: validatedArgs.workingDirectory
                         });
                         
                         return {
@@ -1864,6 +1876,26 @@ Use the ai-agent-test tool to validate functionality:
                         console.error(`✅ SCRIPT COMPLETED [${requestId}]`);
                         console.error(`📊 Result: ${result.success ? 'SUCCESS' : 'FAILED'}`);
                         console.error("─".repeat(50));
+                        
+                        // Add audit logging for script responses too
+                        auditLog('INFO', 'MCP_RESPONSE', `Enterprise tool response: ${name}`, {
+                            requestId,
+                            toolName: name,
+                            script: validatedArgs.script, // THE ACTUAL POWERSHELL SCRIPT
+                            success: result.success,
+                            exitCode: result.exitCode,
+                            stdout: result.stdout, // THE ACTUAL SCRIPT OUTPUT
+                            stderr: result.stderr, // THE ACTUAL ERROR OUTPUT
+                            outputLength: result.stdout?.length || 0,
+                            errorLength: result.stderr?.length || 0,
+                            duration_ms: result.duration_ms,
+                            securityLevel: securityAssessment.level,
+                            riskLevel: securityAssessment.risk,
+                            category: securityAssessment.category,
+                            clientPid: clientInfo.parentPid,
+                            serverPid: clientInfo.serverPid,
+                            workingDirectory: validatedArgs.workingDirectory
+                        });
                         
                         return {
                             content: [{ 
