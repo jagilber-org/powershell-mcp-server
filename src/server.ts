@@ -2158,7 +2158,9 @@ async function main() {
 }
 
 // Start the server if this file is run directly
-const isMainModule = import.meta.url === `file://${process.argv[1]}` || process.argv[1].endsWith('vscode-server-enterprise.js');
+const isMainModule = import.meta.url === `file://${process.argv[1]}` || 
+                    process.argv[1].endsWith('server.js') || 
+                    process.argv[1].endsWith('index.js');
 
 if (isMainModule) {
     main().catch((error) => {
