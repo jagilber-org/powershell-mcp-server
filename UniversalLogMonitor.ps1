@@ -4,7 +4,22 @@
 .SYNOPSIS    Write-Host "[*] Launching Universal MCP Monitor in new window..." -ForegroundColor Green
     Universal Enterpris    switch ($JsonData.level) {
         "CRITICAL" { $icon = "[*]"; $levelColor = "Magenta"; $messageColor = "Red" }
-        "ERROR"    { $icon = [char]0x274C; $levelColor = "Red"; $messageColor $Host.UI.RawUI.WindowTitle = "[*] Universal Enterprise MCP Log Monitor - Multi$Host.UI.RawUI.WindowTitle = "[*] Universal MCP Monitor - $workspaceName"Workspace" "Red" }
+        "ERROR"    { $icon = [char]0x274C; $levelColor = "Red"; $messageColor $Host.UI.RawUI.WindowTitle = "[*]         if ($availableLogs.Count -eq 1) {
+            $logFileToMonitor = $availableLogs[0].FullName
+            $workspaceName = Get-WorkspaceInfo $logFileToMonitor
+            Write-Host "[+] Auto-selected only available log: $logFileToMonitor" -ForegroundColor Green
+        } else {
+            # Auto-select the most recently modified file (likely the active one)
+            $mostRecent = $availableLogs | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            $recentAge = (Get-Date) - $mostRecent.LastWriteTime
+            
+            if ($recentAge.TotalMinutes -lt 30) {
+                $logFileToMonitor = $mostRecent.FullName
+                $workspaceName = Get-WorkspaceInfo $logFileToMonitor
+                Write-Host "[+] Auto-selected most active log (modified $([math]::Round($recentAge.TotalMinutes, 1)) min ago): $($mostRecent.Name)" -ForegroundColor Green
+            } else {
+                # Show menu for selection
+                Show-LogFileMenu $availableLogsal Enterprise MCP Log Monitor - Multi$Host.UI.RawUI.WindowTitle = "[*] Universal MCP Monitor - $workspaceName"Workspace" "Red" }
         "WARNING"  { $icon = [char]0x26A0; $levelColor = "Yellow"; $messageColor = "Yellow" }
         "INFO"     { $icon = [char]0x2139; $levelColor = "Cyan"; $messageColor = "White" }
         "DEBUG"    { $icon = "[*]"; $levelColor = "DarkGray"; $messageColor = "DarkGray" }
@@ -162,19 +177,113 @@ function Show-PrettyLogEntry {
         }
     }
     
-    Write-Host "[*]" # Blank line for readability
+    Write-Host "" # Blank line for readability
+}
+
+function Find-RunningMCPServers {
+    Write-Host "[*] Checking for running MCP server processes..." -ForegroundColor Yellow
+    
+    $mcpProcesses = @()
+    
+    try {
+        # Look for PowerShell processes that might be MCP servers
+        $psProcesses = Get-Process -Name "pwsh", "powershell" -ErrorAction SilentlyContinue
+        
+        foreach ($proc in $psProcesses) {
+            try {
+                # Try to get command line (requires admin or same user)
+                $commandLine = (Get-WmiObject Win32_Process -Filter "ProcessId = $($proc.Id)" -ErrorAction SilentlyContinue).CommandLine
+                
+                if ($commandLine -and ($commandLine -like "*mcp*" -or $commandLine -like "*server*" -or $commandLine -like "*vscode-server*")) {
+                    # Try to extract working directory from command line
+                    $workingDir = $null
+                    
+                    # Look for common patterns to extract paths
+                    if ($commandLine -match '"([^"]+\\[^"]*mcp[^"]*)"') {
+                        $workingDir = Split-Path $matches[1] -Parent
+                    } elseif ($commandLine -match "'([^']+\\[^']*mcp[^']*)'") {
+                        $workingDir = Split-Path $matches[1] -Parent
+                    } elseif ($commandLine -match '([A-Za-z]:\\[^\\s]+\\[^\\s]*mcp[^\\s]*)') {
+                        $workingDir = Split-Path $matches[1] -Parent
+                    }
+                    
+                    if ($workingDir -and (Test-Path $workingDir)) {
+                        $mcpProcesses += @{
+                            ProcessId = $proc.Id
+                            ProcessName = $proc.ProcessName
+                            WorkingDirectory = $workingDir
+                            CommandLine = $commandLine
+                        }
+                        Write-Host "  [+] Found MCP process: PID $($proc.Id) in $workingDir" -ForegroundColor Green
+                    }
+                }
+            } catch {
+                # Skip processes we can't access
+            }
+        }
+        
+        # Also look for Node.js processes (TypeScript MCP servers)
+        $nodeProcesses = Get-Process -Name "node" -ErrorAction SilentlyContinue
+        
+        foreach ($proc in $nodeProcesses) {
+            try {
+                $commandLine = (Get-WmiObject Win32_Process -Filter "ProcessId = $($proc.Id)" -ErrorAction SilentlyContinue).CommandLine
+                
+                if ($commandLine -and ($commandLine -like "*mcp*" -or $commandLine -like "*server*")) {
+                    # Extract working directory
+                    $workingDir = $null
+                    
+                    if ($commandLine -match '"([^"]+\\[^"]*mcp[^"]*)"') {
+                        $workingDir = Split-Path $matches[1] -Parent
+                    } elseif ($commandLine -match '([A-Za-z]:\\[^\\s]+\\[^\\s]*mcp[^\\s]*)') {
+                        $workingDir = Split-Path $matches[1] -Parent
+                    }
+                    
+                    if ($workingDir -and (Test-Path $workingDir)) {
+                        $mcpProcesses += @{
+                            ProcessId = $proc.Id
+                            ProcessName = $proc.ProcessName
+                            WorkingDirectory = $workingDir
+                            CommandLine = $commandLine
+                        }
+                        Write-Host "  [+] Found Node MCP process: PID $($proc.Id) in $workingDir" -ForegroundColor Green
+                    }
+                }
+            } catch {
+                # Skip processes we can't access
+            }
+        }
+        
+    } catch {
+        Write-Host "  [!] Limited process access - some MCP servers may not be detected" -ForegroundColor Yellow
+    }
+    
+    return $mcpProcesses
 }
 
 function Find-MCPLogFiles {
-    Write-Host "$("[*]") Searching for MCP audit log files..." -ForegroundColor Yellow
+    Write-Host "[*] Searching for MCP audit log files..." -ForegroundColor Yellow
+
+    # Skip slow process detection for faster startup
+    # $runningServers = Find-RunningMCPServers
     
-    # Common MCP log locations
+    # Build search paths from common locations
     $searchPaths = @(
         ".",
         "..\*",
         "..\..\*",
-        "$env:USERPROFILE\*"
+        "$env:USERPROFILE\*",
+        "$env:USERPROFILE"
     )
+    
+    # Process detection disabled for faster startup
+    # foreach ($server in $runningServers) {
+    #     $serverPath = $server.WorkingDirectory
+    #     if ($serverPath -and (Test-Path $serverPath)) {
+    #         $searchPaths += $serverPath
+    #         $searchPaths += "$serverPath\*"
+    #     }
+    # }
     
     $foundLogs = @()
     
@@ -234,9 +343,9 @@ function Show-LogFileMenu {
         $lastModified = $log.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
         $sizeKB = [math]::Round($log.Length / 1KB, 1)
         
-        # Status indicator
-        $isRecent = $log.LastWriteTime -gt (Get-Date).AddHours(-1)
-        $statusIcon = if ($isRecent) { "[*]" } else { "[*]" }
+        # Status indicator - consider files from today as recent
+        $isRecent = $log.LastWriteTime -gt (Get-Date).Date
+        $statusIcon = if ($isRecent) { "[+]" } else { "[-]" }
         $statusText = if ($isRecent) { "RECENT" } else { "OLDER" }
         
         Write-Host "  [$($i + 1)] " -NoNewline -ForegroundColor Cyan

@@ -8,6 +8,8 @@
  * - Comprehensive AI agent integration
  * - Enterprise-grade error handling
  * - Full type safety and maintainability
+ * - Unified authentication using 'key' parameter (backward compatible with 'authKey')
+ * - Optimized timeouts (default 90 seconds, AI agent override support)
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -465,7 +467,7 @@ async function auditLog(
     message: string, 
     metadata?: Record<string, any>
 ): Promise<void> {
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date().toISOString(); // 'o' format UTC
     const logEntry: AuditLogEntry = {
         timestamp,
         level,
@@ -480,7 +482,7 @@ async function auditLog(
             const notificationParams: MCPNotificationParams = {
                 level: level.toLowerCase(),
                 logger: 'powershell-mcp-server',
-                data: `[${category}] ${message}${metadata ? ` | ${JSON.stringify(sanitizeMetadata(metadata))}` : ''}`
+                data: `[${category}] ${message}${metadata ? ` | ${JSON.stringify(sanitizeMetadata(metadata), null, 2)}` : ''}`
             };
             
             await mcpServerInstance.notification({
@@ -496,16 +498,16 @@ async function auditLog(
     // Always use stderr for logging (MCP standard for server-side logging)
     if (mcpServerInstance) {
         console.error(`[${level}] [${category}] ${timestamp} - ${message}` + 
-            (metadata ? ` | ${JSON.stringify(sanitizeMetadata(metadata))}` : ''));
+            (metadata ? ` | ${JSON.stringify(sanitizeMetadata(metadata), null, 2)}` : ''));
     } else {
         // Server initialization phase - use INIT prefix
         console.error(`[INIT] [${level}] [${category}] ${timestamp} - ${message}` + 
-            (metadata ? ` | ${JSON.stringify(sanitizeMetadata(metadata))}` : ''));
+            (metadata ? ` | ${JSON.stringify(sanitizeMetadata(metadata), null, 2)}` : ''));
     }
     
-    // File logging (always maintained for audit trail)
+    // File logging (always maintained for audit trail) - Pretty JSON format
     try {
-        const fileLogEntry = `[AUDIT] ${JSON.stringify(logEntry)}\n`;
+        const fileLogEntry = `[AUDIT] ${JSON.stringify(logEntry, null, 2)}\n`;
         fs.appendFileSync(LOG_FILE, fileLogEntry);
     } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
@@ -552,9 +554,10 @@ function logSystemInfo(): void {
 /** PowerShell command execution schema */
 const PowerShellCommandSchema = z.object({
     command: z.string().min(1).describe('PowerShell command to execute'),
-    timeout: z.number().optional().default(300000).describe('Timeout in milliseconds (default: 5 minutes)'),
+    timeout: z.number().optional().default(90000).describe('Timeout in milliseconds (default: 90 seconds)'),
+    aiAgentTimeout: z.number().optional().describe('Optional AI agent-specific timeout override in milliseconds'),
     workingDirectory: z.string().optional().describe('Working directory for command execution'),
-    authKey: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
+    key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
     confirmed: z.boolean().optional().describe('Explicit confirmation for medium-risk commands (required for RISKY/UNKNOWN commands)'),
     override: z.boolean().optional().describe('Security override for authorized administrators (use with extreme caution)'),
 });
@@ -562,9 +565,10 @@ const PowerShellCommandSchema = z.object({
 /** PowerShell script execution schema */
 const PowerShellScriptSchema = z.object({
     script: z.string().min(1).describe('PowerShell script content to execute'),
-    timeout: z.number().optional().default(300000).describe('Timeout in milliseconds (default: 5 minutes)'),
+    timeout: z.number().optional().default(90000).describe('Timeout in milliseconds (default: 90 seconds)'),
+    aiAgentTimeout: z.number().optional().describe('Optional AI agent-specific timeout override in milliseconds'),
     workingDirectory: z.string().optional().describe('Working directory for script execution'),
-    authKey: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
+    key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
     confirmed: z.boolean().optional().describe('Explicit confirmation for medium-risk scripts'),
     override: z.boolean().optional().describe('Security override for authorized administrators'),
 });
@@ -573,9 +577,10 @@ const PowerShellScriptSchema = z.object({
 const PowerShellFileSchema = z.object({
     filePath: z.string().min(1).describe('Path to PowerShell script file to execute'),
     parameters: z.record(z.string()).optional().describe('Parameters to pass to the script'),
-    timeout: z.number().optional().default(300000).describe('Timeout in milliseconds (default: 5 minutes)'),
+    timeout: z.number().optional().default(90000).describe('Timeout in milliseconds (default: 90 seconds)'),
+    aiAgentTimeout: z.number().optional().describe('Optional AI agent-specific timeout override in milliseconds'),
     workingDirectory: z.string().optional().describe('Working directory for script execution'),
-    authKey: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
+    key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
     confirmed: z.boolean().optional().describe('Explicit confirmation for medium-risk file operations'),
     override: z.boolean().optional().describe('Security override for authorized administrators'),
 });
@@ -583,20 +588,20 @@ const PowerShellFileSchema = z.object({
 /** Syntax check schema */
 const SyntaxCheckSchema = z.object({
     content: z.string().min(1).describe('PowerShell script content to validate syntax'),
-    authKey: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
+    key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
 });
 
 /** Help system schema */
 const HelpSchema = z.object({
     topic: z.string().optional().describe('Specific help topic: security, monitoring, authentication, examples, capabilities, or ai-agents'),
-    authKey: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
+    key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
 });
 
 /** AI agent testing schema */
 const AITestSchema = z.object({
     testSuite: z.string().optional().default('basic').describe('Test suite to run: basic, security, monitoring, or comprehensive'),
     skipDangerous: z.boolean().optional().default(true).describe('Skip dangerous command tests (recommended: true for safety)'),
-    authKey: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
+    key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
 });
 
 // ==============================================================================
@@ -1053,7 +1058,7 @@ class EnterprisePowerShellMCPServer {
     /** Execute PowerShell command with comprehensive security and error handling */
     async executePowerShellCommand(
         command: string, 
-        timeout: number = 300000, 
+        timeout: number = 90000, 
         workingDirectory?: string
     ): Promise<PowerShellExecutionResult> {
         const startTime = Date.now();
@@ -1635,7 +1640,8 @@ Use the ai-agent-test tool to validate functionality:
                         description: 'Get detailed threat tracking statistics including unknown commands, alias detection, and security threat analysis. Helps identify potential security risks and command patterns.',
                         inputSchema: zodToJsonSchema(z.object({
                             includeDetails: z.boolean().optional().describe('Include detailed threat entries in response'),
-                            resetStats: z.boolean().optional().describe('Reset threat tracking statistics after retrieval')
+                            resetStats: z.boolean().optional().describe('Reset threat tracking statistics after retrieval'),
+                            key: z.string().optional().describe('Authentication key (required if server has authentication enabled)')
                         })),
                     },
                 ] as Tool[],
@@ -1677,13 +1683,13 @@ Use the ai-agent-test tool to validate functionality:
             auditLog('INFO', 'MCP_REQUEST', `Enterprise tool request: ${name}`, requestInfo);
 
             try {
-                // Validate authentication before processing any tool
-                const authKey = args?.authKey;
-                if (!this.validateAuthKey(authKey)) {
+                // Validate authentication before processing any tool - support both 'key' and legacy 'authKey'
+                const key = args?.key || args?.authKey;
+                if (!this.validateAuthKey(key)) {
                     auditLog('ERROR', 'AUTH_FAILED', `Authentication failed for request ${requestId}`, {
                         requestId,
                         toolName: name,
-                        hasProvidedKey: !!authKey,
+                        hasProvidedKey: !!key,
                         expectedKeyLength: this.authKey?.length || 0,
                         serverMode: 'enterprise'
                     });
@@ -1705,7 +1711,8 @@ Use the ai-agent-test tool to validate functionality:
                         const securityAssessment = this.classifyCommandSafety(validatedArgs.command);
                         
                         console.error(`🔨 Executing PowerShell Command: ${validatedArgs.command}`);
-                        console.error(`⏱️  Timeout: ${validatedArgs.timeout}ms`);
+                        const commandTimeout = validatedArgs.aiAgentTimeout || validatedArgs.timeout;
+                        console.error(`⏱️  Timeout: ${commandTimeout}ms${validatedArgs.aiAgentTimeout ? ' (AI Agent Override)' : ''}`);
                         console.error(`🛡️  Security Level: ${securityAssessment.level} (${securityAssessment.risk} RISK)`);
                         console.error(`📋 Risk Reason: ${securityAssessment.reason}`);
                         console.error(`🎨 Classification Color: ${securityAssessment.color}`);
@@ -1760,11 +1767,11 @@ Use the ai-agent-test tool to validate functionality:
                             throw promptError;
                         }
                         
-                        // Execute the command
+                        // Execute the command with appropriate timeout
                         console.error(`🚀 Executing enterprise PowerShell command...`);
                         const result = await this.executePowerShellCommand(
                             validatedArgs.command,
-                            validatedArgs.timeout,
+                            commandTimeout,
                             validatedArgs.workingDirectory
                         );
                         
@@ -1808,7 +1815,8 @@ Use the ai-agent-test tool to validate functionality:
                         const securityAssessment = this.classifyCommandSafety(validatedArgs.script);
                         
                         console.error(`📜 Executing PowerShell Script (${validatedArgs.script.length} characters)`);
-                        console.error(`⏱️  Timeout: ${validatedArgs.timeout}ms`);
+                        const scriptTimeout = validatedArgs.aiAgentTimeout || validatedArgs.timeout;
+                        console.error(`⏱️  Timeout: ${scriptTimeout}ms${validatedArgs.aiAgentTimeout ? ' (AI Agent Override)' : ''}`);
                         console.error(`🛡️  Security Level: ${securityAssessment.level} (${securityAssessment.risk} RISK)`);
                         
                         // Security enforcement for scripts
@@ -1844,9 +1852,10 @@ Use the ai-agent-test tool to validate functionality:
                             );
                         }
                         
+                        // Execute the script with appropriate timeout
                         const result = await this.executePowerShellCommand(
                             validatedArgs.script,
-                            validatedArgs.timeout,
+                            scriptTimeout,
                             validatedArgs.workingDirectory
                         );
                         

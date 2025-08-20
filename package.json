@@ -6,9 +6,14 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "dev": "tsc && node dist/index.js",
+    "build:enterprise": "tsc src/server.ts --outDir dist --target ES2020 --module ESNext --moduleResolution Node --strict --declaration --sourceMap",
+    "build:legacy": "tsc src/vscode-server.ts --outDir dist --target ES2020 --module ESNext --moduleResolution Node --declaration --sourceMap --noStrict",
+    "dev": "npm run build && node dist/index.js",
     "start": "node dist/index.js",
-    "inspector": "npx @modelcontextprotocol/inspector node dist/index.js"
+    "start:enterprise": "node dist/server.js",
+    "start:legacy": "node dist/vscode-server.js",
+    "inspector": "npx @modelcontextprotocol/inspector node dist/index.js",
+    "clean": "rmdir /s /q dist 2>nul & mkdir dist"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.6.0",

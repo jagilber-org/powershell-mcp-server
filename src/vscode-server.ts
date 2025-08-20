@@ -48,7 +48,14 @@ interface TestResult {
 }
 // Enhanced audit logging utility with MCP standards compliance and file system support
 const LOG_DIR = path.join(process.cwd(), 'logs');
-const LOG_FILE = path.join(LOG_DIR, `powershell-mcp-audit-${new Date().toISOString().split('T')[0]}.log`);
+
+// Helper function to format date in 'o' format (ISO 8601 with timezone)
+function formatDateTimeUTC(): string {
+    const now = new Date();
+    return now.toISOString(); // This is already UTC 'o' format (ISO 8601)
+}
+
+const LOG_FILE = path.join(LOG_DIR, `powershell-mcp-audit-${formatDateTimeUTC().split('T')[0]}.log`);
 
 // Ensure logs directory exists
 if (!fs.existsSync(LOG_DIR)) {
@@ -63,7 +70,7 @@ function setMCPServer(server: Server): void {
 }
 
 async function auditLog(level: string, category: string, message: string, metadata?: any): Promise<void> {
-    const timestamp = new Date().toISOString();
+    const timestamp = formatDateTimeUTC();
     const logEntry = {
         timestamp,
         level,
@@ -95,7 +102,7 @@ async function auditLog(level: string, category: string, message: string, metada
     
     // File logging (always maintained for audit trail)
     try {
-        const fileLogEntry = `[AUDIT] ${JSON.stringify(logEntry)}\n`;
+        const fileLogEntry = `[AUDIT] ${JSON.stringify(logEntry, null, 2)}\n`;
         fs.appendFileSync(LOG_FILE, fileLogEntry);
     } catch (error: any) {
         console.error(`Failed to write to log file: ${error.message}`);
@@ -282,12 +289,12 @@ export class VSCodePowerShellMcpServer {
         // Log server configuration
         console.error(`🛠️  Server Name: powershell-my-mcp-server`);
         console.error(`📦 Server Version: 1.0.0`);
-        console.error(`🕒 Started At: ${this.startTime.toISOString()}`);
+        console.error(`🕒 Started At: ${formatDateTimeUTC()}`);
         console.error("=".repeat(60));
         
         // Log monitoring instructions
         console.error(`📊 AUDIT LOGGING ENABLED:`);
-        console.error(`📁 Log Location: ./logs/powershell-mcp-audit-${new Date().toISOString().split('T')[0]}.log`);
+        console.error(`📁 Log Location: ./logs/powershell-mcp-audit-${formatDateTimeUTC().split('T')[0]}.log`);
         console.error(`🔍 To monitor logs in real-time:`);
         console.error(`   • PowerShell: .\\Simple-LogMonitor.ps1 -Follow`);
         console.error(`   • Separate Window: .\\Start-SimpleLogMonitor.ps1`);
@@ -471,7 +478,7 @@ export class VSCodePowerShellMcpServer {
             connectionId,
             serverPid: currentPid,
             parentPid: parentPid,
-            timestamp: new Date().toISOString(),
+            timestamp: formatDateTimeUTC(),
             platform: process.platform,
             nodeVersion: process.version
         };
@@ -555,7 +562,7 @@ export class VSCodePowerShellMcpServer {
                 requestId,
                 toolName: name,
                 commandNumber: this.commandCount,
-                timestamp: new Date().toISOString(),
+                timestamp: formatDateTimeUTC(),
                 hasArguments: !!args,
                 argumentKeys: args ? Object.keys(args) : [],
                 serverUptime: Math.round((Date.now() - this.startTime.getTime()) / 1000) + 's',
@@ -576,7 +583,7 @@ export class VSCodePowerShellMcpServer {
             await auditLog('info', 'MCP_REQUEST', `Tool request: ${name}`, requestInfo);
             try {
                 // Validate authentication before processing any tool
-                const authKey = args?.authKey;
+                const authKey = (args && typeof args === 'object' && 'authKey' in args) ? (args as any).authKey : undefined;
                 if (!this.validateAuthKey(authKey)) {
                     auditLog('ERROR', 'AUTH_FAILED', `Authentication failed for request ${requestId}`, {
                         requestId,
@@ -642,7 +649,7 @@ export class VSCodePowerShellMcpServer {
                                             category: securityAssessment.category
                                         },
                                         executionContext: {
-                                            timestamp: new Date().toISOString(),
+                                            timestamp: formatDateTimeUTC(),
                                             serverPid: process.pid,
                                             clientPid: clientInfo.parentPid,
                                             requestId: requestId,
@@ -685,7 +692,7 @@ export class VSCodePowerShellMcpServer {
                                                 category: securityAssessment.category
                                             },
                                             executionContext: {
-                                                timestamp: new Date().toISOString(),
+                                                timestamp: formatDateTimeUTC(),
                                                 serverPid: process.pid,
                                                 clientPid: clientInfo.parentPid,
                                                 requestId: requestId,
@@ -722,7 +729,7 @@ export class VSCodePowerShellMcpServer {
                             ...result,
                             securityAssessment: securityAssessment,
                             executionContext: {
-                                timestamp: new Date().toISOString(),
+                                timestamp: formatDateTimeUTC(),
                                 serverPid: process.pid,
                                 clientPid: clientInfo.parentPid,
                                 requestId: requestId
@@ -828,7 +835,7 @@ export class VSCodePowerShellMcpServer {
                                             category: securityAssessment.category
                                         },
                                         executionContext: {
-                                            timestamp: new Date().toISOString(),
+                                            timestamp: formatDateTimeUTC(),
                                             serverPid: process.pid,
                                             clientPid: clientInfo.parentPid,
                                             requestId: requestId,
@@ -871,7 +878,7 @@ export class VSCodePowerShellMcpServer {
                                                 category: securityAssessment.category
                                             },
                                             executionContext: {
-                                                timestamp: new Date().toISOString(),
+                                                timestamp: formatDateTimeUTC(),
                                                 serverPid: process.pid,
                                                 clientPid: clientInfo.parentPid,
                                                 requestId: requestId,
@@ -911,7 +918,7 @@ export class VSCodePowerShellMcpServer {
                             ...result,
                             securityAssessment: securityAssessment,
                             executionContext: {
-                                timestamp: new Date().toISOString(),
+                                timestamp: formatDateTimeUTC(),
                                 serverPid: process.pid,
                                 clientPid: clientInfo.parentPid,
                                 requestId: requestId,
@@ -1128,7 +1135,7 @@ export class VSCodePowerShellMcpServer {
                 reason: safety.reason,
                 workingDirectory: workingDirectory
             });
-            console.error("[MCP-AUDIT] " + new Date().toISOString() + " - Command execution started: " + (command.length > 50 ? command.substring(0, 50) + "..." : command));
+            console.error("[MCP-AUDIT] " + formatDateTimeUTC() + " - Command execution started: " + (command.length > 50 ? command.substring(0, 50) + "..." : command));
             console.error(`[SECURITY] Threat Level: ${safety.level} (${safety.risk} RISK) - ${safety.reason}`);
             const options = {
                 shell: false,
@@ -1160,7 +1167,7 @@ export class VSCodePowerShellMcpServer {
                     stderr: stderr.trim(),
                     success: code === 0,
                     safety,
-                    timestamp: new Date().toISOString(),
+                    timestamp: formatDateTimeUTC(),
                     workingDirectory: workingDirectory || process.cwd()
                 };
                 auditLog('INFO', 'COMMAND_COMPLETE', 'PowerShell command execution completed', {
@@ -1168,7 +1175,7 @@ export class VSCodePowerShellMcpServer {
                     success: code === 0,
                     safety: safety
                 });
-                console.error("[AUDIT-LOG] " + new Date().toISOString() + " - Command executed successfully");
+                console.error("[AUDIT-LOG] " + formatDateTimeUTC() + " - Command executed successfully");
                 resolve(result);
             });
             ps.on('error', (error) => {
@@ -1215,7 +1222,7 @@ export class VSCodePowerShellMcpServer {
                     stderr: stderr.trim(),
                     success: code === 0,
                     safety,
-                    timestamp: new Date().toISOString(),
+                    timestamp: formatDateTimeUTC(),
                     workingDirectory: workingDirectory || process.cwd()
                 });
             });
@@ -1266,7 +1273,7 @@ export class VSCodePowerShellMcpServer {
                     stderr: stderr.trim(),
                     success: code === 0,
                     safety,
-                    timestamp: new Date().toISOString(),
+                    timestamp: formatDateTimeUTC(),
                     workingDirectory: workingDirectory || process.cwd()
                 });
             });
@@ -1362,7 +1369,7 @@ export class VSCodePowerShellMcpServer {
                 }
             },
             monitoring: {
-                logLocation: `./logs/powershell-mcp-audit-${new Date().toISOString().split('T')[0]}.log`,
+                logLocation: `./logs/powershell-mcp-audit-${formatDateTimeUTC().split('T')[0]}.log`,
                 monitoringCommands: [
                     '.\\Simple-LogMonitor.ps1 -Follow (real-time color-coded monitoring)',
                     '.\\Start-SimpleLogMonitor.ps1 (separate window monitoring)',
@@ -1492,7 +1499,7 @@ export class VSCodePowerShellMcpServer {
     async runAIAgentTests(testSuite, skipDangerous = true) {
         const results = {
             testSuite: testSuite,
-            timestamp: new Date().toISOString(),
+            timestamp: formatDateTimeUTC(),
             serverPid: process.pid,
             skipDangerous: skipDangerous,
             totalTests: 0,
@@ -1660,7 +1667,7 @@ ${content}
                     exitCode: code,
                     stdout: stdout.trim(),
                     stderr: stderr.trim(),
-                    timestamp: new Date().toISOString()
+                    timestamp: formatDateTimeUTC()
                 });
             });
             ps.on('error', (error) => {
@@ -1686,7 +1693,7 @@ ${content}
             
             // MCP server is now connected - subsequent logging should use MCP notifications
             console.error("✅ MCP SERVER CONNECTED SUCCESSFULLY");
-            console.error(`🕒 Connection established at: ${new Date().toISOString()}`);
+            console.error(`🕒 Connection established at: ${formatDateTimeUTC()}`);
             console.error(`📊 Server ready to receive tool requests`);
             console.error(`🛠️  Available tools: powershell-command, powershell-script, powershell-file, powershell-syntax-check`);
             console.error("=".repeat(60));
@@ -1699,7 +1706,7 @@ ${content}
             
             // Now use proper MCP logging (server is connected)
             await auditLog('info', 'SERVER_CONNECTED', 'MCP Server successfully connected and ready', {
-                connectionTime: new Date().toISOString(),
+                connectionTime: formatDateTimeUTC(),
                 totalStartupTime: (Date.now() - this.startTime.getTime()) + 'ms',
                 availableTools: ['powershell-command', 'powershell-script', 'powershell-file', 'powershell-syntax-check']
             });
