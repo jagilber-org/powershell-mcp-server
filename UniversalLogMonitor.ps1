@@ -202,7 +202,7 @@ function Find-RunningMCPServers {
     
     try {
         # Look for PowerShell processes that might be MCP servers
-        $psProcesses = Get-Process -Name "pwsh", "powershell" -ErrorAction SilentlyContinue
+        $psProcesses = Get-Process -Name "pwsh", "powershell", "collectservicefabricdata" -ErrorAction SilentlyContinue
         
         foreach ($proc in $psProcesses) {
             try {
@@ -245,13 +245,37 @@ function Find-RunningMCPServers {
                 $commandLine = (Get-WmiObject Win32_Process -Filter "ProcessId = $($proc.Id)" -ErrorAction SilentlyContinue).CommandLine
                 
                 if ($commandLine -and ($commandLine -like "*mcp*" -or $commandLine -like "*server*")) {
-                    # Extract working directory
+                    # Extract working directory from command line
                     $workingDir = $null
                     
-                    if ($commandLine -match '"([^"]+\\[^"]*mcp[^"]*)"') {
-                        $workingDir = Split-Path $matches[1] -Parent
-                    } elseif ($commandLine -match '([A-Za-z]:\\[^\\s]+\\[^\\s]*mcp[^\\s]*)') {
-                        $workingDir = Split-Path $matches[1] -Parent
+                    try {
+                        # Method 1: If command line has full path to server.js, extract the project root
+                        if ($commandLine -match 'node (.+)\\dist\\server\.js') {
+                            $workingDir = $matches[1]
+                            Write-Host "    Found full path MCP server: $workingDir" -ForegroundColor Green
+                        }
+                        # Method 2: If it's just "node dist/server.js", this is likely run from project root
+                        elseif ($commandLine -match '^node\s+dist[/\\]server\.js') {
+                            # For relative paths, we need to find which directories contain dist/server.js
+                            # Check common MCP server locations
+                            $possibleDirs = @(
+                                "c:\github\jagilber-pr\powershell-mcp-server",
+                                "c:\github\jagilber-pr\collectsfdata",
+                                "c:\github\jagilber-pr\mcp-pr",
+                                "c:\github\jagilber-pr\mcp-client"
+                            )
+                            
+                            foreach ($dir in $possibleDirs) {
+                                $serverFile = Join-Path $dir "dist\server.js"
+                                if (Test-Path $serverFile) {
+                                    $workingDir = $dir
+                                    Write-Host "    Found relative path MCP server: $workingDir" -ForegroundColor Green
+                                    break
+                                }
+                            }
+                        }
+                    } catch {
+                        Write-Host "    Error extracting working directory: $($_.Exception.Message)" -ForegroundColor Red
                     }
                     
                     if ($workingDir -and (Test-Path $workingDir)) {
@@ -279,36 +303,51 @@ function Find-RunningMCPServers {
 function Find-MCPLogFiles {
     Write-Host "[*] Searching for MCP audit log files..." -ForegroundColor Yellow
 
-    # Skip slow process detection for faster startup
-    # $runningServers = Find-RunningMCPServers
+    # Find active servers and use ONLY their working directories
+    $runningServers = Find-RunningMCPServers
     
-    # Build search paths from common locations
-    $searchPaths = @(
-        ".",
-        "..\*",
-        "..\..\*",
-        "$env:USERPROFILE\*",
-        "$env:USERPROFILE"
-    )
+    # Build search paths ONLY from active server locations - NO HARDCODED PATHS
+    $searchPaths = @()
     
-    # Process detection disabled for faster startup
-    # foreach ($server in $runningServers) {
-    #     $serverPath = $server.WorkingDirectory
-    #     if ($serverPath -and (Test-Path $serverPath)) {
-    #         $searchPaths += $serverPath
-    #         $searchPaths += "$serverPath\*"
-    #     }
-    # }
+    foreach ($server in $runningServers) {
+        if ($server.WorkingDirectory -and (Test-Path $server.WorkingDirectory)) {
+            $searchPaths += $server.WorkingDirectory
+            Write-Host "    [+] Will search in active server directory: $($server.WorkingDirectory)" -ForegroundColor Green
+        }
+    }
+    
+    # If no active servers found, exit - don't use fallback paths
+    if ($searchPaths.Count -eq 0) {
+        Write-Host "    [!] No active MCP servers detected. Start an MCP server first." -ForegroundColor Red
+        Write-Host "Press any key to close..." -ForegroundColor Yellow
+        $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+        exit 1
+    }
     
     $foundLogs = @()
     
     foreach ($searchPath in $searchPaths) {
         try {
-            $logs = Get-ChildItem -Path "$searchPath\logs\powershell-mcp-audit-*.log" -Recurse -ErrorAction SilentlyContinue |
-                Where-Object { $_.Length -gt 0 } |
-                Sort-Object LastWriteTime -Descending
+            # Look for various MCP log patterns
+            $logPatterns = @(
+                "logs\powershell-mcp-audit-*.log",
+                "logs\mcp-audit-*.log", 
+                "logs\*-mcp-*.log",
+                "logs\audit-*.log",
+                "*.log"
+            )
             
-            $foundLogs += $logs
+            foreach ($pattern in $logPatterns) {
+                $logs = Get-ChildItem -Path "$searchPath\$pattern" -Recurse -ErrorAction SilentlyContinue |
+                    Where-Object { 
+                        $_.Length -gt 0 -and 
+                        ($_.Name -like "*mcp*" -or $_.Name -like "*audit*" -or 
+                         (Get-Content $_.FullName -TotalCount 5 | Where-Object { $_ -like "*[AUDIT]*" -or $_ -like "*MCP*" }))
+                    } |
+                    Sort-Object LastWriteTime -Descending
+                
+                $foundLogs += $logs
+            }
         } catch {
             # Ignore permission errors
         }

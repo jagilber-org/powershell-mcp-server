@@ -3,9 +3,10 @@
     "powershell-mcp-server": {
       "command": "node",
       "args": [
-        "dist/vscode-server-enterprise.js"
+        "dist/server.js"
       ],
-      "cwd": "c:\\github\\jagilber-pr\\powershell-mcp-server"
+      "cwd": "c:\\github\\jagilber-pr\\powershell-mcp-server",
+      "type": "stdio"
     }
   }
 }
