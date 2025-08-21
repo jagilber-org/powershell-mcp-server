@@ -42,7 +42,8 @@ async function run() {
   // generate large output (5000 lines) to trigger truncation
   setTimeout(()=> {
     const ps = '1..5000 | ForEach-Object { \"LINE: $_\" }';
-    send({ jsonrpc:'2.0', id:2, method:'tools/call', params:{ name:'powershell-command', arguments:{ command: ps } } }, server);
+    // Add confirmed:true since this classifies as UNKNOWN (starts with number) and requires confirmation
+    send({ jsonrpc:'2.0', id:2, method:'tools/call', params:{ name:'powershell-command', arguments:{ command: ps, confirmed: true } } }, server);
   }, 2000);
 }
 run();
