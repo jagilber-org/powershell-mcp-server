@@ -126,11 +126,42 @@ Phase 1 + 2 tests (added):
 - `test-server-stats.mjs` (metrics + dynamic pattern state)
 - `test-rate-limit.mjs` (validates token bucket enforcement)
 
+### Performance / Stress
+
+- `stress-test.mjs` (high concurrency latency + throughput capture -> `metrics/`)
+- `codebase-stats.ps1` (captures LOC breakdown for trending)
+
+Run a quick stress sample:
+
+```powershell
+npm run test:stress
+```
+
+Collect codebase stats:
+
+```powershell
+npm run stats:codebase
+```
+
+Daily baseline combo (stats + moderate stress) writes timestamped JSON to `metrics/`:
+
+```powershell
+npm run baseline:daily
+```
+
 ## Roadmap (Excerpt)
 
 - Phase 2: dynamic overrides + metrics + rate limiting (DONE; further tuning possible)
 - Phase 3: cancellation, pluggable policies, signing
 - Phase 4: log rotation, redaction, self-test tool
+
+### Periodic Operational Checks (add to scheduler / reminder)
+
+- Daily: `npm run baseline:daily` capture latency percentiles + codebase size
+- Weekly: Review `metrics/` trends (latency p95/p99, error counts, total lines)
+- Weekly: Run `npm run compliance:report` and archive report
+- After security changes: Run `test-rate-limit.mjs` + `test-server-stats.mjs` to confirm metrics & limits
+- Monthly: Consider pruning old `metrics/*.json` or archiving
 
 ## Git Hooks
 
