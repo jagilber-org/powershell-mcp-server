@@ -1351,6 +1351,8 @@ This MCP server provides secure, enterprise-grade PowerShell command execution w
 - **powershell-script**: Execute multi-line PowerShell scripts  
 - **powershell-file**: Execute PowerShell script files
 - **powershell-syntax-check**: Validate PowerShell syntax without execution
+- **server-stats**: Retrieve metrics, dynamic pattern overrides and rate limit snapshot
+- **security-config**: Get / set runtime security flags (e.g. enforceWorkingDirectory)
 - **help**: Get comprehensive help and guidance
 - **ai-agent-test**: Run validation tests for server functionality
 
@@ -1570,12 +1572,19 @@ Include authKey in all tool requests when server requires it:
 - Batch related operations when possible
 - Monitor execution time in responses
 
-## Working Directory Usage
-- Prefer specifying a workingDirectory for any command that accesses relative paths to ensure predictable file resolution.
-- Use isolated temp folders for write operations (creation, modification) to reduce risk of unintended file access.
-- Validate the directory exists before invoking tools; if missing, create it with least privileges required.
-- Never point workingDirectory at system directories (e.g. Windows, System32) or user profile roots when executing untrusted input.
-- For multi-step workflows, reuse the same workingDirectory to maintain context (e.g. generate file then read it).
+## Working Directory Usage & Enforcement
+The server offers an optional policy flag: **enforceWorkingDirectory** (default: false). When enabled, any provided workingDirectory must resolve under one of the configured roots in security.allowedWriteRoots (environment variables like \${TEMP} are expanded). If a directory is outside the allowed roots, the command is blocked with error WORKING_DIRECTORY_POLICY_VIOLATION.
+
+Guidelines:
+- Prefer specifying a workingDirectory for relative path operations.
+- Use isolated temp/sandbox folders for write operations.
+- Create the directory with least privileges if missing before execution.
+- Never target system or highly privileged paths for untrusted content.
+- Reuse a dedicated sandbox directory for multi-step workflows.
+
+Runtime Toggle via security-config tool (JSON examples):
+{ "tool": "security-config", "params": { "action": "get" } }
+{ "tool": "security-config", "params": { "action": "set", "option": "enforceWorkingDirectory", "value": true } }
 
 ## Security Compliance
 - Never override security classifications without authorization
