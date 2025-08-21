@@ -45,7 +45,7 @@ Unknown commands require confirmation. Blocked or dangerous patterns never run. 
 ```jsonc
 {
   "security": {
-    "enforceAuth": true,
+    // enforceAuth (optional): enable to require MCP_AUTH_KEY, omitted here for local dev
     "allowedWriteRoots": ["${TEMP}", "./sandbox"],
     "requireConfirmationForUnknown": true
   },

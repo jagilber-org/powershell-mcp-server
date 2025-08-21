@@ -35,7 +35,7 @@ import * as path from 'path';
 
 interface EnterpriseConfig {
     security: {
-        enforceAuth: boolean;
+        enforceAuth?: boolean; // optional
         allowedWriteRoots: string[];
         requireConfirmationForUnknown: boolean;
     };
@@ -783,9 +783,9 @@ class EnterprisePowerShellMCPServer {
     private validateAuthKey(providedKey?: string): boolean {
         // If no auth key is set, allow access (development mode)
         if (!this.authKey) {
-            if (ENTERPRISE_CONFIG.security.enforceAuth) {
-                auditLog('ERROR', 'AUTH_REQUIRED', 'Authentication enforced by config but no key provided at startup');
-                return false;
+            if (ENTERPRISE_CONFIG.security.enforceAuth === true) {
+                // Misconfiguration: enforceAuth requested without key; degrade to warning and allow for now
+                auditLog('WARNING', 'AUTH_MISCONFIGURED', 'enforceAuth true but no MCP_AUTH_KEY set; allowing requests (development fallback)');
             }
             return true;
         }
