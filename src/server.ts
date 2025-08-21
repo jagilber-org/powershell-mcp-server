@@ -38,6 +38,7 @@ interface EnterpriseConfig {
         enforceAuth?: boolean; // optional
         allowedWriteRoots: string[];
         requireConfirmationForUnknown: boolean;
+    enforceWorkingDirectory?: boolean; // new flag to enable/disable working directory restriction
     // Dynamic pattern override support (Phase 2)
     additionalSafe?: string[];
     additionalBlocked?: string[];
@@ -65,6 +66,7 @@ const DEFAULT_CONFIG: EnterpriseConfig = {
         enforceAuth: false,
         allowedWriteRoots: ['.'],
     requireConfirmationForUnknown: true,
+    enforceWorkingDirectory: false,
     additionalSafe: [],
     additionalBlocked: [],
     suppressPatterns: []
@@ -1144,8 +1146,8 @@ class EnterprisePowerShellMCPServer {
         let keptLines = 0;
         
         try {
-            // Working directory enforcement
-            if (workingDirectory) {
+            // Working directory enforcement (guarded by flag)
+            if (workingDirectory && ENTERPRISE_CONFIG.security.enforceWorkingDirectory) {
                 try {
                     const real = fs.realpathSync(workingDirectory);
                     const allowed = ENTERPRISE_CONFIG.security.allowedWriteRoots.some(root => {
@@ -1169,12 +1171,12 @@ class EnterprisePowerShellMCPServer {
                     return {
                         success: false,
                         stdout: '',
-                        stderr: `Failed to resolve working directory: ${e instanceof Error ? e.message : e}`,
+                        stderr: `Failed to validate working directory: ${e instanceof Error ? (e as Error).message : e}`,
                         exitCode: null,
                         duration_ms: 0,
                         command,
                         workingDirectory,
-                        error: 'WORKING_DIRECTORY_RESOLUTION_FAILED'
+                        error: 'WORKING_DIRECTORY_VALIDATION_FAILED'
                     };
                 }
             }
@@ -1761,6 +1763,16 @@ Use the ai-agent-test tool to validate functionality:
                         inputSchema: zodToJsonSchema(PowerShellCommandSchema),
                     },
                     {
+                        name: 'security-config',
+                        description: 'Get or set security runtime options (currently enforceWorkingDirectory) without restarting.',
+                        inputSchema: zodToJsonSchema(z.object({
+                            action: z.enum(['get','set']).default('get').describe('Operation to perform'),
+                            option: z.enum(['enforceWorkingDirectory']).optional().describe('Security option to set when action=set'),
+                            value: z.boolean().optional().describe('New boolean value when action=set'),
+                            key: z.string().optional().describe('Authentication key (required if server has authentication enabled)')
+                        }))
+                    },
+                    {
                         name: 'powershell-script',
                         description: 'Execute a multi-line PowerShell script with full security assessment and audit trail. Ideal for complex operations requiring multiple commands.',
                         inputSchema: zodToJsonSchema(PowerShellScriptSchema),
@@ -1885,6 +1897,21 @@ Use the ai-agent-test tool to validate functionality:
 
                 // Route to appropriate handler
                 switch (name) {
+                    case 'security-config': {
+                        const action = args?.action || 'get';
+                        if (action === 'get') {
+                            return { content: [{ type: 'text', text: JSON.stringify({ enforceWorkingDirectory: ENTERPRISE_CONFIG.security.enforceWorkingDirectory }, null, 2) }] };
+                        }
+                        if (action === 'set') {
+                            if (!('value' in args) || typeof args.value !== 'boolean') {
+                                throw new McpError(ErrorCode.InvalidParams, 'Missing boolean value for set action');
+                            }
+                            ENTERPRISE_CONFIG.security.enforceWorkingDirectory = args.value;
+                            auditLog('INFO', 'SECURITY_CONFIG_CHANGED', 'Updated enforceWorkingDirectory', { value: args.value });
+                            return { content: [{ type: 'text', text: `enforceWorkingDirectory set to ${args.value}` }] };
+                        }
+                        throw new McpError(ErrorCode.InvalidParams, `Unsupported action: ${action}`);
+                    }
                     case 'server-stats': {
                         const reset = args?.reset;
                         const snapshot = {
