@@ -10,6 +10,12 @@
     "suppressPatterns": [
     ]
   },
+  "rateLimit": {
+    "enabled": true,
+    "intervalMs": 5000,
+    "maxRequests": 8,
+    "burst": 12
+  },
   "limits": {
     "maxOutputKB": 128,
     "maxLines": 1000,

@@ -43,12 +43,12 @@ Unknown commands require confirmation. Blocked or dangerous patterns never run. 
 - Output size + line truncation with indicator
 - Optional structured NDJSON audit logging
 
-### Phase 2 (In Progress)
+### Phase 2 (Implemented So Far)
 
 - Dynamic security pattern overrides (additionalSafe / additionalBlocked / suppressPatterns)
 - Metrics collection (counts by security level, blocked/truncated, average duration)
 - `server-stats` tool for runtime metrics & threat + pattern state
-- (Planned) Rate limiting (token bucket)
+- Rate limiting (token bucket per client PID) with configurable window, throughput and burst
 
 ## Configuration (`enterprise-config.json`)
 
@@ -62,6 +62,12 @@ Unknown commands require confirmation. Blocked or dangerous patterns never run. 
   "additionalSafe": ["^Get-ChildItem"],
   "additionalBlocked": [],
   "suppressPatterns": []
+  },
+  "rateLimit": {
+    "enabled": true,
+    "intervalMs": 5000,        // Refill window length
+    "maxRequests": 8,          // Tokens refilled per interval
+    "burst": 12                // Maximum bucket capacity (initial tokens)
   },
   "limits": {
     "maxOutputKB": 128,
@@ -106,6 +112,7 @@ Stdout / stderr are truncated when either byte or line limits exceed configurati
 ```powershell
 ./Simple-LogMonitor.ps1 -Follow
 ```
+
 Or view NDJSON structured log files in `./logs/*.ndjson` when enabled.
 
 ## Tests
@@ -117,10 +124,11 @@ Phase 1 + 2 tests (added):
 - `test-output-truncation.mjs`
 - `test-workingdirectory-policy.mjs`
 - `test-server-stats.mjs` (metrics + dynamic pattern state)
+- `test-rate-limit.mjs` (validates token bucket enforcement)
 
 ## Roadmap (Excerpt)
 
-- Phase 2: (partial) dynamic overrides + metrics (DONE), add rate limiting
+- Phase 2: dynamic overrides + metrics + rate limiting (DONE; further tuning possible)
 - Phase 3: cancellation, pluggable policies, signing
 - Phase 4: log rotation, redaction, self-test tool
 

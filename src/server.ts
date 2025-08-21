@@ -43,6 +43,12 @@ interface EnterpriseConfig {
     additionalBlocked?: string[];
     suppressPatterns?: string[]; // patterns (raw string or regex source) to remove from built-in sets
     };
+    rateLimit?: {
+        enabled: boolean;
+        intervalMs: number; // window for refill
+        maxRequests: number; // tokens added per interval
+        burst: number; // maximum bucket capacity
+    };
     limits: {
         maxOutputKB: number;
         maxLines: number;
@@ -62,6 +68,12 @@ const DEFAULT_CONFIG: EnterpriseConfig = {
     additionalSafe: [],
     additionalBlocked: [],
     suppressPatterns: []
+    },
+    rateLimit: {
+        enabled: true,
+        intervalMs: 5000,
+        maxRequests: 8,
+        burst: 12
     },
     limits: {
         maxOutputKB: 256,
@@ -86,6 +98,8 @@ function loadEnterpriseConfig(): EnterpriseConfig {
                 const parsed = JSON.parse(raw);
                 return {
                     security: { ...DEFAULT_CONFIG.security, ...parsed.security },
+                    // Ensure rateLimit block is merged (was previously omitted, disabling rate limiting)
+                    rateLimit: { ...DEFAULT_CONFIG.rateLimit, ...parsed.rateLimit },
                     limits: { ...DEFAULT_CONFIG.limits, ...parsed.limits },
                     logging: { ...DEFAULT_CONFIG.logging, ...parsed.logging }
                 };
@@ -727,6 +741,32 @@ class EnterprisePowerShellMCPServer {
         risky: RegExp[];
         blocked: RegExp[]; // union of registry/system/root/remote/critical/dangerous
     };
+    
+    // Rate limiting (simple token bucket keyed by parent PID)
+    private rateBuckets: Map<number, { tokens: number; lastRefill: number }> = new Map();
+    
+    private enforceRateLimit(clientPid: number): { allowed: boolean; remaining: number; resetMs: number } {
+        const cfg = ENTERPRISE_CONFIG.rateLimit;
+        if (!cfg || !cfg.enabled) return { allowed: true, remaining: cfg?.burst || 0, resetMs: 0 };
+        const now = Date.now();
+        let bucket = this.rateBuckets.get(clientPid);
+        if (!bucket) {
+            bucket = { tokens: cfg.burst, lastRefill: now };
+            this.rateBuckets.set(clientPid, bucket);
+        }
+        // Refill
+        const since = now - bucket.lastRefill;
+        if (since >= cfg.intervalMs) {
+            const intervals = Math.floor(since / cfg.intervalMs);
+            bucket.tokens = Math.min(cfg.burst, bucket.tokens + intervals * cfg.maxRequests);
+            bucket.lastRefill += intervals * cfg.intervalMs;
+        }
+        if (bucket.tokens <= 0) {
+            return { allowed: false, remaining: 0, resetMs: cfg.intervalMs - (now - bucket.lastRefill) };
+        }
+        bucket.tokens--;
+        return { allowed: true, remaining: bucket.tokens, resetMs: cfg.intervalMs - (now - bucket.lastRefill) };
+    }
     
     constructor(authKey?: string) {
         this.authKey = authKey;
@@ -1828,6 +1868,21 @@ Use the ai-agent-test tool to validate functionality:
 
                 console.error(`✅ Enterprise authentication passed for ${name}`);
 
+                // Rate limiting
+                const rl = this.enforceRateLimit(clientInfo.parentPid);
+                if (!rl.allowed) {
+                    auditLog('WARNING', 'RATE_LIMIT_EXCEEDED', 'Client exceeded rate limit', {
+                        clientPid: clientInfo.parentPid,
+                        toolName: name,
+                        resetMs: rl.resetMs
+                    });
+                    throw new McpError(
+                        ErrorCode.InvalidRequest,
+                        `Rate limit exceeded. Try again in ${rl.resetMs}ms.`
+                    );
+                }
+                enhancedRequestInfo['rateLimit'] = { remaining: rl.remaining, resetMs: rl.resetMs };
+
                 // Route to appropriate handler
                 switch (name) {
                     case 'server-stats': {
@@ -1845,6 +1900,7 @@ Use the ai-agent-test tool to validate functionality:
                                 additionalBlocked: ENTERPRISE_CONFIG.security.additionalBlocked || [],
                                 suppressPatterns: ENTERPRISE_CONFIG.security.suppressPatterns || []
                             },
+                            rateLimit: ENTERPRISE_CONFIG.rateLimit || { enabled: false },
                             timestamp: new Date().toISOString()
                         };
                         if (reset) {
