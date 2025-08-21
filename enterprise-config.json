@@ -1,6 +1,6 @@
 {
   "security": {
-    "enforceAuth": true,
+    "enforceAuth": false,
     "allowedWriteRoots": ["${TEMP}", "./sandbox"],
     "requireConfirmationForUnknown": true
   },
