@@ -1352,7 +1352,8 @@ This MCP server provides secure, enterprise-grade PowerShell command execution w
 - **powershell-file**: Execute PowerShell script files
 - **powershell-syntax-check**: Validate PowerShell syntax without execution
 - **server-stats**: Retrieve metrics, dynamic pattern overrides and rate limit snapshot
-- **security-config**: Get / set runtime security flags (e.g. enforceWorkingDirectory)
+- **enforce-working-directory**: Enable/disable working directory enforcement policy  
+- **get-working-directory-policy**: Check current working directory policy status
 - **help**: Get comprehensive help and guidance
 - **ai-agent-test**: Run validation tests for server functionality
 
@@ -1582,9 +1583,10 @@ Guidelines:
 - Never target system or highly privileged paths for untrusted content.
 - Reuse a dedicated sandbox directory for multi-step workflows.
 
-Runtime Toggle via security-config tool (JSON examples):
-{ "tool": "security-config", "params": { "action": "get" } }
-{ "tool": "security-config", "params": { "action": "set", "option": "enforceWorkingDirectory", "value": true } }
+Runtime Control Tools:
+{ "tool": "get-working-directory-policy" }
+{ "tool": "enforce-working-directory", "params": { "enabled": true } }
+{ "tool": "enforce-working-directory", "params": { "enabled": false } }
 
 ## Security Compliance
 - Never override security classifications without authorization
@@ -1603,7 +1605,52 @@ Use the ai-agent-test tool to validate functionality:
     "authKey": "your-key"
   }
 }
-\`\`\``
+\`\`\``,
+
+            'working-directory': `
+# 📁 Working Directory Management
+
+## Overview
+Control working directory enforcement policy to restrict where PowerShell commands can execute.
+
+## Policy Status
+Use \`get-working-directory-policy\` to check current settings:
+- **enforceWorkingDirectory**: Whether enforcement is active
+- **allowedWriteRoots**: Permitted directory roots  
+- **status**: Current enforcement state (ENFORCED/DISABLED)
+
+## Enable/Disable Enforcement  
+\`\`\`json
+// Enable enforcement
+{
+  "tool": "enforce-working-directory", 
+  "params": { "enabled": true }
+}
+
+// Disable enforcement  
+{
+  "tool": "enforce-working-directory",
+  "params": { "enabled": false }
+}
+\`\`\`
+
+## Check Current Policy
+\`\`\`json
+{
+  "tool": "get-working-directory-policy"
+}
+\`\`\`
+
+## How It Works
+When **enabled**: Commands with workingDirectory parameter must resolve under configured allowedWriteRoots (environment variables like \${TEMP} are expanded). Commands outside allowed roots are blocked with WORKING_DIRECTORY_POLICY_VIOLATION.
+
+When **disabled** (default): Commands can use any workingDirectory without restriction.
+
+## Best Practices
+- Enable enforcement in production environments
+- Configure allowedWriteRoots to include safe temporary directories
+- Use dedicated sandbox directories for untrusted operations
+- Always specify workingDirectory for file operations`
         };
         
         if (topic && helpSections[topic as keyof typeof helpSections]) {
@@ -1772,12 +1819,17 @@ Use the ai-agent-test tool to validate functionality:
                         inputSchema: zodToJsonSchema(PowerShellCommandSchema),
                     },
                     {
-                        name: 'security-config',
-                        description: 'Get or set security runtime options (currently enforceWorkingDirectory) without restarting.',
+                        name: 'enforce-working-directory',
+                        description: 'Enable or disable working directory enforcement policy. When enabled, commands with workingDirectory must resolve under configured allowedWriteRoots.',
                         inputSchema: zodToJsonSchema(z.object({
-                            action: z.enum(['get','set']).default('get').describe('Operation to perform'),
-                            option: z.enum(['enforceWorkingDirectory']).optional().describe('Security option to set when action=set'),
-                            value: z.boolean().optional().describe('New boolean value when action=set'),
+                            enabled: z.boolean().describe('Enable (true) or disable (false) working directory enforcement'),
+                            key: z.string().optional().describe('Authentication key (required if server has authentication enabled)')
+                        }))
+                    },
+                    {
+                        name: 'get-working-directory-policy',
+                        description: 'Check current working directory enforcement policy status and configuration.',
+                        inputSchema: zodToJsonSchema(z.object({
                             key: z.string().optional().describe('Authentication key (required if server has authentication enabled)')
                         }))
                     },
@@ -1906,20 +1958,38 @@ Use the ai-agent-test tool to validate functionality:
 
                 // Route to appropriate handler
                 switch (name) {
-                    case 'security-config': {
-                        const action = args?.action || 'get';
-                        if (action === 'get') {
-                            return { content: [{ type: 'text', text: JSON.stringify({ enforceWorkingDirectory: ENTERPRISE_CONFIG.security.enforceWorkingDirectory }, null, 2) }] };
+                    case 'enforce-working-directory': {
+                        if (!('enabled' in args) || typeof args.enabled !== 'boolean') {
+                            throw new McpError(ErrorCode.InvalidParams, 'Missing boolean "enabled" parameter');
                         }
-                        if (action === 'set') {
-                            if (!('value' in args) || typeof args.value !== 'boolean') {
-                                throw new McpError(ErrorCode.InvalidParams, 'Missing boolean value for set action');
-                            }
-                            ENTERPRISE_CONFIG.security.enforceWorkingDirectory = args.value;
-                            auditLog('INFO', 'SECURITY_CONFIG_CHANGED', 'Updated enforceWorkingDirectory', { value: args.value });
-                            return { content: [{ type: 'text', text: `enforceWorkingDirectory set to ${args.value}` }] };
-                        }
-                        throw new McpError(ErrorCode.InvalidParams, `Unsupported action: ${action}`);
+                        const oldValue = ENTERPRISE_CONFIG.security.enforceWorkingDirectory;
+                        ENTERPRISE_CONFIG.security.enforceWorkingDirectory = args.enabled;
+                        auditLog('INFO', 'WORKING_DIRECTORY_POLICY_CHANGED', `Working directory enforcement ${args.enabled ? 'enabled' : 'disabled'}`, { 
+                            oldValue, 
+                            newValue: args.enabled 
+                        });
+                        return { 
+                            content: [{ 
+                                type: 'text', 
+                                text: `Working directory enforcement ${args.enabled ? 'enabled' : 'disabled'}.\n\nWhen enabled, all commands with workingDirectory must resolve under configured allowedWriteRoots.\nCurrent status: ${args.enabled ? 'ENFORCED' : 'DISABLED'}` 
+                            }] 
+                        };
+                    }
+                    case 'get-working-directory-policy': {
+                        const policy = {
+                            enforceWorkingDirectory: ENTERPRISE_CONFIG.security.enforceWorkingDirectory,
+                            status: ENTERPRISE_CONFIG.security.enforceWorkingDirectory ? 'ENFORCED' : 'DISABLED',
+                            allowedWriteRoots: ENTERPRISE_CONFIG.security.allowedWriteRoots || [],
+                            description: ENTERPRISE_CONFIG.security.enforceWorkingDirectory 
+                                ? 'Working directory enforcement is ACTIVE. Commands with workingDirectory must resolve under allowedWriteRoots.'
+                                : 'Working directory enforcement is DISABLED. Commands can use any workingDirectory.'
+                        };
+                        return { 
+                            content: [{ 
+                                type: 'text', 
+                                text: JSON.stringify(policy, null, 2) 
+                            }] 
+                        };
                     }
                     case 'server-stats': {
                         const reset = args?.reset;
