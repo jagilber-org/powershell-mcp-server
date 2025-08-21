@@ -58,6 +58,8 @@ Unknown commands require confirmation. Blocked or dangerous patterns never run. 
     // enforceAuth (optional): enable to require MCP_AUTH_KEY, omitted here for local dev
     "allowedWriteRoots": ["${TEMP}", "./sandbox"],
   "requireConfirmationForUnknown": true,
+  // enforceWorkingDirectory: false by default (set true to restrict allowed working dirs)
+  "enforceWorkingDirectory": false,
   // Phase 2 dynamic overrides (all optional)
   "additionalSafe": ["^Get-ChildItem"],
   "additionalBlocked": [],

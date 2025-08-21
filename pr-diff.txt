@@ -1,0 +1,16 @@
+A	.githooks/pre-commit
+A	.githooks/pre-commit.ps1
+A	HARDENING-DESIGN.md
+A	README.md
+A	enterprise-config.json
+A	metrics/codebase-stats-2025-08-21-15-24-06.json
+A	metrics/stress-2025-08-21T19-18-02-456Z.json
+A	metrics/stress-2025-08-21T19-21-19-952Z.json
+M	package.json
+M	src/server.ts
+A	tests/stress-test.mjs
+A	tests/test-output-truncation.mjs
+A	tests/test-rate-limit.mjs
+A	tests/test-server-stats.mjs
+A	tests/test-workingdirectory-policy.mjs
+A	tools/codebase-stats.ps1

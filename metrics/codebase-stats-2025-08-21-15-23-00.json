@@ -1,0 +1,2847 @@
+{
+    "timestamp":  "2025-08-21T15:23:07.3064096-04:00",
+    "totalLines":  241016,
+    "counts":  {
+                   "ts":  656,
+                   "ps1":  35,
+                   "mjs":  18
+               },
+    "files":  [
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\.githooks\\pre-commit.ps1",
+                      "lines":  33
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\dist\\index.d.ts",
+                      "lines":  9
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\dist\\server.d.ts",
+                      "lines":  15
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\.bin\\acorn.ps1",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\.bin\\ts-node-cwd.ps1",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\.bin\\ts-node-esm.ps1",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\.bin\\ts-node-script.ps1",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\.bin\\ts-node-transpile-only.ps1",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\.bin\\ts-node.ps1",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\.bin\\ts-script.ps1",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\.bin\\tsc.ps1",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\.bin\\tsserver.ps1",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@cspotcode\\source-map-support\\register-hook-require.d.ts",
+                      "lines":  7
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@cspotcode\\source-map-support\\register.d.ts",
+                      "lines":  7
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@cspotcode\\source-map-support\\source-map-support.d.ts",
+                      "lines":  76
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\resolve-uri\\dist\\types\\resolve-uri.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\resolve-uri\\dist\\resolve-uri.mjs",
+                      "lines":  232
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\sourcemap-codec\\dist\\sourcemap-codec.mjs",
+                      "lines":  423
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\sourcemap-codec\\src\\scopes.ts",
+                      "lines":  345
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\sourcemap-codec\\src\\sourcemap-codec.ts",
+                      "lines":  111
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\sourcemap-codec\\src\\strings.ts",
+                      "lines":  65
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\sourcemap-codec\\src\\vlq.ts",
+                      "lines":  55
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\trace-mapping\\dist\\types\\any-map.d.ts",
+                      "lines":  8
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\trace-mapping\\dist\\types\\binary-search.d.ts",
+                      "lines":  32
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\trace-mapping\\dist\\types\\by-source.d.ts",
+                      "lines":  7
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\trace-mapping\\dist\\types\\resolve.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\trace-mapping\\dist\\types\\sort.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\trace-mapping\\dist\\types\\sourcemap-segment.d.ts",
+                      "lines":  16
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\trace-mapping\\dist\\types\\strip-filename.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\trace-mapping\\dist\\types\\trace-mapping.d.ts",
+                      "lines":  70
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\trace-mapping\\dist\\types\\types.d.ts",
+                      "lines":  85
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@jridgewell\\trace-mapping\\dist\\trace-mapping.mjs",
+                      "lines":  514
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\client\\index.d.ts",
+                      "lines":  773
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\client\\index.test.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\client\\sse.d.ts",
+                      "lines":  22
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\client\\stdio.d.ts",
+                      "lines":  56
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\client\\stdio.test.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\client\\websocket.d.ts",
+                      "lines":  17
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\server\\index.d.ts",
+                      "lines":  112
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\server\\index.test.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\server\\sse.d.ts",
+                      "lines":  46
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\server\\stdio.d.ts",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\server\\stdio.test.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\shared\\protocol.d.ts",
+                      "lines":  157
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\shared\\stdio.d.ts",
+                      "lines":  13
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\shared\\stdio.test.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\shared\\transport.d.ts",
+                      "lines":  39
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\cli.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\inMemory.d.ts",
+                      "lines":  20
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\inMemory.test.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\types.d.ts",
+                      "lines":  26425
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\utils.d.ts",
+                      "lines":  5
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@modelcontextprotocol\\sdk\\dist\\utils.test.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\assert\\strict.d.ts",
+                      "lines":  8
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\compatibility\\disposable.d.ts",
+                      "lines":  16
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\compatibility\\index.d.ts",
+                      "lines":  9
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\compatibility\\indexable.d.ts",
+                      "lines":  20
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\compatibility\\iterators.d.ts",
+                      "lines":  21
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\dns\\promises.d.ts",
+                      "lines":  479
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\fs\\promises.d.ts",
+                      "lines":  1248
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\readline\\promises.d.ts",
+                      "lines":  162
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\stream\\consumers.d.ts",
+                      "lines":  38
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\stream\\promises.d.ts",
+                      "lines":  90
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\stream\\web.d.ts",
+                      "lines":  533
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\timers\\promises.d.ts",
+                      "lines":  108
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\ts5.6\\buffer.buffer.d.ts",
+                      "lines":  460
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\ts5.6\\globals.typedarray.d.ts",
+                      "lines":  19
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\ts5.6\\index.d.ts",
+                      "lines":  91
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\assert.d.ts",
+                      "lines":  1044
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\async_hooks.d.ts",
+                      "lines":  605
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\buffer.buffer.d.ts",
+                      "lines":  462
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\buffer.d.ts",
+                      "lines":  1932
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\child_process.d.ts",
+                      "lines":  1452
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\cluster.d.ts",
+                      "lines":  578
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\console.d.ts",
+                      "lines":  452
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\constants.d.ts",
+                      "lines":  21
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\crypto.d.ts",
+                      "lines":  4570
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\dgram.d.ts",
+                      "lines":  596
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\diagnostics_channel.d.ts",
+                      "lines":  578
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\dns.d.ts",
+                      "lines":  871
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\dom-events.d.ts",
+                      "lines":  99
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\domain.d.ts",
+                      "lines":  170
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\events.d.ts",
+                      "lines":  931
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\fs.d.ts",
+                      "lines":  4362
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\globals.d.ts",
+                      "lines":  335
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\globals.typedarray.d.ts",
+                      "lines":  21
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\http.d.ts",
+                      "lines":  2031
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\http2.d.ts",
+                      "lines":  2623
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\https.d.ts",
+                      "lines":  544
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\index.d.ts",
+                      "lines":  91
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\inspector.d.ts",
+                      "lines":  3966
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\module.d.ts",
+                      "lines":  539
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\net.d.ts",
+                      "lines":  1011
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\os.d.ts",
+                      "lines":  495
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\path.d.ts",
+                      "lines":  200
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\perf_hooks.d.ts",
+                      "lines":  963
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\process.d.ts",
+                      "lines":  1956
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\punycode.d.ts",
+                      "lines":  117
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\querystring.d.ts",
+                      "lines":  152
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\readline.d.ts",
+                      "lines":  589
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\repl.d.ts",
+                      "lines":  430
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\sea.d.ts",
+                      "lines":  153
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\stream.d.ts",
+                      "lines":  1668
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\string_decoder.d.ts",
+                      "lines":  67
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\test.d.ts",
+                      "lines":  1807
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\timers.d.ts",
+                      "lines":  286
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\tls.d.ts",
+                      "lines":  1231
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\trace_events.d.ts",
+                      "lines":  197
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\tty.d.ts",
+                      "lines":  208
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\url.d.ts",
+                      "lines":  964
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\util.d.ts",
+                      "lines":  2331
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\v8.d.ts",
+                      "lines":  808
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\vm.d.ts",
+                      "lines":  1030
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\wasi.d.ts",
+                      "lines":  181
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\worker_threads.d.ts",
+                      "lines":  724
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\@types\\node\\zlib.d.ts",
+                      "lines":  539
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\acorn\\dist\\acorn.d.ts",
+                      "lines":  883
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\acorn\\dist\\acorn.mjs",
+                      "lines":  6233
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\acorn-walk\\dist\\walk.d.ts",
+                      "lines":  177
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\acorn-walk\\dist\\walk.mjs",
+                      "lines":  437
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\arg\\index.d.ts",
+                      "lines":  31
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\create-require\\create-require.d.ts",
+                      "lines":  3
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\iconv-lite\\lib\\index.d.ts",
+                      "lines":  41
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\make-error\\index.d.ts",
+                      "lines":  47
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\raw-body\\index.d.ts",
+                      "lines":  85
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\setprototypeof\\index.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\child\\argv-payload.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\child\\child-entrypoint.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\child\\child-loader.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\child\\child-require.d.ts",
+                      "lines":  7
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\child\\spawn-child.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\transpilers\\swc.d.ts",
+                      "lines":  11
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\transpilers\\types.d.ts",
+                      "lines":  35
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\bin-cwd.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\bin-esm.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\bin-script-deprecated.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\bin-script.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\bin-transpile.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\bin.d.ts",
+                      "lines":  11
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\cjs-resolve-hooks.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\configuration.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\esm.d.ts",
+                      "lines":  53
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\file-extensions.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\index.d.ts",
+                      "lines":  332
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\module-type-classifier.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\node-module-type-classifier.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\repl.d.ts",
+                      "lines":  78
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\resolver-functions.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\ts-compiler-types.d.ts",
+                      "lines":  63
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\ts-internals.d.ts",
+                      "lines":  6
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\ts-transpile-module.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\tsconfig-schema.d.ts",
+                      "lines":  13
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\tsconfigs.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\dist\\util.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\esm\\transpile-only.mjs",
+                      "lines":  8
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\child-loader.mjs",
+                      "lines":  8
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\ts-node\\esm.mjs",
+                      "lines":  8
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.d.ts",
+                      "lines":  22
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.decorators.d.ts",
+                      "lines":  384
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.decorators.legacy.d.ts",
+                      "lines":  22
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.dom.asynciterable.d.ts",
+                      "lines":  41
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.dom.d.ts",
+                      "lines":  39429
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.dom.iterable.d.ts",
+                      "lines":  571
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2015.collection.d.ts",
+                      "lines":  147
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2015.core.d.ts",
+                      "lines":  597
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2015.d.ts",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2015.generator.d.ts",
+                      "lines":  77
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2015.iterable.d.ts",
+                      "lines":  605
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2015.promise.d.ts",
+                      "lines":  81
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2015.proxy.d.ts",
+                      "lines":  128
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2015.reflect.d.ts",
+                      "lines":  144
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2015.symbol.d.ts",
+                      "lines":  46
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2015.symbol.wellknown.d.ts",
+                      "lines":  326
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2016.array.include.d.ts",
+                      "lines":  116
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2016.d.ts",
+                      "lines":  21
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2016.full.d.ts",
+                      "lines":  23
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2016.intl.d.ts",
+                      "lines":  31
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2017.arraybuffer.d.ts",
+                      "lines":  21
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2017.d.ts",
+                      "lines":  26
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2017.date.d.ts",
+                      "lines":  31
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2017.full.d.ts",
+                      "lines":  23
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2017.intl.d.ts",
+                      "lines":  44
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2017.object.d.ts",
+                      "lines":  49
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2017.sharedmemory.d.ts",
+                      "lines":  135
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2017.string.d.ts",
+                      "lines":  45
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2017.typedarrays.d.ts",
+                      "lines":  53
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2018.asyncgenerator.d.ts",
+                      "lines":  77
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2018.asynciterable.d.ts",
+                      "lines":  53
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2018.d.ts",
+                      "lines":  24
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2018.full.d.ts",
+                      "lines":  24
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2018.intl.d.ts",
+                      "lines":  83
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2018.promise.d.ts",
+                      "lines":  30
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2018.regexp.d.ts",
+                      "lines":  37
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2019.array.d.ts",
+                      "lines":  79
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2019.d.ts",
+                      "lines":  24
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2019.full.d.ts",
+                      "lines":  24
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2019.intl.d.ts",
+                      "lines":  23
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2019.object.d.ts",
+                      "lines":  33
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2019.string.d.ts",
+                      "lines":  37
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2019.symbol.d.ts",
+                      "lines":  24
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2020.bigint.d.ts",
+                      "lines":  765
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2020.d.ts",
+                      "lines":  27
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2020.date.d.ts",
+                      "lines":  42
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2020.full.d.ts",
+                      "lines":  24
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2020.intl.d.ts",
+                      "lines":  474
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2020.number.d.ts",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2020.promise.d.ts",
+                      "lines":  47
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2020.sharedmemory.d.ts",
+                      "lines":  99
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2020.string.d.ts",
+                      "lines":  44
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2020.symbol.wellknown.d.ts",
+                      "lines":  41
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2021.d.ts",
+                      "lines":  23
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2021.full.d.ts",
+                      "lines":  24
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2021.intl.d.ts",
+                      "lines":  166
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2021.promise.d.ts",
+                      "lines":  48
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2021.string.d.ts",
+                      "lines":  33
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2021.weakref.d.ts",
+                      "lines":  78
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2022.array.d.ts",
+                      "lines":  121
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2022.d.ts",
+                      "lines":  25
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2022.error.d.ts",
+                      "lines":  75
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2022.full.d.ts",
+                      "lines":  24
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2022.intl.d.ts",
+                      "lines":  145
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2022.object.d.ts",
+                      "lines":  26
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2022.regexp.d.ts",
+                      "lines":  39
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2022.string.d.ts",
+                      "lines":  25
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2023.array.d.ts",
+                      "lines":  924
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2023.collection.d.ts",
+                      "lines":  21
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2023.d.ts",
+                      "lines":  22
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2023.full.d.ts",
+                      "lines":  24
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2023.intl.d.ts",
+                      "lines":  56
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2024.arraybuffer.d.ts",
+                      "lines":  65
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2024.collection.d.ts",
+                      "lines":  29
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2024.d.ts",
+                      "lines":  26
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2024.full.d.ts",
+                      "lines":  24
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2024.object.d.ts",
+                      "lines":  29
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2024.promise.d.ts",
+                      "lines":  35
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2024.regexp.d.ts",
+                      "lines":  25
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2024.sharedmemory.d.ts",
+                      "lines":  68
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es2024.string.d.ts",
+                      "lines":  29
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es5.d.ts",
+                      "lines":  4601
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.es6.d.ts",
+                      "lines":  23
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.esnext.array.d.ts",
+                      "lines":  35
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.esnext.collection.d.ts",
+                      "lines":  96
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.esnext.d.ts",
+                      "lines":  29
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.esnext.decorators.d.ts",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.esnext.disposable.d.ts",
+                      "lines":  193
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.esnext.error.d.ts",
+                      "lines":  24
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.esnext.float16.d.ts",
+                      "lines":  443
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.esnext.full.d.ts",
+                      "lines":  24
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.esnext.intl.d.ts",
+                      "lines":  21
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.esnext.iterator.d.ts",
+                      "lines":  148
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.esnext.promise.d.ts",
+                      "lines":  34
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.esnext.sharedmemory.d.ts",
+                      "lines":  25
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.scripthost.d.ts",
+                      "lines":  322
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.webworker.asynciterable.d.ts",
+                      "lines":  41
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.webworker.d.ts",
+                      "lines":  13150
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.webworker.importscripts.d.ts",
+                      "lines":  23
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\lib.webworker.iterable.d.ts",
+                      "lines":  340
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\tsserverlibrary.d.ts",
+                      "lines":  17
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\typescript\\lib\\typescript.d.ts",
+                      "lines":  11438
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\agent.d.ts",
+                      "lines":  31
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\api.d.ts",
+                      "lines":  43
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\balanced-pool.d.ts",
+                      "lines":  29
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\cache.d.ts",
+                      "lines":  36
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\client.d.ts",
+                      "lines":  108
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\connector.d.ts",
+                      "lines":  34
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\content-type.d.ts",
+                      "lines":  21
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\cookies.d.ts",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\diagnostics-channel.d.ts",
+                      "lines":  66
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\dispatcher.d.ts",
+                      "lines":  256
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\env-http-proxy-agent.d.ts",
+                      "lines":  21
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\errors.d.ts",
+                      "lines":  149
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\eventsource.d.ts",
+                      "lines":  61
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\fetch.d.ts",
+                      "lines":  209
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\file.d.ts",
+                      "lines":  39
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\filereader.d.ts",
+                      "lines":  54
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\formdata.d.ts",
+                      "lines":  108
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\global-dispatcher.d.ts",
+                      "lines":  9
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\global-origin.d.ts",
+                      "lines":  7
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\handlers.d.ts",
+                      "lines":  15
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\header.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\index.d.ts",
+                      "lines":  71
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\interceptors.d.ts",
+                      "lines":  17
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\mock-agent.d.ts",
+                      "lines":  50
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\mock-client.d.ts",
+                      "lines":  25
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\mock-errors.d.ts",
+                      "lines":  12
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\mock-interceptor.d.ts",
+                      "lines":  93
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\mock-pool.d.ts",
+                      "lines":  25
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\patch.d.ts",
+                      "lines":  33
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\pool-stats.d.ts",
+                      "lines":  19
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\pool.d.ts",
+                      "lines":  39
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\proxy-agent.d.ts",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\readable.d.ts",
+                      "lines":  65
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\retry-agent.d.ts",
+                      "lines":  8
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\retry-handler.d.ts",
+                      "lines":  116
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\util.d.ts",
+                      "lines":  18
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\webidl.d.ts",
+                      "lines":  228
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\undici-types\\websocket.d.ts",
+                      "lines":  150
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\v8-compile-cache-lib\\v8-compile-cache.d.ts",
+                      "lines":  7
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\yn\\index.d.ts",
+                      "lines":  65
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\benchmarks\\datetime.ts",
+                      "lines":  58
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\benchmarks\\discriminatedUnion.ts",
+                      "lines":  80
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\benchmarks\\index.ts",
+                      "lines":  59
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\benchmarks\\ipv4.ts",
+                      "lines":  57
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\benchmarks\\object.ts",
+                      "lines":  69
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\benchmarks\\primitives.ts",
+                      "lines":  162
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\benchmarks\\realworld.ts",
+                      "lines":  63
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\benchmarks\\string.ts",
+                      "lines":  55
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\benchmarks\\union.ts",
+                      "lines":  80
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\helpers\\enumUtil.ts",
+                      "lines":  17
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\helpers\\errorUtil.ts",
+                      "lines":  8
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\helpers\\parseUtil.ts",
+                      "lines":  176
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\helpers\\partialUtil.ts",
+                      "lines":  34
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\helpers\\typeAliases.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\helpers\\util.ts",
+                      "lines":  224
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\locales\\en.ts",
+                      "lines":  124
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\all-errors.test.ts",
+                      "lines":  157
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\anyunknown.test.ts",
+                      "lines":  28
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\array.test.ts",
+                      "lines":  71
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\async-parsing.test.ts",
+                      "lines":  388
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\async-refinements.test.ts",
+                      "lines":  46
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\base.test.ts",
+                      "lines":  29
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\bigint.test.ts",
+                      "lines":  55
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\branded.test.ts",
+                      "lines":  53
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\catch.test.ts",
+                      "lines":  220
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\coerce.test.ts",
+                      "lines":  133
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\complex.test.ts",
+                      "lines":  56
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\custom.test.ts",
+                      "lines":  31
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\date.test.ts",
+                      "lines":  32
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\deepmasking.test.ts",
+                      "lines":  186
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\default.test.ts",
+                      "lines":  112
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\description.test.ts",
+                      "lines":  33
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\discriminated-unions.test.ts",
+                      "lines":  315
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\enum.test.ts",
+                      "lines":  80
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\error.test.ts",
+                      "lines":  551
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\firstparty.test.ts",
+                      "lines":  87
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\firstpartyschematypes.test.ts",
+                      "lines":  21
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\function.test.ts",
+                      "lines":  257
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\generics.test.ts",
+                      "lines":  48
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\instanceof.test.ts",
+                      "lines":  37
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\intersection.test.ts",
+                      "lines":  110
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\language-server.source.ts",
+                      "lines":  76
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\language-server.test.ts",
+                      "lines":  207
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\literal.test.ts",
+                      "lines":  36
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\map.test.ts",
+                      "lines":  110
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\masking.test.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\mocker.test.ts",
+                      "lines":  19
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\Mocker.ts",
+                      "lines":  54
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\nan.test.ts",
+                      "lines":  21
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\nativeEnum.test.ts",
+                      "lines":  87
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\nullable.test.ts",
+                      "lines":  42
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\number.test.ts",
+                      "lines":  176
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\object-augmentation.test.ts",
+                      "lines":  29
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\object-in-es5-env.test.ts",
+                      "lines":  29
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\object.test.ts",
+                      "lines":  434
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\optional.test.ts",
+                      "lines":  42
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\parser.test.ts",
+                      "lines":  41
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\parseUtil.test.ts",
+                      "lines":  23
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\partials.test.ts",
+                      "lines":  243
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\pickomit.test.ts",
+                      "lines":  111
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\pipeline.test.ts",
+                      "lines":  29
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\preprocess.test.ts",
+                      "lines":  186
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\primitive.test.ts",
+                      "lines":  440
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\promise.test.ts",
+                      "lines":  90
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\readonly.test.ts",
+                      "lines":  194
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\record.test.ts",
+                      "lines":  171
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\recursive.test.ts",
+                      "lines":  197
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\refine.test.ts",
+                      "lines":  313
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\safeparse.test.ts",
+                      "lines":  27
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\set.test.ts",
+                      "lines":  142
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\standard-schema.test.ts",
+                      "lines":  83
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\string.test.ts",
+                      "lines":  916
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\transformer.test.ts",
+                      "lines":  233
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\tuple.test.ts",
+                      "lines":  90
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\unions.test.ts",
+                      "lines":  57
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\validations.test.ts",
+                      "lines":  133
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\tests\\void.test.ts",
+                      "lines":  15
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\errors.ts",
+                      "lines":  13
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\external.ts",
+                      "lines":  6
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\index.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\standard-schema.ts",
+                      "lines":  113
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\types.ts",
+                      "lines":  5136
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v3\\ZodError.ts",
+                      "lines":  330
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\anyunknown.test.ts",
+                      "lines":  26
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\array.test.ts",
+                      "lines":  264
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\assignability.test.ts",
+                      "lines":  210
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\async-parsing.test.ts",
+                      "lines":  381
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\async-refinements.test.ts",
+                      "lines":  68
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\base.test.ts",
+                      "lines":  7
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\bigint.test.ts",
+                      "lines":  54
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\brand.test.ts",
+                      "lines":  63
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\catch.test.ts",
+                      "lines":  252
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\coalesce.test.ts",
+                      "lines":  20
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\coerce.test.ts",
+                      "lines":  160
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\continuability.test.ts",
+                      "lines":  352
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\custom.test.ts",
+                      "lines":  40
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\date.test.ts",
+                      "lines":  31
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\datetime.test.ts",
+                      "lines":  296
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\default.test.ts",
+                      "lines":  313
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\description.test.ts",
+                      "lines":  32
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\discriminated-unions.test.ts",
+                      "lines":  619
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\enum.test.ts",
+                      "lines":  285
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\error-utils.test.ts",
+                      "lines":  527
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\error.test.ts",
+                      "lines":  711
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\file.test.ts",
+                      "lines":  91
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\firstparty.test.ts",
+                      "lines":  175
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\function.test.ts",
+                      "lines":  268
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\generics.test.ts",
+                      "lines":  72
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\index.test.ts",
+                      "lines":  829
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\instanceof.test.ts",
+                      "lines":  34
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\intersection.test.ts",
+                      "lines":  171
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\json.test.ts",
+                      "lines":  108
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\lazy.test.ts",
+                      "lines":  227
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\literal.test.ts",
+                      "lines":  92
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\map.test.ts",
+                      "lines":  196
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\nan.test.ts",
+                      "lines":  21
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\nested-refine.test.ts",
+                      "lines":  168
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\nonoptional.test.ts",
+                      "lines":  86
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\nullable.test.ts",
+                      "lines":  22
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\number.test.ts",
+                      "lines":  247
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\object.test.ts",
+                      "lines":  563
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\optional.test.ts",
+                      "lines":  123
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\partial.test.ts",
+                      "lines":  147
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\pickomit.test.ts",
+                      "lines":  127
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\pipe.test.ts",
+                      "lines":  81
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\prefault.test.ts",
+                      "lines":  37
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\preprocess.test.ts",
+                      "lines":  298
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\primitive.test.ts",
+                      "lines":  175
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\promise.test.ts",
+                      "lines":  81
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\prototypes.test.ts",
+                      "lines":  23
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\readonly.test.ts",
+                      "lines":  252
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\record.test.ts",
+                      "lines":  342
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\recursive-types.test.ts",
+                      "lines":  356
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\refine.test.ts",
+                      "lines":  532
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\registries.test.ts",
+                      "lines":  204
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\set.test.ts",
+                      "lines":  179
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\standard-schema.test.ts",
+                      "lines":  57
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\string-formats.test.ts",
+                      "lines":  109
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\string.test.ts",
+                      "lines":  881
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\stringbool.test.ts",
+                      "lines":  66
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\template-literal.test.ts",
+                      "lines":  758
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\to-json-schema.test.ts",
+                      "lines":  2314
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\transform.test.ts",
+                      "lines":  250
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\tuple.test.ts",
+                      "lines":  163
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\union.test.ts",
+                      "lines":  94
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\validations.test.ts",
+                      "lines":  283
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\tests\\void.test.ts",
+                      "lines":  12
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\checks.ts",
+                      "lines":  30
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\coerce.ts",
+                      "lines":  27
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\compat.ts",
+                      "lines":  66
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\errors.ts",
+                      "lines":  75
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\external.ts",
+                      "lines":  50
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\index.ts",
+                      "lines":  5
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\iso.ts",
+                      "lines":  90
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\parse.ts",
+                      "lines":  33
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\classic\\schemas.ts",
+                      "lines":  2054
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\tests\\locales\\be.test.ts",
+                      "lines":  124
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\tests\\locales\\en.test.ts",
+                      "lines":  22
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\tests\\locales\\ru.test.ts",
+                      "lines":  128
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\tests\\locales\\tr.test.ts",
+                      "lines":  69
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\tests\\index.test.ts",
+                      "lines":  46
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\api.ts",
+                      "lines":  1594
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\checks.ts",
+                      "lines":  1283
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\config.ts",
+                      "lines":  15
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\core.ts",
+                      "lines":  134
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\doc.ts",
+                      "lines":  44
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\errors.ts",
+                      "lines":  424
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\function.ts",
+                      "lines":  176
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\index.ts",
+                      "lines":  15
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\json-schema.ts",
+                      "lines":  143
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\parse.ts",
+                      "lines":  94
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\regexes.ts",
+                      "lines":  135
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\registries.ts",
+                      "lines":  96
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\schemas.ts",
+                      "lines":  3842
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\standard-schema.ts",
+                      "lines":  64
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\to-json-schema.ts",
+                      "lines":  977
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\util.ts",
+                      "lines":  775
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\versions.ts",
+                      "lines":  5
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\core\\zsf.ts",
+                      "lines":  323
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\ar.ts",
+                      "lines":  125
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\az.ts",
+                      "lines":  121
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\be.ts",
+                      "lines":  184
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\ca.ts",
+                      "lines":  127
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\cs.ts",
+                      "lines":  142
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\de.ts",
+                      "lines":  124
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\en.ts",
+                      "lines":  127
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\eo.ts",
+                      "lines":  125
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\es.ts",
+                      "lines":  125
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\fa.ts",
+                      "lines":  134
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\fi.ts",
+                      "lines":  131
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\fr-CA.ts",
+                      "lines":  126
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\fr.ts",
+                      "lines":  124
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\he.ts",
+                      "lines":  125
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\hu.ts",
+                      "lines":  126
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\id.ts",
+                      "lines":  125
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\index.ts",
+                      "lines":  39
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\it.ts",
+                      "lines":  125
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\ja.ts",
+                      "lines":  122
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\kh.ts",
+                      "lines":  126
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\ko.ts",
+                      "lines":  131
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\mk.ts",
+                      "lines":  127
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\ms.ts",
+                      "lines":  124
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\nl.ts",
+                      "lines":  126
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\no.ts",
+                      "lines":  124
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\ota.ts",
+                      "lines":  125
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\pl.ts",
+                      "lines":  126
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\ps.ts",
+                      "lines":  133
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\pt.ts",
+                      "lines":  123
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\ru.ts",
+                      "lines":  184
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\sl.ts",
+                      "lines":  126
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\sv.ts",
+                      "lines":  127
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\ta.ts",
+                      "lines":  125
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\th.ts",
+                      "lines":  126
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\tr.ts",
+                      "lines":  121
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\ua.ts",
+                      "lines":  126
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\ur.ts",
+                      "lines":  126
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\vi.ts",
+                      "lines":  125
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\zh-CN.ts",
+                      "lines":  123
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\locales\\zh-TW.ts",
+                      "lines":  125
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\tests\\assignability.test.ts",
+                      "lines":  129
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\tests\\brand.test.ts",
+                      "lines":  51
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\tests\\checks.test.ts",
+                      "lines":  144
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\tests\\computed.test.ts",
+                      "lines":  36
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\tests\\error.test.ts",
+                      "lines":  22
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\tests\\functions.test.ts",
+                      "lines":  43
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\tests\\index.test.ts",
+                      "lines":  871
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\tests\\number.test.ts",
+                      "lines":  95
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\tests\\object.test.ts",
+                      "lines":  185
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\tests\\prototypes.test.ts",
+                      "lines":  43
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\tests\\recursive-types.test.ts",
+                      "lines":  275
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\tests\\string.test.ts",
+                      "lines":  299
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\checks.ts",
+                      "lines":  32
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\coerce.ts",
+                      "lines":  22
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\external.ts",
+                      "lines":  40
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\index.ts",
+                      "lines":  3
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\iso.ts",
+                      "lines":  62
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\parse.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\mini\\schemas.ts",
+                      "lines":  1579
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4\\index.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\v4-mini\\index.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\src\\index.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v3\\helpers\\enumUtil.d.ts",
+                      "lines":  8
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v3\\helpers\\errorUtil.d.ts",
+                      "lines":  9
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v3\\helpers\\parseUtil.d.ts",
+                      "lines":  78
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v3\\helpers\\partialUtil.d.ts",
+                      "lines":  8
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v3\\helpers\\typeAliases.d.ts",
+                      "lines":  2
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v3\\helpers\\util.d.ts",
+                      "lines":  85
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v3\\locales\\en.d.ts",
+                      "lines":  3
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v3\\errors.d.ts",
+                      "lines":  5
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v3\\external.d.ts",
+                      "lines":  6
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v3\\index.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v3\\standard-schema.d.ts",
+                      "lines":  102
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v3\\types.d.ts",
+                      "lines":  1031
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v3\\ZodError.d.ts",
+                      "lines":  164
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\classic\\checks.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\classic\\coerce.d.ts",
+                      "lines":  17
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\classic\\compat.d.ts",
+                      "lines":  46
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\classic\\errors.d.ts",
+                      "lines":  30
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\classic\\external.d.ts",
+                      "lines":  13
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\classic\\index.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\classic\\iso.d.ts",
+                      "lines":  22
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\classic\\parse.d.ts",
+                      "lines":  23
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\classic\\schemas.d.ts",
+                      "lines":  630
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\api.d.ts",
+                      "lines":  284
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\checks.d.ts",
+                      "lines":  278
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\core.d.ts",
+                      "lines":  49
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\doc.d.ts",
+                      "lines":  14
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\errors.d.ts",
+                      "lines":  208
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\function.d.ts",
+                      "lines":  52
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\index.d.ts",
+                      "lines":  15
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\json-schema.d.ts",
+                      "lines":  87
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\parse.d.ts",
+                      "lines":  25
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\regexes.d.ts",
+                      "lines":  62
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\registries.d.ts",
+                      "lines":  35
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\schemas.d.ts",
+                      "lines":  1041
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\standard-schema.d.ts",
+                      "lines":  55
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\to-json-schema.d.ts",
+                      "lines":  88
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\util.d.ts",
+                      "lines":  183
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\core\\versions.d.ts",
+                      "lines":  5
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\ar.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\az.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\be.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\ca.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\cs.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\de.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\en.d.ts",
+                      "lines":  5
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\eo.d.ts",
+                      "lines":  5
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\es.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\fa.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\fi.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\fr-CA.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\fr.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\he.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\hu.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\id.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\index.d.ts",
+                      "lines":  39
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\it.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\ja.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\kh.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\ko.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\mk.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\ms.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\nl.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\no.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\ota.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\pl.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\ps.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\pt.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\ru.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\sl.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\sv.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\ta.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\th.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\tr.d.ts",
+                      "lines":  5
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\ua.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\ur.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\vi.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\zh-CN.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\locales\\zh-TW.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\mini\\checks.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\mini\\coerce.d.ts",
+                      "lines":  7
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\mini\\external.d.ts",
+                      "lines":  11
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\mini\\index.d.ts",
+                      "lines":  3
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\mini\\iso.d.ts",
+                      "lines":  22
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\mini\\parse.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\mini\\schemas.d.ts",
+                      "lines":  356
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4\\index.d.ts",
+                      "lines":  3
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\v4-mini\\index.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod\\index.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\any.d.ts",
+                      "lines":  5
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\array.d.ts",
+                      "lines":  12
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\bigint.d.ts",
+                      "lines":  14
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\boolean.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\branded.d.ts",
+                      "lines":  3
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\catch.d.ts",
+                      "lines":  3
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\date.d.ts",
+                      "lines":  15
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\default.d.ts",
+                      "lines":  6
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\effects.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\enum.d.ts",
+                      "lines":  6
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\intersection.d.ts",
+                      "lines":  8
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\literal.d.ts",
+                      "lines":  9
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\map.d.ts",
+                      "lines":  15
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\nativeEnum.d.ts",
+                      "lines":  6
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\never.d.ts",
+                      "lines":  6
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\null.d.ts",
+                      "lines":  5
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\nullable.d.ts",
+                      "lines":  10
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\number.d.ts",
+                      "lines":  13
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\object.d.ts",
+                      "lines":  10
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\optional.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\pipeline.d.ts",
+                      "lines":  5
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\promise.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\readonly.d.ts",
+                      "lines":  3
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\record.d.ts",
+                      "lines":  13
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\set.d.ts",
+                      "lines":  13
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\string.d.ts",
+                      "lines":  73
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\tuple.d.ts",
+                      "lines":  13
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\undefined.d.ts",
+                      "lines":  6
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\union.d.ts",
+                      "lines":  23
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parsers\\unknown.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\errorMessages.d.ts",
+                      "lines":  15
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\getRelativePath.d.ts",
+                      "lines":  1
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\index.d.ts",
+                      "lines":  40
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\Options.d.ts",
+                      "lines":  37
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parseDef.d.ts",
+                      "lines":  4
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\parseTypes.d.ts",
+                      "lines":  34
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\Refs.d.ts",
+                      "lines":  17
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\selectParser.d.ts",
+                      "lines":  5
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\dist\\types\\zodToJsonSchema.d.ts",
+                      "lines":  10
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\createIndex.ts",
+                      "lines":  32
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\postcjs.ts",
+                      "lines":  3
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\node_modules\\zod-to-json-schema\\postesm.ts",
+                      "lines":  3
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\scripts\\check-mcp-compliance.mjs",
+                      "lines":  659
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\src\\index.ts",
+                      "lines":  18
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\src\\server.ts",
+                      "lines":  2415
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\src\\vscode-server-enterprise.ts",
+                      "lines":  2169
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\src\\vscode-server.ts",
+                      "lines":  1746
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\manual-test-mcp.ps1",
+                      "lines":  82
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\Quick-MCPTest.ps1",
+                      "lines":  185
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\Quick-Security-Test.ps1",
+                      "lines":  118
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\stress-test.mjs",
+                      "lines":  67
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\Test-Enhanced-Security.ps1",
+                      "lines":  164
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\test-mcp-proper.mjs",
+                      "lines":  68
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\test-mcp-protocol.mjs",
+                      "lines":  124
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\test-mcp-stdio.mjs",
+                      "lines":  121
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\Test-MCPClient.ps1",
+                      "lines":  405
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\test-output-truncation.mjs",
+                      "lines":  49
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\Test-PowerShellMCP-Fixed.ps1",
+                      "lines":  200
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\Test-PowerShellMCP.ps1",
+                      "lines":  342
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\test-rate-limit.mjs",
+                      "lines":  27
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\test-server-stats.mjs",
+                      "lines":  13
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\Test-UniversalLogMonitor-WorkingDirectory.ps1",
+                      "lines":  41
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\test-working-directory.mjs",
+                      "lines":  72
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tests\\test-workingdirectory-policy.mjs",
+                      "lines":  41
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tools\\codebase-stats.ps1",
+                      "lines":  25
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tools\\key-helper.ps1",
+                      "lines":  134
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tools\\ps-http-server.ps1",
+                      "lines":  607
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tools\\query-examples.ps1",
+                      "lines":  110
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tools\\quick-mcp-test.ps1",
+                      "lines":  18
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\tools\\quick-query.ps1",
+                      "lines":  98
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\build-enterprise.ps1",
+                      "lines":  24
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\Check-MCPCompliance.ps1",
+                      "lines":  0
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\LogMonitor.ps1",
+                      "lines":  194
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\PrettyLogMonitor.ps1",
+                      "lines":  168
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\Simple-MCPCheck.ps1",
+                      "lines":  50
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\SimpleLogMonitor.ps1",
+                      "lines":  190
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\SimpleUniversalMonitor.ps1",
+                      "lines":  308
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\Start-LogMonitor.ps1",
+                      "lines":  68
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\Start-SimpleMonitor.ps1",
+                      "lines":  62
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\Start-UniversalMonitor.ps1",
+                      "lines":  78
+                  },
+                  {
+                      "path":  "C:\\github\\jagilber\\powershell-mcp-server\\UniversalLogMonitor.ps1",
+                      "lines":  663
+                  }
+              ]
+}

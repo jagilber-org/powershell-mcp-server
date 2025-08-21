@@ -785,7 +785,9 @@ class EnterprisePowerShellMCPServer {
             },
             {
                 capabilities: {
-                    tools: {},
+                    tools: {
+                        listChanged: true
+                    },
                 },
             }
         );
@@ -1560,6 +1562,7 @@ Include authKey in all tool requests when server requires it:
 3. **Start with safe commands**: Use Get-* commands for information gathering
 4. **Handle confirmations**: Include 'confirmed: true' for risky operations
 5. **Monitor security levels**: Review classification in responses
+6. **Use terminal for stateful operations**: Long-running commands, session state, background jobs better suited for terminal tools
 
 ## Error Handling Best Practices
 - Check 'success' field in responses
@@ -1572,6 +1575,27 @@ Include authKey in all tool requests when server requires it:
 - Use working directory parameter to avoid path issues
 - Batch related operations when possible
 - Monitor execution time in responses
+
+## Terminal vs MCP Tool Selection
+**Use Terminal Tools for:**
+- **Long-running commands**: Operations taking >30 seconds (e.g., large data processing, system scans)
+- **Session-dependent workflows**: Commands that modify environment variables, change directories, or maintain state
+- **Background jobs**: Start-Job, background processes, monitoring tasks that continue running
+- **Interactive commands**: Tools requiring user input or confirmation prompts
+- **Pipeline-heavy operations**: Complex PowerShell pipelines with multiple stages
+
+**Use MCP PowerShell Tools for:**
+- **Quick information gathering**: Get-* cmdlets, system status checks
+- **Isolated operations**: Single commands with clear input/output
+- **Security-classified operations**: Commands requiring audit logging and security assessment
+- **Syntax validation**: Testing PowerShell scripts before execution
+- **Enterprise compliance**: Operations requiring authentication and policy enforcement
+
+**Examples:**
+- Terminal: Start-Job -ScriptBlock { Get-EventLog -LogName System | Export-Csv log.csv }
+- MCP Tool: Get-Process | Select-Object -First 10
+- Terminal: $env:PATH += ";C:\\\\NewPath"; Get-Command MyTool
+- MCP Tool: Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 
 ## Working Directory Usage & Enforcement
 The server offers an optional policy flag: **enforceWorkingDirectory** (default: false). When enabled, any provided workingDirectory must resolve under one of the configured roots in security.allowedWriteRoots (environment variables like \${TEMP} are expanded). If a directory is outside the allowed roots, the command is blocked with error WORKING_DIRECTORY_POLICY_VIOLATION.
@@ -1815,12 +1839,14 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                 tools: [
                     {
                         name: 'powershell-command',
-                        description: 'Execute a PowerShell command with enterprise-grade security classification and comprehensive audit logging. Supports timeout control, working directory specification, and security confirmation.',
+                        title: 'PowerShell Command Executor',
+                        description: 'Execute a single PowerShell command with enterprise security, audit logging, and timeout control. Supports working directory specification and security confirmation for risky operations.',
                         inputSchema: zodToJsonSchema(PowerShellCommandSchema),
                     },
                     {
                         name: 'enforce-working-directory',
-                        description: 'Enable or disable working directory enforcement policy. When enabled, commands with workingDirectory must resolve under configured allowedWriteRoots.',
+                        title: 'Working Directory Enforcement Control',
+                        description: 'Enable or disable the working directory enforcement security policy. When enabled, all commands with workingDirectory must resolve under configured allowedWriteRoots paths.',
                         inputSchema: zodToJsonSchema(z.object({
                             enabled: z.boolean().describe('Enable (true) or disable (false) working directory enforcement'),
                             key: z.string().optional().describe('Authentication key (required if server has authentication enabled)')
@@ -1828,39 +1854,78 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                     },
                     {
                         name: 'get-working-directory-policy',
-                        description: 'Check current working directory enforcement policy status and configuration.',
+                        title: 'Working Directory Policy Status',
+                        description: 'Get the current working directory enforcement policy status, configuration, and allowed root paths for security compliance.',
                         inputSchema: zodToJsonSchema(z.object({
                             key: z.string().optional().describe('Authentication key (required if server has authentication enabled)')
-                        }))
+                        })),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                enforceWorkingDirectory: { type: 'boolean', description: 'Whether working directory enforcement is enabled' },
+                                status: { type: 'string', enum: ['ENFORCED', 'DISABLED'], description: 'Current enforcement status' },
+                                allowedWriteRoots: { type: 'array', items: { type: 'string' }, description: 'List of allowed root directories' },
+                                description: { type: 'string', description: 'Human-readable policy description' }
+                            },
+                            required: ['enforceWorkingDirectory', 'status', 'allowedWriteRoots', 'description']
+                        }
                     },
                     {
                         name: 'powershell-script',
-                        description: 'Execute a multi-line PowerShell script with full security assessment and audit trail. Ideal for complex operations requiring multiple commands.',
+                        title: 'PowerShell Script Executor', 
+                        description: 'Execute multi-line PowerShell scripts with comprehensive security assessment, audit trail, and enterprise controls. Ideal for complex operations requiring multiple commands.',
                         inputSchema: zodToJsonSchema(PowerShellScriptSchema),
                     },
                     {
                         name: 'powershell-file',
-                        description: 'Execute a PowerShell script file with parameter support and comprehensive security analysis. Supports script files with complex parameter requirements.',
+                        title: 'PowerShell File Executor',
+                        description: 'Execute PowerShell script files (.ps1) with parameter support, security analysis, and audit logging. Supports complex scripts with parameter requirements.',
                         inputSchema: zodToJsonSchema(PowerShellFileSchema),
                     },
                     {
                         name: 'powershell-syntax-check',
-                        description: 'Validate PowerShell script syntax without execution. Perfect for pre-execution validation and development assistance.',
+                        title: 'PowerShell Syntax Validator',
+                        description: 'Validate PowerShell script syntax without execution. Provides syntax error detection and validation for development and pre-execution checks.',
                         inputSchema: zodToJsonSchema(SyntaxCheckSchema),
                     },
                     {
                         name: 'help',
-                        description: 'Get comprehensive help information about Enterprise PowerShell MCP Server capabilities, security policies, usage examples, and AI agent integration guidance.',
+                        title: 'Enterprise Help System',
+                        description: 'Get comprehensive help documentation about server capabilities, security policies, usage examples, and AI agent integration guidance. Supports topic-specific help.',
                         inputSchema: zodToJsonSchema(HelpSchema),
                     },
                     {
                         name: 'ai-agent-test',
-                        description: 'Run comprehensive validation tests to verify MCP server functionality, security enforcement, and demonstrate capabilities for AI agents. Tests all security levels safely.',
+                        title: 'AI Agent Testing Framework',
+                        description: 'Run comprehensive validation tests to verify server functionality, security enforcement, and capabilities. Tests all security levels safely with configurable test suites.',
                         inputSchema: zodToJsonSchema(AITestSchema),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                testSuite: { type: 'string', description: 'Name of test suite executed' },
+                                timestamp: { type: 'string', description: 'ISO timestamp of test execution' },
+                                serverPid: { type: 'number', description: 'Server process ID' },
+                                skipDangerous: { type: 'boolean', description: 'Whether dangerous tests were skipped' },
+                                totalTests: { type: 'number', description: 'Total number of tests run' },
+                                passed: { type: 'number', description: 'Number of tests passed' },
+                                failed: { type: 'number', description: 'Number of tests failed' },
+                                summary: {
+                                    type: 'object',
+                                    properties: {
+                                        successRate: { type: 'string', description: 'Success percentage as string' },
+                                        securityEnforcement: { type: 'string', enum: ['EXCELLENT', 'GOOD', 'NEEDS_REVIEW'], description: 'Security enforcement rating' },
+                                        safeExecution: { type: 'string', enum: ['EXCELLENT', 'GOOD', 'NEEDS_REVIEW'], description: 'Safe execution rating' }
+                                    },
+                                    required: ['successRate', 'securityEnforcement', 'safeExecution']
+                                }
+                            },
+                            required: ['testSuite', 'timestamp', 'serverPid', 'skipDangerous', 'totalTests', 'passed', 'failed', 'summary']
+                        }
                     },
                     {
                         name: 'threat-analysis',
-                        description: 'Get detailed threat tracking statistics including unknown commands, alias detection, and security threat analysis. Helps identify potential security risks and command patterns.',
+                        title: 'Security Threat Analytics',
+                        description: 'Get detailed threat tracking statistics including unknown commands, alias detection, suspicious patterns, and security risk analysis for audit and monitoring.',
                         inputSchema: zodToJsonSchema(z.object({
                             includeDetails: z.boolean().optional().describe('Include detailed threat entries in response'),
                             resetStats: z.boolean().optional().describe('Reset threat tracking statistics after retrieval'),
@@ -1869,11 +1934,33 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                     },
                     {
                         name: 'server-stats',
-                        description: 'Retrieve server runtime metrics (counts by security level, blocked/truncated totals, average duration, threat stats, dynamic pattern overrides).',
+                        title: 'Server Runtime Metrics',
+                        description: 'Retrieve comprehensive server performance and usage metrics including command counts by security level, execution times, threat statistics, and dynamic pattern overrides.',
                         inputSchema: zodToJsonSchema(z.object({
                             reset: z.boolean().optional().describe('Reset metrics after retrieval'),
                             key: z.string().optional().describe('Authentication key (required if server has authentication enabled)')
                         })),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                uptimeSeconds: { type: 'number', description: 'Server uptime in seconds' },
+                                metrics: {
+                                    type: 'object',
+                                    properties: {
+                                        totalCommands: { type: 'number', description: 'Total commands executed' },
+                                        safeCommands: { type: 'number', description: 'Safe commands executed' },
+                                        riskyCommands: { type: 'number', description: 'Risky commands executed' },
+                                        dangerousCommands: { type: 'number', description: 'Dangerous commands executed' },
+                                        criticalCommands: { type: 'number', description: 'Critical commands executed' },
+                                        blockedCommands: { type: 'number', description: 'Blocked commands' },
+                                        truncatedOutputs: { type: 'number', description: 'Truncated outputs count' },
+                                        averageDurationMs: { type: 'number', description: 'Average execution duration in milliseconds' }
+                                    },
+                                    required: ['totalCommands', 'safeCommands', 'riskyCommands', 'dangerousCommands', 'criticalCommands', 'blockedCommands', 'truncatedOutputs', 'averageDurationMs']
+                                }
+                            },
+                            required: ['uptimeSeconds', 'metrics']
+                        }
                     },
                 ] as Tool[],
             };
@@ -1988,7 +2075,8 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                             content: [{ 
                                 type: 'text', 
                                 text: JSON.stringify(policy, null, 2) 
-                            }] 
+                            }],
+                            structuredContent: policy
                         };
                     }
                     case 'server-stats': {
@@ -2013,7 +2101,10 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                             this.metrics = { commands:0, executions:0, blocked:0, truncated:0, byLevel:{SAFE:0,RISKY:0,DANGEROUS:0,CRITICAL:0,BLOCKED:0,UNKNOWN:0}, durationsMs:[], lastReset:new Date().toISOString() };
                         }
                         auditLog('INFO', 'SERVER_STATS', 'Server metrics retrieved', { reset, snapshot });
-                        return { content: [{ type:'text', text: JSON.stringify(snapshot,null,2) }] };
+                        return { 
+                            content: [{ type:'text', text: JSON.stringify(snapshot,null,2) }],
+                            structuredContent: snapshot
+                        };
                     }
                     case 'powershell-command': {
                         const validatedArgs = PowerShellCommandSchema.parse(args);
@@ -2314,7 +2405,8 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                             content: [{
                                 type: 'text' as const,
                                 text: JSON.stringify(testResults, null, 2)
-                            }]
+                            }],
+                            structuredContent: testResults
                         };
                     }
                     
