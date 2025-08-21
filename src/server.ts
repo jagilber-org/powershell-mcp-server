@@ -1425,6 +1425,13 @@ Include authKey in all tool requests when server requires it:
 - Batch related operations when possible
 - Monitor execution time in responses
 
+## Working Directory Usage
+- Prefer specifying a workingDirectory for any command that accesses relative paths to ensure predictable file resolution.
+- Use isolated temp folders for write operations (creation, modification) to reduce risk of unintended file access.
+- Validate the directory exists before invoking tools; if missing, create it with least privileges required.
+- Never point workingDirectory at system directories (e.g. Windows, System32) or user profile roots when executing untrusted input.
+- For multi-step workflows, reuse the same workingDirectory to maintain context (e.g. generate file then read it).
+
 ## Security Compliance
 - Never override security classifications without authorization
 - Review audit logs for security events

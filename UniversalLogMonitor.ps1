@@ -1,39 +1,49 @@
 #Requires -Version 5.1
 
 <#
-.SYNOPSIS    Write-Host "[*] Launching Universal MCP Monitor in new window..." -ForegroundColor Green
-    Universal Enterpris    switch ($JsonData.level) {
-        "CRITICAL" { $icon = "[*]"; $levelColor = "Magenta"; $messageColor = "Red" }
-        "ERROR"    { $icon = [char]0x274C; $levelColor = "Red"; $messageColor $Host.UI.RawUI.WindowTitle = "[*]         if ($availableLogs.Count -eq 1) {
-            $logFileToMonitor = $availableLogs[0].FullName
-            $workspaceName = Get-WorkspaceInfo $logFileToMonitor
-            Write-Host "[+] Auto-selected only available log: $logFileToMonitor" -ForegroundColor Green
-        } else {
-            # Auto-select the most recently modified file (likely the active one)
-            $mostRecent = $availableLogs | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-            $recentAge = (Get-Date) - $mostRecent.LastWriteTime
-            
-            if ($recentAge.TotalMinutes -lt 30) {
-                $logFileToMonitor = $mostRecent.FullName
-                $workspaceName = Get-WorkspaceInfo $logFileToMonitor
-                Write-Host "[+] Auto-selected most active log (modified $([math]::Round($recentAge.TotalMinutes, 1)) min ago): $($mostRecent.Name)" -ForegroundColor Green
-            } else {
-                # Show menu for selection
-                Show-LogFileMenu $availableLogsal Enterprise MCP Log Monitor - Multi$Host.UI.RawUI.WindowTitle = "[*] Universal MCP Monitor - $workspaceName"Workspace" "Red" }
-        "WARNING"  { $icon = [char]0x26A0; $levelColor = "Yellow"; $messageColor = "Yellow" }
-        "INFO"     { $icon = [char]0x2139; $levelColor = "Cyan"; $messageColor = "White" }
-        "DEBUG"    { $icon = "[*]"; $levelColor = "DarkGray"; $messageColor = "DarkGray" }
-    }og Monitor - Auto-detect logs with workspace info menu
+.SYNOPSIS
+    Universal Enterprise MCP Log Monitor - multi-workspace audit log viewer.
+
+.DESCRIPTION
+    Dynamically discovers and tails MCP audit log files across active workspaces.
+    Provides colorized, annotated output with security classification indicators
+    and workspace context. Can auto-detect running MCP servers or target a
+    specific log file. Supports pretty printing and optional raw JSON suppression.
+
 .PARAMETER LogPath
-    Specific log file path to monitor
+    Specific audit log file path to monitor. Overrides auto-detection.
+
+.PARAMETER WorkingDirectory
+    Working directory to prioritize when searching for audit logs. If provided
+    and valid, only that directory is searched (faster + deterministic). Falls
+    back to active server working directories when omitted.
+
 .PARAMETER AutoDetect
-    Auto-detect running MCP servers and their log files
+    Enable discovery of running MCP server processes to gather their working
+    directories for log file enumeration.
+
 .PARAMETER NoNewWindow
-    Skip launching in new window (for internal use)
+    Prevent relaunch in a new window (internal use / nested invocation).
+
+.PARAMETER HideJson
+    Suppress raw JSON output, showing only formatted, human-readable entries.
+
+.EXAMPLE
+    ./UniversalLogMonitor.ps1 -AutoDetect
+    Auto-detect active servers and follow the most recently updated audit log.
+
+.EXAMPLE
+    ./UniversalLogMonitor.ps1 -WorkingDirectory C:\Repos\ProjectA
+    Monitor audit logs only within the specified working directory.
+
+.NOTES
+    Added WorkingDirectory parameter to improve performance and reliability in
+    multi-repository environments and detached workspace scenarios.
 #>
 
 param(
     [string]$LogPath,
+    [string]$WorkingDirectory,
     [switch]$AutoDetect,
     [switch]$NoNewWindow,
     [switch]$HideJson
@@ -46,6 +56,9 @@ if (-not $NoNewWindow) {
     
     if ($LogPath) {
         $arguments += @('-LogPath', "`"$LogPath`"[*]")
+    }
+    if ($WorkingDirectory) {
+        $arguments += @('-WorkingDirectory', "`"$WorkingDirectory`"")
     }
     if ($AutoDetect) {
         $arguments += @('-AutoDetect')
@@ -323,18 +336,35 @@ function Find-RunningMCPServers {
 }
 
 function Find-MCPLogFiles {
+    param(
+        [string]$WorkingDirectory
+    )
     Write-Host "[*] Searching for MCP audit log files..." -ForegroundColor Yellow
 
-    # Find active servers and use ONLY their working directories
-    $runningServers = Find-RunningMCPServers
+    # If explicit working directory provided, prioritize it
+    if ($WorkingDirectory) {
+        $resolved = Resolve-Path -Path $WorkingDirectory -ErrorAction SilentlyContinue
+        if (-not $resolved) {
+            Write-Host "    [X] Working directory not found: $WorkingDirectory" -ForegroundColor Red
+        } else {
+            $WorkingDirectory = $resolved.ProviderPath
+            Write-Host "    [+] Using provided working directory: $WorkingDirectory" -ForegroundColor Green
+            $searchPaths = @($WorkingDirectory)
+        }
+    }
     
-    # Build search paths ONLY from active server locations - NO HARDCODED PATHS
-    $searchPaths = @()
-    
-    foreach ($server in $runningServers) {
-        if ($server.WorkingDirectory -and (Test-Path $server.WorkingDirectory)) {
-            $searchPaths += $server.WorkingDirectory
-            Write-Host "    [+] Will search in active server directory: $($server.WorkingDirectory)" -ForegroundColor Green
+    if (-not $searchPaths) {
+        # Find active servers and use ONLY their working directories
+        $runningServers = Find-RunningMCPServers
+        
+        # Build search paths ONLY from active server locations - NO HARDCODED PATHS
+        $searchPaths = @()
+        
+        foreach ($server in $runningServers) {
+            if ($server.WorkingDirectory -and (Test-Path $server.WorkingDirectory)) {
+                $searchPaths += $server.WorkingDirectory
+                Write-Host "    [+] Will search in active server directory: $($server.WorkingDirectory)" -ForegroundColor Green
+            }
         }
     }
     
@@ -496,7 +526,7 @@ try {
         Write-Host "$("[*]") Using specified log file: $LogPath" -ForegroundColor Green
     } else {
         # Find available log files
-        $availableLogs = Find-MCPLogFiles
+    $availableLogs = Find-MCPLogFiles -WorkingDirectory $WorkingDirectory
         
         if ($availableLogs.Count -eq 0) {
             Write-Host "$([char]0x274C) No MCP audit log files found!" -ForegroundColor Red
