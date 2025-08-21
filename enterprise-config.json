@@ -1,0 +1,16 @@
+{
+  "security": {
+    "enforceAuth": true,
+    "allowedWriteRoots": ["${TEMP}", "./sandbox"],
+    "requireConfirmationForUnknown": true
+  },
+  "limits": {
+    "maxOutputKB": 128,
+    "maxLines": 1000,
+    "defaultTimeoutMs": 90000
+  },
+  "logging": {
+    "structuredAudit": true,
+    "truncateIndicator": "<TRUNCATED>"
+  }
+}

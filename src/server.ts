@@ -29,6 +29,69 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// ============================================================================
+// PHASE 1 HARDENING: Config-driven limits & path enforcement
+// ============================================================================
+
+interface EnterpriseConfig {
+    security: {
+        enforceAuth: boolean;
+        allowedWriteRoots: string[];
+        requireConfirmationForUnknown: boolean;
+    };
+    limits: {
+        maxOutputKB: number;
+        maxLines: number;
+        defaultTimeoutMs: number;
+    };
+    logging: {
+        structuredAudit: boolean;
+        truncateIndicator: string;
+    };
+}
+
+const DEFAULT_CONFIG: EnterpriseConfig = {
+    security: {
+        enforceAuth: false,
+        allowedWriteRoots: ['.'],
+        requireConfirmationForUnknown: true
+    },
+    limits: {
+        maxOutputKB: 256,
+        maxLines: 2000,
+        defaultTimeoutMs: 90000
+    },
+    logging: {
+        structuredAudit: true,
+        truncateIndicator: '<TRUNCATED>'
+    }
+};
+
+function loadEnterpriseConfig(): EnterpriseConfig {
+    const configPaths = [
+        path.join(process.cwd(), 'enterprise-config.json'),
+        path.join(process.cwd(), 'enterprise.config.json')
+    ];
+    for (const p of configPaths) {
+        if (fs.existsSync(p)) {
+            try {
+                const raw = fs.readFileSync(p, 'utf8');
+                const parsed = JSON.parse(raw);
+                return {
+                    security: { ...DEFAULT_CONFIG.security, ...parsed.security },
+                    limits: { ...DEFAULT_CONFIG.limits, ...parsed.limits },
+                    logging: { ...DEFAULT_CONFIG.logging, ...parsed.logging }
+                };
+            } catch (e) {
+                console.error(`⚠️  Failed to parse enterprise config ${p}: ${e instanceof Error ? e.message : e}`);
+            }
+        }
+    }
+    return DEFAULT_CONFIG;
+}
+
+const ENTERPRISE_CONFIG = loadEnterpriseConfig();
+
 // ==============================================================================
 // TYPE DEFINITIONS - Enterprise-grade type safety
 // ==============================================================================
@@ -105,6 +168,7 @@ interface AuditLogEntry {
     category: string;
     message: string;
     metadata?: Record<string, any>;
+    structured?: boolean;
 }
 
 /** MCP notification parameters */
@@ -462,9 +526,9 @@ function sanitizeMetadata(metadata: Record<string, any> | undefined): Record<str
 
 /** Enhanced audit logging with MCP compliance */
 async function auditLog(
-    level: string, 
-    category: string, 
-    message: string, 
+    level: string,
+    category: string,
+    message: string,
     metadata?: Record<string, any>
 ): Promise<void> {
     const timestamp = new Date().toISOString(); // 'o' format UTC
@@ -507,6 +571,10 @@ async function auditLog(
     
     // File logging (always maintained for audit trail) - Pretty JSON format
     try {
+        if (ENTERPRISE_CONFIG.logging.structuredAudit) {
+            const ndjsonPath = path.join(LOG_DIR, `powershell-mcp-audit-${new Date().toISOString().split('T')[0]}.ndjson`);
+            fs.appendFileSync(ndjsonPath, JSON.stringify({ ...logEntry, structured: true }) + '\n');
+        }
         const fileLogEntry = `[AUDIT] ${JSON.stringify(logEntry, null, 2)}\n`;
         fs.appendFileSync(LOG_FILE, fileLogEntry);
     } catch (error) {
@@ -715,6 +783,10 @@ class EnterprisePowerShellMCPServer {
     private validateAuthKey(providedKey?: string): boolean {
         // If no auth key is set, allow access (development mode)
         if (!this.authKey) {
+            if (ENTERPRISE_CONFIG.security.enforceAuth) {
+                auditLog('ERROR', 'AUTH_REQUIRED', 'Authentication enforced by config but no key provided at startup');
+                return false;
+            }
             return true;
         }
         
@@ -1057,14 +1129,51 @@ class EnterprisePowerShellMCPServer {
     
     /** Execute PowerShell command with comprehensive security and error handling */
     async executePowerShellCommand(
-        command: string, 
-        timeout: number = 90000, 
+        command: string,
+        timeout: number = ENTERPRISE_CONFIG.limits.defaultTimeoutMs,
         workingDirectory?: string
     ): Promise<PowerShellExecutionResult> {
         const startTime = Date.now();
         let childProcess: ChildProcess | null = null;
+        let truncated = false;
+        let keptBytes = 0;
+        let keptLines = 0;
         
         try {
+            // Working directory enforcement
+            if (workingDirectory) {
+                try {
+                    const real = fs.realpathSync(workingDirectory);
+                    const allowed = ENTERPRISE_CONFIG.security.allowedWriteRoots.some(root => {
+                        const expanded = root.replace('${TEMP}', os.tmpdir());
+                        const fullRoot = path.resolve(expanded);
+                        return real.startsWith(fullRoot);
+                    });
+                    if (!allowed) {
+                        return {
+                            success: false,
+                            stdout: '',
+                            stderr: `Working directory '${workingDirectory}' outside allowed roots`,
+                            exitCode: null,
+                            duration_ms: 0,
+                            command,
+                            workingDirectory,
+                            error: 'WORKING_DIRECTORY_POLICY_VIOLATION'
+                        };
+                    }
+                } catch (e) {
+                    return {
+                        success: false,
+                        stdout: '',
+                        stderr: `Failed to resolve working directory: ${e instanceof Error ? e.message : e}`,
+                        exitCode: null,
+                        duration_ms: 0,
+                        command,
+                        workingDirectory,
+                        error: 'WORKING_DIRECTORY_RESOLUTION_FAILED'
+                    };
+                }
+            }
             const options: SpawnOptionsWithoutStdio = {
                 shell: false,
                 ...(workingDirectory && { cwd: workingDirectory })
@@ -1086,15 +1195,44 @@ class EnterprisePowerShellMCPServer {
             }, timeout);
             
             // Collect output
+            const MAX_BYTES = ENTERPRISE_CONFIG.limits.maxOutputKB * 1024;
+            const MAX_LINES = ENTERPRISE_CONFIG.limits.maxLines;
+            const truncateIndicator = ENTERPRISE_CONFIG.logging.truncateIndicator;
+
             if (childProcess.stdout) {
                 childProcess.stdout.on('data', (data) => {
-                    stdout += data.toString();
+                    if (truncated) return;
+                    const chunk = data.toString();
+                    const lines = chunk.split(/\r?\n/);
+                    for (const line of lines) {
+                        if (truncated) break;
+                        const prospective = stdout + (stdout ? '\n' : '') + line;
+                        const prospectiveBytes = Buffer.byteLength(prospective, 'utf8');
+                        const prospectiveLines = keptLines + 1;
+                        if (prospectiveBytes > MAX_BYTES || prospectiveLines > MAX_LINES) {
+                            truncated = true;
+                            stdout += `\n${truncateIndicator}`;
+                            break;
+                        }
+                        stdout = prospective;
+                        keptBytes = prospectiveBytes;
+                        keptLines = prospectiveLines;
+                    }
                 });
             }
-            
+
             if (childProcess.stderr) {
                 childProcess.stderr.on('data', (data) => {
-                    stderr += data.toString();
+                    if (truncated) return;
+                    const chunk = data.toString();
+                    const prospective = stderr + chunk;
+                    const prospectiveBytes = Buffer.byteLength(stdout + prospective, 'utf8');
+                    if (prospectiveBytes > MAX_BYTES) {
+                        truncated = true;
+                        stderr += `\n${truncateIndicator}`;
+                    } else {
+                        stderr = prospective;
+                    }
                 });
             }
             
@@ -1128,7 +1266,8 @@ class EnterprisePowerShellMCPServer {
                 workingDirectory,
                 processId: childProcess?.pid,
                 timedOut,
-                ...(timedOut ? { error: `Command timed out after ${timeout}ms` } : {})
+                ...(timedOut ? { error: `Command timed out after ${timeout}ms` } : {}),
+                ...(truncated ? { error: (timedOut ? 'TIMEOUT_AND_TRUNCATED' : 'OUTPUT_TRUNCATED') } : {})
             };
             
         } catch (error) {
@@ -1726,7 +1865,7 @@ Use the ai-agent-test tool to validate functionality:
                         const securityAssessment = this.classifyCommandSafety(validatedArgs.command);
                         
                         console.error(`🔨 Executing PowerShell Command: ${validatedArgs.command}`);
-                        const commandTimeout = validatedArgs.aiAgentTimeout || validatedArgs.timeout;
+                        const commandTimeout = validatedArgs.aiAgentTimeout || validatedArgs.timeout || ENTERPRISE_CONFIG.limits.defaultTimeoutMs;
                         console.error(`⏱️  Timeout: ${commandTimeout}ms${validatedArgs.aiAgentTimeout ? ' (AI Agent Override)' : ''}`);
                         console.error(`🛡️  Security Level: ${securityAssessment.level} (${securityAssessment.risk} RISK)`);
                         console.error(`📋 Risk Reason: ${securityAssessment.reason}`);
@@ -1816,7 +1955,8 @@ Use the ai-agent-test tool to validate functionality:
                             category: securityAssessment.category,
                             clientPid: clientInfo.parentPid,
                             serverPid: clientInfo.serverPid,
-                            workingDirectory: validatedArgs.workingDirectory
+                            workingDirectory: validatedArgs.workingDirectory,
+                            truncated: !!(result.error && result.error.includes('TRUNCATED'))
                         });
                         
                         return {
@@ -1834,7 +1974,7 @@ Use the ai-agent-test tool to validate functionality:
                         const securityAssessment = this.classifyCommandSafety(validatedArgs.script);
                         
                         console.error(`📜 Executing PowerShell Script (${validatedArgs.script.length} characters)`);
-                        const scriptTimeout = validatedArgs.aiAgentTimeout || validatedArgs.timeout;
+                        const scriptTimeout = validatedArgs.aiAgentTimeout || validatedArgs.timeout || ENTERPRISE_CONFIG.limits.defaultTimeoutMs;
                         console.error(`⏱️  Timeout: ${scriptTimeout}ms${validatedArgs.aiAgentTimeout ? ' (AI Agent Override)' : ''}`);
                         console.error(`🛡️  Security Level: ${securityAssessment.level} (${securityAssessment.risk} RISK)`);
                         
@@ -1901,7 +2041,8 @@ Use the ai-agent-test tool to validate functionality:
                             category: securityAssessment.category,
                             clientPid: clientInfo.parentPid,
                             serverPid: clientInfo.serverPid,
-                            workingDirectory: validatedArgs.workingDirectory
+                            workingDirectory: validatedArgs.workingDirectory,
+                            truncated: !!(result.error && result.error.includes('TRUNCATED'))
                         });
                         
                         return {
