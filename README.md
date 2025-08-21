@@ -25,6 +25,7 @@ npm run start:enterprise
 - help
 - ai-agent-test
 - threat-analysis
+- server-stats
 
 ## Security Model
 
@@ -33,12 +34,21 @@ SAFE → RISKY → DANGEROUS → CRITICAL → BLOCKED
 
 Unknown commands require confirmation. Blocked or dangerous patterns never run. Aliases and obfuscation patterns are detected and logged.
 
-## Phase 1 Hardening Features
+## Hardening Features
+
+### Phase 1 (Complete)
 
 - Config-driven limits (`enterprise-config.json`)
 - Working directory root enforcement
 - Output size + line truncation with indicator
 - Optional structured NDJSON audit logging
+
+### Phase 2 (In Progress)
+
+- Dynamic security pattern overrides (additionalSafe / additionalBlocked / suppressPatterns)
+- Metrics collection (counts by security level, blocked/truncated, average duration)
+- `server-stats` tool for runtime metrics & threat + pattern state
+- (Planned) Rate limiting (token bucket)
 
 ## Configuration (`enterprise-config.json`)
 
@@ -47,7 +57,11 @@ Unknown commands require confirmation. Blocked or dangerous patterns never run. 
   "security": {
     // enforceAuth (optional): enable to require MCP_AUTH_KEY, omitted here for local dev
     "allowedWriteRoots": ["${TEMP}", "./sandbox"],
-    "requireConfirmationForUnknown": true
+  "requireConfirmationForUnknown": true,
+  // Phase 2 dynamic overrides (all optional)
+  "additionalSafe": ["^Get-ChildItem"],
+  "additionalBlocked": [],
+  "suppressPatterns": []
   },
   "limits": {
     "maxOutputKB": 128,
@@ -98,16 +112,31 @@ Or view NDJSON structured log files in `./logs/*.ndjson` when enabled.
 
 Run existing protocol/security tests manually via Node or PowerShell scripts in `tests/`.
 
-Phase 1 new tests (added):
+Phase 1 + 2 tests (added):
 
 - `test-output-truncation.mjs`
 - `test-workingdirectory-policy.mjs`
+- `test-server-stats.mjs` (metrics + dynamic pattern state)
 
 ## Roadmap (Excerpt)
 
-- Phase 2: dynamic pattern overrides, rate limiting, metrics tool
+- Phase 2: (partial) dynamic overrides + metrics (DONE), add rate limiting
 - Phase 3: cancellation, pluggable policies, signing
 - Phase 4: log rotation, redaction, self-test tool
+
+## Git Hooks
+
+Enable the provided PowerShell pre-commit hook (runs build + key tests):
+
+```powershell
+git config core.hooksPath .githooks
+```
+
+Hook file: `.githooks/pre-commit.ps1` (wrapper `.githooks/pre-commit` for cross-platform). Disable by resetting:
+
+```powershell
+git config --unset core.hooksPath
+```
 
 ## Contributing
 
@@ -119,4 +148,5 @@ npm run build
 ```
 
 ## License
+
 Proprietary (internal hardening branch).

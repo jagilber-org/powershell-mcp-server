@@ -1,0 +1,5 @@
+#!/usr/bin/env pwsh
+# Redirect to PowerShell script
+$script = Join-Path $PSScriptRoot 'pre-commit.ps1'
+& $script
+exit $LASTEXITCODE
