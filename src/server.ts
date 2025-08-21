@@ -38,6 +38,10 @@ interface EnterpriseConfig {
         enforceAuth?: boolean; // optional
         allowedWriteRoots: string[];
         requireConfirmationForUnknown: boolean;
+    // Dynamic pattern override support (Phase 2)
+    additionalSafe?: string[];
+    additionalBlocked?: string[];
+    suppressPatterns?: string[]; // patterns (raw string or regex source) to remove from built-in sets
     };
     limits: {
         maxOutputKB: number;
@@ -54,7 +58,10 @@ const DEFAULT_CONFIG: EnterpriseConfig = {
     security: {
         enforceAuth: false,
         allowedWriteRoots: ['.'],
-        requireConfirmationForUnknown: true
+    requireConfirmationForUnknown: true,
+    additionalSafe: [],
+    additionalBlocked: [],
+    suppressPatterns: []
     },
     limits: {
         maxOutputKB: 256,
@@ -703,6 +710,24 @@ class EnterprisePowerShellMCPServer {
         sessionsWithThreats: 0
     };
     
+    // Phase 2: metrics & dynamic pattern caches
+    private metrics = {
+        commands: 0,
+        executions: 0,
+        blocked: 0,
+        truncated: 0,
+        byLevel: {
+            SAFE: 0, RISKY: 0, DANGEROUS: 0, CRITICAL: 0, BLOCKED: 0, UNKNOWN: 0
+        } as Record<SecurityLevel, number>,
+        durationsMs: [] as number[],
+        lastReset: new Date().toISOString()
+    };
+    private mergedPatterns?: {
+        safe: RegExp[];
+        risky: RegExp[];
+        blocked: RegExp[]; // union of registry/system/root/remote/critical/dangerous
+    };
+    
     constructor(authKey?: string) {
         this.authKey = authKey;
         this.startTime = new Date();
@@ -959,103 +984,42 @@ class EnterprisePowerShellMCPServer {
         // Continue with existing security patterns
         // 🚫 BLOCKED PATTERNS - These commands are completely blocked
         
-        // Registry modifications
-        for (const pattern of REGISTRY_MODIFICATION_PATTERNS) {
-            if (new RegExp(pattern, 'i').test(command)) {
-                return {
-                    level: 'BLOCKED',
-                    risk: 'FORBIDDEN', 
-                    reason: `Registry modification blocked: ${pattern}`,
-                    color: 'RED',
-                    blocked: true,
-                    category: 'REGISTRY_MODIFICATION',
-                    patterns: [pattern],
-                    recommendations: ['Use read-only registry operations', 'Request administrator approval for modifications']
-                };
-            }
+        // Phase 2 dynamic pattern merging (lazy init)
+        if (!this.mergedPatterns) {
+            const sup = new Set((ENTERPRISE_CONFIG.security.suppressPatterns||[]).map(p=>p.toLowerCase()));
+            const addBlocked = (ENTERPRISE_CONFIG.security.additionalBlocked||[]).map(p=>new RegExp(p, 'i'));
+            const addSafe = (ENTERPRISE_CONFIG.security.additionalSafe||[]).map(p=>new RegExp(p, 'i'));
+            const filterSet = (arr: readonly string[]) => arr.filter(p=>!sup.has(p.toLowerCase())).map(p=>new RegExp(p,'i'));
+            const blocked = [
+                ...filterSet(REGISTRY_MODIFICATION_PATTERNS),
+                ...filterSet(SYSTEM_FILE_PATTERNS),
+                ...filterSet(ROOT_DELETION_PATTERNS),
+                ...filterSet(REMOTE_MODIFICATION_PATTERNS),
+                ...filterSet(CRITICAL_PATTERNS),
+                ...filterSet(DANGEROUS_COMMANDS),
+                ...addBlocked
+            ];
+            const risky = filterSet(RISKY_PATTERNS);
+            const safe = [...filterSet(SAFE_PATTERNS), ...addSafe];
+            this.mergedPatterns = { safe, risky, blocked };
         }
-        
-        // System file modifications
-        for (const pattern of SYSTEM_FILE_PATTERNS) {
-            if (command.includes(pattern) || command.includes(pattern.replace(/\\\\/g, '/'))) {
+
+        // BLOCKED
+        for (const rx of this.mergedPatterns.blocked) {
+            if (rx.test(command)) {
                 return {
-                    level: 'BLOCKED',
+                    level: /powershell|encodedcommand|invoke-webrequest|download|string|webclient|format-volume|set-itemproperty/i.test(rx.source) ? 'CRITICAL' : 'BLOCKED',
                     risk: 'FORBIDDEN',
-                    reason: `Windows system file modification blocked: ${pattern}`,
-                    color: 'RED',
-                    blocked: true,
-                    category: 'SYSTEM_FILE_MODIFICATION',
-                    patterns: [pattern],
-                    recommendations: ['Use temporary directories', 'Work with user-accessible paths only']
-                };
-            }
-        }
-        
-        // Root drive operations
-        for (const pattern of ROOT_DELETION_PATTERNS) {
-            if (new RegExp(pattern, 'i').test(command)) {
-                return {
-                    level: 'BLOCKED',
-                    risk: 'FORBIDDEN',
-                    reason: `Root drive operation blocked: ${pattern}`,
-                    color: 'RED',
-                    blocked: true,
-                    category: 'ROOT_DRIVE_DELETION',
-                    patterns: [pattern],
-                    recommendations: ['Use -WhatIf for testing', 'Work with non-system drives']
-                };
-            }
-        }
-        
-        // Remote modifications
-        for (const pattern of REMOTE_MODIFICATION_PATTERNS) {
-            if (new RegExp(pattern, 'i').test(command)) {
-                return {
-                    level: 'BLOCKED',
-                    risk: 'FORBIDDEN',
-                    reason: `Remote machine modification blocked: ${pattern}`,
-                    color: 'RED',
-                    blocked: true,
-                    category: 'REMOTE_MODIFICATION',
-                    patterns: [pattern],
-                    recommendations: ['Use localhost only', 'Request remote access approval']
-                };
-            }
-        }
-        
-        // 🔴 CRITICAL THREATS - Security exploits and malware patterns
-        for (const pattern of CRITICAL_PATTERNS) {
-            if (new RegExp(pattern, 'i').test(command)) {
-                return {
-                    level: 'CRITICAL',
-                    risk: 'EXTREME',
-                    reason: `Critical security threat detected: ${pattern}`,
+                    reason: `Blocked by security policy: ${rx.source}`,
                     color: 'RED',
                     blocked: true,
                     category: 'SECURITY_THREAT',
-                    patterns: [pattern],
-                    recommendations: ['Review command for malicious intent', 'Use safe alternatives']
+                    patterns: [rx.source],
+                    recommendations: ['Remove dangerous operations', 'Use read-only alternatives']
                 };
             }
         }
-        
-        // 🟣 DANGEROUS - System-level modifications
-        for (const dangerousCmd of DANGEROUS_COMMANDS) {
-            if (new RegExp(dangerousCmd, 'i').test(command)) {
-                return {
-                    level: 'DANGEROUS',
-                    risk: 'HIGH',
-                    reason: `Dangerous system operation: ${dangerousCmd}`,
-                    color: 'MAGENTA',
-                    blocked: true,
-                    category: 'SYSTEM_MODIFICATION',
-                    patterns: [dangerousCmd],
-                    recommendations: ['Use -WhatIf for testing', 'Request administrator approval']
-                };
-            }
-        }
-        
-        // Additional hardcoded dangerous patterns
+        // Additional hardcoded dangerous patterns (fallback)
         if (upperCommand.includes('FORMAT C:') ||
             upperCommand.includes('DEL /') ||
             upperCommand.includes('RMDIR /') ||
@@ -1076,34 +1040,34 @@ class EnterprisePowerShellMCPServer {
             };
         }
         
-        // 🟡 RISKY - Operations requiring confirmation
-        for (const pattern of RISKY_PATTERNS) {
-            if (new RegExp(pattern, 'i').test(command)) {
+        // RISKY
+        for (const rx of this.mergedPatterns.risky) {
+            if (rx.test(command)) {
                 return {
                     level: 'RISKY',
                     risk: 'MEDIUM',
-                    reason: `File/service modification operation: ${pattern}`,
+                    reason: `File/service modification operation: ${rx.source}`,
                     color: 'YELLOW',
                     blocked: false,
                     requiresPrompt: true,
                     category: 'FILE_OPERATION',
-                    patterns: [pattern],
+                    patterns: [rx.source],
                     recommendations: ['Add confirmed: true to proceed', 'Use -WhatIf for testing']
                 };
             }
         }
-        
-        // 🟢 SAFE - Explicitly safe operations
-        for (const pattern of SAFE_PATTERNS) {
-            if (new RegExp(pattern, 'i').test(command)) {
+
+        // SAFE
+        for (const rx of this.mergedPatterns.safe) {
+            if (rx.test(command)) {
                 return {
                     level: 'SAFE',
                     risk: 'LOW',
-                    reason: `Safe read-only operation: ${pattern}`,
+                    reason: `Safe read-only operation: ${rx.source}`,
                     color: 'GREEN',
                     blocked: false,
                     category: 'INFORMATION_GATHERING',
-                    patterns: [pattern],
+                    patterns: [rx.source],
                     recommendations: ['Command is safe to execute']
                 };
             }
@@ -1790,6 +1754,14 @@ Use the ai-agent-test tool to validate functionality:
                             key: z.string().optional().describe('Authentication key (required if server has authentication enabled)')
                         })),
                     },
+                    {
+                        name: 'server-stats',
+                        description: 'Retrieve server runtime metrics (counts by security level, blocked/truncated totals, average duration, threat stats, dynamic pattern overrides).',
+                        inputSchema: zodToJsonSchema(z.object({
+                            reset: z.boolean().optional().describe('Reset metrics after retrieval'),
+                            key: z.string().optional().describe('Authentication key (required if server has authentication enabled)')
+                        })),
+                    },
                 ] as Tool[],
             };
         });
@@ -1858,6 +1830,29 @@ Use the ai-agent-test tool to validate functionality:
 
                 // Route to appropriate handler
                 switch (name) {
+                    case 'server-stats': {
+                        const reset = args?.reset;
+                        const snapshot = {
+                            uptimeSeconds: Math.round((Date.now() - this.startTime.getTime())/1000),
+                            metrics: {
+                                ...this.metrics,
+                                averageDurationMs: this.metrics.durationsMs.length ? Math.round(this.metrics.durationsMs.reduce((a,b)=>a+b,0)/this.metrics.durationsMs.length) : 0
+                            },
+                            threatStats: this.getThreatStats(),
+                            dynamicPatterns: {
+                                enabled: !!(ENTERPRISE_CONFIG.security.additionalSafe?.length || ENTERPRISE_CONFIG.security.additionalBlocked?.length || ENTERPRISE_CONFIG.security.suppressPatterns?.length),
+                                additionalSafe: ENTERPRISE_CONFIG.security.additionalSafe || [],
+                                additionalBlocked: ENTERPRISE_CONFIG.security.additionalBlocked || [],
+                                suppressPatterns: ENTERPRISE_CONFIG.security.suppressPatterns || []
+                            },
+                            timestamp: new Date().toISOString()
+                        };
+                        if (reset) {
+                            this.metrics = { commands:0, executions:0, blocked:0, truncated:0, byLevel:{SAFE:0,RISKY:0,DANGEROUS:0,CRITICAL:0,BLOCKED:0,UNKNOWN:0}, durationsMs:[], lastReset:new Date().toISOString() };
+                        }
+                        auditLog('INFO', 'SERVER_STATS', 'Server metrics retrieved', { reset, snapshot });
+                        return { content: [{ type:'text', text: JSON.stringify(snapshot,null,2) }] };
+                    }
                     case 'powershell-command': {
                         const validatedArgs = PowerShellCommandSchema.parse(args);
                         
@@ -1930,6 +1925,13 @@ Use the ai-agent-test tool to validate functionality:
                         );
                         
                         result.securityAssessment = securityAssessment;
+                        // metrics update
+                        this.metrics.commands++;
+                        this.metrics.executions++;
+                        this.metrics.byLevel[securityAssessment.level]++;
+                        if (securityAssessment.blocked) this.metrics.blocked++;
+                        if (result.error && result.error.includes('TRUNCATED')) this.metrics.truncated++;
+                        if (result.duration_ms) this.metrics.durationsMs.push(result.duration_ms);
                         
                         // Enhanced result logging
                         console.error(`✅ COMMAND COMPLETED [${requestId}]`);
@@ -2019,6 +2021,12 @@ Use the ai-agent-test tool to validate functionality:
                         );
                         
                         result.securityAssessment = securityAssessment;
+                        this.metrics.commands++;
+                        this.metrics.executions++;
+                        this.metrics.byLevel[securityAssessment.level]++;
+                        if (securityAssessment.blocked) this.metrics.blocked++;
+                        if (result.error && result.error.includes('TRUNCATED')) this.metrics.truncated++;
+                        if (result.duration_ms) this.metrics.durationsMs.push(result.duration_ms);
                         
                         console.error(`✅ SCRIPT COMPLETED [${requestId}]`);
                         console.error(`📊 Result: ${result.success ? 'SUCCESS' : 'FAILED'}`);

@@ -1,7 +1,14 @@
 {
   "security": {
     "allowedWriteRoots": ["${TEMP}", "./sandbox"],
-    "requireConfirmationForUnknown": true
+    "requireConfirmationForUnknown": true,
+    "additionalSafe": [
+      "^Get-ChildItem"
+    ],
+    "additionalBlocked": [
+    ],
+    "suppressPatterns": [
+    ]
   },
   "limits": {
     "maxOutputKB": 128,
