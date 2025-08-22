@@ -211,7 +211,21 @@ Dashboard Visuals:
 ## 7. Threat & Alias Tracking Data Model
 
 ```mermaid
-%%{init: {'theme':'dark','themeVariables': { 'primaryColor': '#1e2730','primaryTextColor':'#e6f1ff','primaryBorderColor':'#4fa3ff','lineColor':'#6ea8ff','secondaryColor':'#2a3542','tertiaryColor':'#16202a'}}}%%
+%%{init: {"theme":"dark","themeVariables": { 
+    "primaryColor": "#1e2730",
+    "primaryTextColor":"#e6f1ff",
+    "primaryBorderColor":"#4fa3ff",
+    "lineColor":"#6ea8ff",
+    "secondaryColor":"#2a3542",
+    "tertiaryColor":"#16202a",
+    "noteBkgColor":"#2d3640",
+    "noteTextColor":"#e6f1ff",
+    "classTextColor":"#e6f1ff",
+    "classTitleColor":"#ffffff",
+    "classBackground":"#1e2730",
+    "classBorderColor":"#4fa3ff",
+    "fontFamily":"Segoe UI,Inter,Arial"
+}}%%
 classDiagram
     class UnknownThreatEntry {
         +string command
@@ -283,7 +297,21 @@ Supported formats:
 ## 10. Execution Output Struct (Simplified)
 
 ```mermaid
-%%{init: {'theme':'dark','themeVariables': { 'primaryColor': '#1e2730','primaryTextColor':'#e6f1ff','primaryBorderColor':'#4fa3ff','lineColor':'#6ea8ff','secondaryColor':'#2a3542','tertiaryColor':'#16202a'}}}%%
+%%{init: {"theme":"dark","themeVariables": { 
+    "primaryColor": "#1e2730",
+    "primaryTextColor":"#e6f1ff",
+    "primaryBorderColor":"#4fa3ff",
+    "lineColor":"#6ea8ff",
+    "secondaryColor":"#2a3542",
+    "tertiaryColor":"#16202a",
+    "noteBkgColor":"#2d3640",
+    "noteTextColor":"#e6f1ff",
+    "classTextColor":"#e6f1ff",
+    "classTitleColor":"#ffffff",
+    "classBackground":"#1e2730",
+    "classBorderColor":"#4fa3ff",
+    "fontFamily":"Segoe UI,Inter,Arial"
+}}%%
 classDiagram
     class PowerShellExecutionResult {
         +bool success
