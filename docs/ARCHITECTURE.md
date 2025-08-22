@@ -108,21 +108,21 @@ sequenceDiagram
 ## 3. Security Classification Logic (Decision Flow)
 
 ```mermaid
-%%{init: {'theme':'dark','themeVariables': { 'primaryColor': '#1e2730','primaryTextColor':'#e6f1ff','primaryBorderColor':'#ff7b72','lineColor':'#ffb347','secondaryColor':'#2a3542','tertiaryColor':'#16202a','fontFamily':'Segoe UI,Inter,Arial'}}}%%
+%%{init: {"theme":"dark","themeVariables": {"primaryColor": "#1e2730","primaryTextColor":"#e6f1ff","primaryBorderColor":"#ff7b72","lineColor":"#ffb347","secondaryColor":"#2a3542","tertiaryColor":"#16202a","fontFamily":"Segoe UI,Inter,Arial"}}}%%
 flowchart TD
-    A[Input Command] --> B[Alias Detection / Suspicious Patterns]
-    B --> C{High-Risk Alias or Suspicious Pattern?}
-    C -->|Yes| CRIT[CRITICAL (blocked)]
-    C -->|No| D[Dynamic Pattern Merge (safe/risky/blocked)]
-    D --> E{Matches BLOCKED Regex?}
-    E -->|Yes| BLK[BLOCKED or CRITICAL depending pattern<br/>blocked=true]
-    E -->|No| F{Matches Hardcoded Danger Fallback?}
-    F -->|Yes| DANG[DANGEROUS<br/>blocked=true]
-    F -->|No| G{Matches RISKY Regex?}
-    G -->|Yes| RISKY[RISKY<br/>requiresPrompt=true]
-    G -->|No| H{Matches SAFE Regex?}
-    H -->|Yes| SAFE[SAFE<br/>execute directly]
-    H -->|No| UNK[UNKNOWN<br/>requiresPrompt=true]
+    A[Input Command] --> B[Alias / Suspicious Checks]
+    B --> C{High-Risk Alias\nor Suspicious?}
+    C -->|Yes| CRIT[[CRITICAL BLOCK]]
+    C -->|No| D[Merge Dynamic\nPatterns]
+    D --> E{Blocked Regex?}
+    E -->|Yes| BLK[[BLOCKED]]
+    E -->|No| F{Danger Fallback?}
+    F -->|Yes| DANG[[DANGEROUS]]
+    F -->|No| G{RISKY Regex?}
+    G -->|Yes| RISKY[[RISKY\nNeeds Confirm]]
+    G -->|No| H{SAFE Regex?}
+    H -->|Yes| SAFE[[SAFE]]
+    H -->|No| UNK[[UNKNOWN\nNeeds Confirm]]
 ```
 
 ### Classification Outcomes
@@ -147,17 +147,17 @@ flowchart TD
 ## 4. Rate Limiter (Token Bucket) Lifecycle
 
 ```mermaid
-%%{init: {'theme':'dark','themeVariables': { 'primaryColor': '#1e2730','primaryTextColor':'#e6f1ff','primaryBorderColor':'#c9d1d9','lineColor':'#6ea8ff','secondaryColor':'#2a3542','tertiaryColor':'#16202a'}}}%%
+%%{init: {"theme":"dark","themeVariables": {"primaryColor": "#1e2730","primaryTextColor":"#e6f1ff","primaryBorderColor":"#c9d1d9","lineColor":"#6ea8ff","secondaryColor":"#2a3542","tertiaryColor":"#16202a"}}}%%
 flowchart LR
-    subgraph Token Bucket
-        START[Init bucket tokens = burst] --> USE[Request Arrives]
+    subgraph TOKEN_BUCKET
+        START[Init Tokens] --> USE[Request]
         USE --> CHECK{tokens > 0?}
-    CHECK -->|No| DENY[Reject Request<br/>Rate Limit Exceeded]
-        CHECK -->|Yes| CONSUME[Decrement Token]
+        CHECK -->|No| DENY[[RATE LIMIT]]
+        CHECK -->|Yes| CONSUME[Take One]
         CONSUME --> ALLOW[Proceed]
-        DENY --> WAIT[Client waits until refill]
-        subgraph Refill Cycle
-            TIME[Interval Elapses] --> REFILL[Add maxRequests<br/>Bucket <= burst]
+        DENY --> WAIT[Client Backoff]
+        subgraph REFILL
+            TICK[Interval] --> REFILLSTEP[Add maxRequests]
         end
     end
 ```
@@ -169,13 +169,13 @@ flowchart LR
 ## 5. Working Directory Enforcement
 
 ```mermaid
-%%{init: {'theme':'dark','themeVariables': { 'primaryColor': '#1e2730','primaryTextColor':'#e6f1ff','primaryBorderColor':'#c9d1d9','lineColor':'#f0883e','secondaryColor':'#2a3542','tertiaryColor':'#16202a'}}}%%
+%%{init: {"theme":"dark","themeVariables": {"primaryColor": "#1e2730","primaryTextColor":"#e6f1ff","primaryBorderColor":"#c9d1d9","lineColor":"#f0883e","secondaryColor":"#2a3542","tertiaryColor":"#16202a"}}}%%
 flowchart TD
-    A[Command with workingDirectory?] -->|No| PASS1[Skip WD Enforcement]
-    A -->|Yes| RESOLVE[Resolve real path]
-    RESOLVE --> VALID{StartsWith any allowedWriteRoots?}
-    VALID -->|No| ERR[Policy Violation<br/>Blocked]
-    VALID -->|Yes| PASS2[Continue Execution]
+    A{workingDirectory provided?} -->|No| SKIP[Skip Enforcement]
+    A -->|Yes| RESOLVE[Resolve Real Path]
+    RESOLVE --> VALID{Path Starts With\nAllowed Root?}
+    VALID -->|No| BLOCK[[VIOLATION]]
+    VALID -->|Yes| CONT[Execute]
 ```
 
 Enforcement toggled via tools:
