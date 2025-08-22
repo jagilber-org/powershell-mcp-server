@@ -927,6 +927,21 @@ class EnterprisePowerShellMCPServer {
                     sessionId: this.sessionId,
                     riskLevel: 'CRITICAL'
                 });
+                // Surface suspicious pattern detections to metrics dashboard immediately
+                try {
+                    metricsHttpServer.publishExecution({
+                        id: `susp-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+                        level: 'CRITICAL',
+                        durationMs: 0,
+                        blocked: false, // not yet blocked by policy – classification continues
+                        truncated: false,
+                        timestamp: new Date().toISOString(),
+                        preview: command.substring(0,120) + ' [SUSPICIOUS]',
+                        success: false,
+                        exitCode: null
+                    });
+                    metricsRegistry.record({ level: 'CRITICAL' as any, blocked: false, durationMs: 0, truncated: false });
+                } catch {}
                 
                 return {
                     originalCommand: command,
@@ -994,6 +1009,21 @@ class EnterprisePowerShellMCPServer {
                 sessionId: this.sessionId,
                 threatCount: this.threatStats.uniqueThreats
             });
+            // Emit UNKNOWN event so it appears in dashboard even if later not executed
+            try {
+                metricsHttpServer.publishExecution({
+                    id: `unk-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+                    level: 'UNKNOWN',
+                    durationMs: 0,
+                    blocked: false,
+                    truncated: false,
+                    timestamp: new Date().toISOString(),
+                    preview: command.substring(0,120) + ' [UNKNOWN]',
+                    success: false,
+                    exitCode: null
+                });
+                metricsRegistry.record({ level: 'UNKNOWN' as any, blocked: false, durationMs: 0, truncated: false });
+            } catch {}
         }
     }
     
