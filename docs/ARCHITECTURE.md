@@ -152,7 +152,7 @@ flowchart LR
     subgraph Token Bucket
         START[Init bucket tokens = burst] --> USE[Request Arrives]
         USE --> CHECK{tokens > 0?}
-        CHECK -->|No| DENY[Reject Request\nRate Limit Exceeded]
+    CHECK -->|No| DENY[Reject Request<br/>Rate Limit Exceeded]
         CHECK -->|Yes| CONSUME[Decrement Token]
         CONSUME --> ALLOW[Proceed]
         DENY --> WAIT[Client waits until refill]
@@ -174,7 +174,7 @@ flowchart TD
     A[Command with workingDirectory?] -->|No| PASS1[Skip WD Enforcement]
     A -->|Yes| RESOLVE[Resolve real path]
     RESOLVE --> VALID{StartsWith any allowedWriteRoots?}
-    VALID -->|No| ERR[Policy Violation\nBlocked]
+    VALID -->|No| ERR[Policy Violation<br/>Blocked]
     VALID -->|Yes| PASS2[Continue Execution]
 ```
 
