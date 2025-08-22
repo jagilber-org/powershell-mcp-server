@@ -115,14 +115,14 @@ flowchart TD
     C -->|Yes| CRIT[CRITICAL (blocked)]
     C -->|No| D[Dynamic Pattern Merge (safe/risky/blocked)]
     D --> E{Matches BLOCKED Regex?}
-    E -->|Yes| BLK[BLOCKED or CRITICAL depending pattern]\nblocked=true
+    E -->|Yes| BLK[BLOCKED or CRITICAL depending pattern<br/>blocked=true]
     E -->|No| F{Matches Hardcoded Danger Fallback?}
-    F -->|Yes| DANG[DANGEROUS]\nblocked=true
+    F -->|Yes| DANG[DANGEROUS<br/>blocked=true]
     F -->|No| G{Matches RISKY Regex?}
-    G -->|Yes| RISKY[RISKY]\nrequiresPrompt=true
+    G -->|Yes| RISKY[RISKY<br/>requiresPrompt=true]
     G -->|No| H{Matches SAFE Regex?}
-    H -->|Yes| SAFE[SAFE]\nexecute directly
-    H -->|No| UNK[UNKNOWN]\nrequiresPrompt=true
+    H -->|Yes| SAFE[SAFE<br/>execute directly]
+    H -->|No| UNK[UNKNOWN<br/>requiresPrompt=true]
 ```
 
 ### Classification Outcomes
@@ -157,7 +157,7 @@ flowchart LR
         CONSUME --> ALLOW[Proceed]
         DENY --> WAIT[Client waits until refill]
         subgraph Refill Cycle
-            TIME[Interval Elapses] --> REFILL[Add maxRequests]\nBucket <= burst
+            TIME[Interval Elapses] --> REFILL[Add maxRequests<br/>Bucket <= burst]
         end
     end
 ```
