@@ -188,15 +188,15 @@ Enforcement toggled via tools:
 ## 6. Metrics & Observability Flow
 
 ```mermaid
-%%{init: {'theme':'dark','themeVariables': { 'primaryColor': '#1e2730','primaryTextColor':'#e6f1ff','primaryBorderColor':'#58a6ff','lineColor':'#58a6ff','secondaryColor':'#2a3542','tertiaryColor':'#16202a'}}}%%
+%%{init: {"theme":"dark","themeVariables": { "primaryColor": "#1e2730","primaryTextColor":"#e6f1ff","primaryBorderColor":"#58a6ff","lineColor":"#58a6ff","secondaryColor":"#2a3542","tertiaryColor":"#16202a"}}}%%
 flowchart LR
     EXEC_EVENT[Execution Result] --> METR[metricsRegistry]
     CLASSIFY[Security Classification] --> METR
-    THREAT[Unknown/Alias Tracking] --> METR
-    METR --> SNAPSHOT[/api/metrics JSON]
-    METR --> SSE[/events SSE Stream]
+    THREAT[Unknown / Alias Tracking] --> METR
+    METR --> SNAPSHOT[GET /api/metrics]
+    METR --> SSE[STREAM /events]
     SSE --> DASH[Browser Dashboard]
-    LOGS[(Audit Logs)] --> (External Analysis)
+    LOGS[(Audit Logs)] --> ANALYSIS[External Analysis]
 ```
 
 Dashboard Visuals:
@@ -380,12 +380,12 @@ classDiagram
 ## 13. Dynamic Pattern Overrides
 
 ```mermaid
-%%{init: {'theme':'dark','themeVariables': { 'primaryColor': '#1e2730','primaryTextColor':'#e6f1ff','primaryBorderColor':'#4fa3ff','lineColor':'#6ea8ff','secondaryColor':'#2a3542','tertiaryColor':'#16202a'}}}%%
+%%{init: {"theme":"dark","themeVariables": { "primaryColor": "#1e2730","primaryTextColor":"#e6f1ff","primaryBorderColor":"#4fa3ff","lineColor":"#6ea8ff","secondaryColor":"#2a3542","tertiaryColor":"#16202a"}}}%%
 flowchart LR
     DEFAULT[Built-in Pattern Sets] --> MERGE[Merge Layer]
-    ADD_SAFE[additionalSafe[]] --> MERGE
-    ADD_BLOCK[additionalBlocked[]] --> MERGE
-    SUPPRESS[suppressPatterns[]] --> MERGE
+    ADD_SAFE[additionalSafe array] --> MERGE
+    ADD_BLOCK[additionalBlocked array] --> MERGE
+    SUPPRESS[suppressPatterns array] --> MERGE
     MERGE --> RUNTIME{mergedPatterns cache}
     RUNTIME --> CLASSIFY[classifyCommandSafety]
 ```
