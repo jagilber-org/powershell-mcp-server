@@ -1842,6 +1842,35 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                         title: 'PowerShell Command Executor',
                         description: 'Execute a single PowerShell command with enterprise security, audit logging, and timeout control. Supports working directory specification and security confirmation for risky operations.',
                         inputSchema: zodToJsonSchema(PowerShellCommandSchema),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                success: { type: 'boolean', description: 'Whether the command executed successfully' },
+                                output: { type: 'string', description: 'Command output or error message' },
+                                exitCode: { type: 'number', description: 'PowerShell exit code' },
+                                executionTime: { type: 'number', description: 'Execution time in milliseconds' },
+                                securityAssessment: {
+                                    type: 'object',
+                                    properties: {
+                                        level: { type: 'string', enum: ['SAFE', 'RISKY', 'DANGEROUS', 'CRITICAL', 'UNKNOWN'], description: 'Security classification level' },
+                                        reason: { type: 'string', description: 'Explanation for security classification' },
+                                        blocked: { type: 'boolean', description: 'Whether command was blocked by security policy' }
+                                    },
+                                    required: ['level', 'reason', 'blocked']
+                                },
+                                auditId: { type: 'string', description: 'Unique identifier for audit trail' }
+                            },
+                            required: ['success', 'output', 'securityAssessment']
+                        },
+                        annotations: {
+                            audience: ['assistant'],
+                            priority: 0.8,
+                            security: {
+                                requiresConfirmation: true,
+                                auditLogged: true,
+                                classification: 'dynamic'
+                            }
+                        }
                     },
                     {
                         name: 'enforce-working-directory',
@@ -1850,7 +1879,26 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                         inputSchema: zodToJsonSchema(z.object({
                             enabled: z.boolean().describe('Enable (true) or disable (false) working directory enforcement'),
                             key: z.string().optional().describe('Authentication key (required if server has authentication enabled)')
-                        }))
+                        })),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                success: { type: 'boolean', description: 'Whether the operation succeeded' },
+                                previousState: { type: 'boolean', description: 'Previous enforcement state' },
+                                newState: { type: 'boolean', description: 'New enforcement state' },
+                                message: { type: 'string', description: 'Status message' }
+                            },
+                            required: ['success', 'previousState', 'newState', 'message']
+                        },
+                        annotations: {
+                            audience: ['assistant'],
+                            priority: 0.5,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: true,
+                                classification: 'administrative'
+                            }
+                        }
                     },
                     {
                         name: 'get-working-directory-policy',
@@ -1868,6 +1916,15 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                                 description: { type: 'string', description: 'Human-readable policy description' }
                             },
                             required: ['enforceWorkingDirectory', 'status', 'allowedWriteRoots', 'description']
+                        },
+                        annotations: {
+                            audience: ['assistant', 'user'],
+                            priority: 0.8,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: false,
+                                classification: 'safe'
+                            }
                         }
                     },
                     {
@@ -1875,24 +1932,141 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                         title: 'PowerShell Script Executor', 
                         description: 'Execute multi-line PowerShell scripts with comprehensive security assessment, audit trail, and enterprise controls. Ideal for complex operations requiring multiple commands.',
                         inputSchema: zodToJsonSchema(PowerShellScriptSchema),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                success: { type: 'boolean', description: 'Whether the script executed successfully' },
+                                output: { type: 'string', description: 'Script output or error message' },
+                                exitCode: { type: 'number', description: 'PowerShell exit code' },
+                                executionTime: { type: 'number', description: 'Execution time in milliseconds' },
+                                securityAssessment: {
+                                    type: 'object',
+                                    properties: {
+                                        level: { type: 'string', enum: ['SAFE', 'RISKY', 'DANGEROUS', 'CRITICAL', 'UNKNOWN'], description: 'Security classification level' },
+                                        reason: { type: 'string', description: 'Explanation for security classification' },
+                                        blocked: { type: 'boolean', description: 'Whether script was blocked by security policy' }
+                                    },
+                                    required: ['level', 'reason', 'blocked']
+                                },
+                                auditId: { type: 'string', description: 'Unique identifier for audit trail' }
+                            },
+                            required: ['success', 'output', 'securityAssessment']
+                        },
+                        annotations: {
+                            audience: ['assistant'],
+                            priority: 0.7,
+                            security: {
+                                requiresConfirmation: true,
+                                auditLogged: true,
+                                classification: 'dynamic'
+                            }
+                        }
                     },
                     {
                         name: 'powershell-file',
                         title: 'PowerShell File Executor',
                         description: 'Execute PowerShell script files (.ps1) with parameter support, security analysis, and audit logging. Supports complex scripts with parameter requirements.',
                         inputSchema: zodToJsonSchema(PowerShellFileSchema),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                success: { type: 'boolean', description: 'Whether the file executed successfully' },
+                                output: { type: 'string', description: 'File execution output or error message' },
+                                exitCode: { type: 'number', description: 'PowerShell exit code' },
+                                executionTime: { type: 'number', description: 'Execution time in milliseconds' },
+                                filePath: { type: 'string', description: 'Path to executed file' },
+                                securityAssessment: {
+                                    type: 'object',
+                                    properties: {
+                                        level: { type: 'string', enum: ['SAFE', 'RISKY', 'DANGEROUS', 'CRITICAL', 'UNKNOWN'], description: 'Security classification level' },
+                                        reason: { type: 'string', description: 'Explanation for security classification' },
+                                        blocked: { type: 'boolean', description: 'Whether file execution was blocked by security policy' }
+                                    },
+                                    required: ['level', 'reason', 'blocked']
+                                },
+                                auditId: { type: 'string', description: 'Unique identifier for audit trail' }
+                            },
+                            required: ['success', 'output', 'securityAssessment', 'filePath']
+                        },
+                        annotations: {
+                            audience: ['assistant'],
+                            priority: 0.6,
+                            security: {
+                                requiresConfirmation: true,
+                                auditLogged: true,
+                                classification: 'dynamic',
+                                fileAccess: true
+                            }
+                        }
                     },
                     {
                         name: 'powershell-syntax-check',
                         title: 'PowerShell Syntax Validator',
                         description: 'Validate PowerShell script syntax without execution. Provides syntax error detection and validation for development and pre-execution checks.',
                         inputSchema: zodToJsonSchema(SyntaxCheckSchema),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                isValid: { type: 'boolean', description: 'Whether the syntax is valid' },
+                                errors: {
+                                    type: 'array',
+                                    items: {
+                                        type: 'object',
+                                        properties: {
+                                            line: { type: 'number', description: 'Line number of error' },
+                                            column: { type: 'number', description: 'Column number of error' },
+                                            message: { type: 'string', description: 'Error message' },
+                                            severity: { type: 'string', enum: ['Error', 'Warning', 'Information'], description: 'Error severity' }
+                                        },
+                                        required: ['line', 'column', 'message', 'severity']
+                                    },
+                                    description: 'List of syntax errors found'
+                                },
+                                suggestions: {
+                                    type: 'array',
+                                    items: { type: 'string' },
+                                    description: 'Suggestions for fixing syntax errors'
+                                }
+                            },
+                            required: ['isValid', 'errors']
+                        },
+                        annotations: {
+                            audience: ['assistant', 'user'],
+                            priority: 0.9,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: true,
+                                classification: 'safe'
+                            }
+                        }
                     },
                     {
                         name: 'help',
                         title: 'Enterprise Help System',
                         description: 'Get comprehensive help documentation about server capabilities, security policies, usage examples, and AI agent integration guidance. Supports topic-specific help.',
                         inputSchema: zodToJsonSchema(HelpSchema),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                topic: { type: 'string', description: 'Help topic requested (or "comprehensive" for all)' },
+                                content: { type: 'string', description: 'Help content in markdown format' },
+                                availableTopics: {
+                                    type: 'array',
+                                    items: { type: 'string' },
+                                    description: 'List of available help topics'
+                                }
+                            },
+                            required: ['topic', 'content', 'availableTopics']
+                        },
+                        annotations: {
+                            audience: ['assistant', 'user'],
+                            priority: 1.0,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: false,
+                                classification: 'safe'
+                            }
+                        }
                     },
                     {
                         name: 'ai-agent-test',
@@ -1920,6 +2094,15 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                                 }
                             },
                             required: ['testSuite', 'timestamp', 'serverPid', 'skipDangerous', 'totalTests', 'passed', 'failed', 'summary']
+                        },
+                        annotations: {
+                            audience: ['assistant', 'user'],
+                            priority: 0.6,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: true,
+                                classification: 'testing'
+                            }
                         }
                     },
                     {
@@ -1931,6 +2114,38 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                             resetStats: z.boolean().optional().describe('Reset threat tracking statistics after retrieval'),
                             key: z.string().optional().describe('Authentication key (required if server has authentication enabled)')
                         })),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                unknownCommands: { type: 'number', description: 'Count of unknown/unclassified commands' },
+                                aliasesDetected: { type: 'number', description: 'Count of PowerShell aliases detected' },
+                                suspiciousPatterns: { type: 'number', description: 'Count of suspicious command patterns' },
+                                threatLevel: { type: 'string', enum: ['LOW', 'MODERATE', 'HIGH', 'CRITICAL'], description: 'Overall threat assessment level' },
+                                details: {
+                                    type: 'array',
+                                    items: {
+                                        type: 'object',
+                                        properties: {
+                                            type: { type: 'string', description: 'Type of threat detected' },
+                                            command: { type: 'string', description: 'Command or pattern detected' },
+                                            timestamp: { type: 'string', description: 'When threat was detected' },
+                                            severity: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], description: 'Severity level' }
+                                        }
+                                    },
+                                    description: 'Detailed threat entries (if includeDetails is true)'
+                                }
+                            },
+                            required: ['unknownCommands', 'aliasesDetected', 'suspiciousPatterns', 'threatLevel']
+                        },
+                        annotations: {
+                            audience: ['assistant'],
+                            priority: 0.4,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: true,
+                                classification: 'administrative'
+                            }
+                        }
                     },
                     {
                         name: 'server-stats',
@@ -1960,6 +2175,15 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                                 }
                             },
                             required: ['uptimeSeconds', 'metrics']
+                        },
+                        annotations: {
+                            audience: ['assistant'],
+                            priority: 0.3,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: false,
+                                classification: 'safe'
+                            }
                         }
                     },
                 ] as Tool[],
@@ -2059,7 +2283,13 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                             content: [{ 
                                 type: 'text', 
                                 text: `Working directory enforcement ${args.enabled ? 'enabled' : 'disabled'}.\n\nWhen enabled, all commands with workingDirectory must resolve under configured allowedWriteRoots.\nCurrent status: ${args.enabled ? 'ENFORCED' : 'DISABLED'}` 
-                            }] 
+                            }],
+                            structuredContent: {
+                                success: true,
+                                previousState: oldValue,
+                                newState: args.enabled,
+                                message: `Working directory enforcement ${args.enabled ? 'enabled' : 'disabled'}`
+                            }
                         };
                     }
                     case 'get-working-directory-policy': {
@@ -2218,7 +2448,19 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                             content: [{ 
                                 type: 'text' as const,
                                 text: JSON.stringify(result, null, 2)
-                            }] as TextContent[]
+                            }] as TextContent[],
+                            structuredContent: {
+                                success: result.success,
+                                output: result.stdout || result.stderr || '',
+                                exitCode: result.exitCode,
+                                executionTime: result.duration_ms,
+                                securityAssessment: {
+                                    level: securityAssessment.level,
+                                    reason: securityAssessment.reason,
+                                    blocked: securityAssessment.blocked
+                                },
+                                auditId: requestId
+                            }
                         };
                     }
                     
@@ -2310,7 +2552,19 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                             content: [{ 
                                 type: 'text' as const,
                                 text: JSON.stringify(result, null, 2)
-                            }]
+                            }],
+                            structuredContent: {
+                                success: result.success,
+                                output: result.stdout || result.stderr || '',
+                                exitCode: result.exitCode,
+                                executionTime: result.duration_ms,
+                                securityAssessment: {
+                                    level: securityAssessment.level,
+                                    reason: securityAssessment.reason,
+                                    blocked: securityAssessment.blocked
+                                },
+                                auditId: requestId
+                            }
                         };
                     }
                     
@@ -2340,7 +2594,12 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                             content: [{ 
                                 type: 'text' as const,
                                 text: JSON.stringify(result, null, 2)
-                            }]
+                            }],
+                            structuredContent: {
+                                isValid: result.isValid,
+                                errors: result.errors,
+                                suggestions: []
+                            }
                         };
                     }
                     
@@ -2370,7 +2629,12 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                             content: [{ 
                                 type: 'text' as const,
                                 text: helpContent
-                            }]
+                            }],
+                            structuredContent: {
+                                topic: validatedArgs.topic || 'comprehensive',
+                                content: helpContent,
+                                availableTopics: ['security', 'monitoring', 'authentication', 'examples', 'capabilities', 'ai-agents', 'working-directory']
+                            }
                         };
                     }
                     
