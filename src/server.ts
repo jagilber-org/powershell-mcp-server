@@ -168,6 +168,8 @@ interface PowerShellExecutionResult {
     securityAssessment?: SecurityAssessment;
     processId?: number;
     timedOut?: boolean;
+    configuredTimeoutMs?: number;
+    killEscalated?: boolean;
     error?: string;
 }
 
@@ -1198,16 +1200,19 @@ class EnterprisePowerShellMCPServer {
             let stderr = '';
             let timedOut = false;
             let killEscalated = false;
+            console.error(`⏱️  Scheduling timeout in ${timeout}ms for PowerShell process...`);
             
             // Set up timeout
             const timeoutHandle = setTimeout(() => {
                 timedOut = true;
                 if (childProcess && !childProcess.killed) {
+            console.error(`⏱️  TIMEOUT TRIGGERED after ${timeout}ms (pid=${childProcess.pid}) – sending SIGTERM`);
                     try { childProcess.kill('SIGTERM'); } catch {}
                     // Escalate after grace window
                     setTimeout(() => {
                         if (childProcess && !childProcess.killed) {
                             killEscalated = true;
+                console.error(`⏱️  TIMEOUT ESCALATION (SIGKILL) pid=${childProcess.pid}`);
                             try { childProcess.kill('SIGKILL'); } catch {}
                         }
                     }, Math.min(5000, Math.max(2000, Math.floor(timeout * 0.1))));
@@ -1286,6 +1291,8 @@ class EnterprisePowerShellMCPServer {
                 workingDirectory,
                 processId: childProcess?.pid,
                 timedOut,
+                configuredTimeoutMs: timeout,
+                ...(killEscalated ? { killEscalated: true } : {}),
                 ...(timedOut ? { error: `Command timed out after ${timeout}ms${killEscalated ? ' (escalated)' : ''}` } : {}),
                 ...(truncated ? { error: (timedOut ? 'TIMEOUT_AND_TRUNCATED' : 'OUTPUT_TRUNCATED') } : {})
             };
@@ -2476,6 +2483,7 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
                         console.error(`🔨 Executing PowerShell Command: ${validatedArgs.command}`);
                         const commandTimeout = validatedArgs.aiAgentTimeout || validatedArgs.timeout || ENTERPRISE_CONFIG.limits.defaultTimeoutMs;
                         console.error(`⏱️  Timeout: ${commandTimeout}ms${validatedArgs.aiAgentTimeout ? ' (AI Agent Override)' : ''}`);
+                        console.error(`[DEBUG] Received timeout params => timeout: ${validatedArgs.timeout ?? 'undefined'} aiAgentTimeout: ${validatedArgs.aiAgentTimeout ?? 'undefined'}`);
                         console.error(`🛡️  Security Level: ${securityAssessment.level} (${securityAssessment.risk} RISK)`);
                         console.error(`📋 Risk Reason: ${securityAssessment.reason}`);
                         console.error(`🎨 Classification Color: ${securityAssessment.color}`);
@@ -2619,21 +2627,34 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
                         });
                         
                         return {
-                            content: [{ 
-                                type: 'text' as const,
-                                text: JSON.stringify(result, null, 2)
-                            }],
+                            content: [
+                                { type: 'text' as const, text: JSON.stringify(result, null, 2) },
+                                { type: 'text' as const, text: `SUMMARY: elapsed=${result.duration_ms}ms configuredTimeout=${result.configuredTimeoutMs}ms timedOut=${result.timedOut||false} killEscalated=${result.killEscalated||false}` }
+                            ],
                             structuredContent: {
                                 success: result.success,
-                                output: result.stdout || result.stderr || '',
+                                output: (() => {
+                                    const base = result.stdout || result.stderr || '';
+                                    if (result.timedOut) {
+                                        return `[TIMEOUT] Command exceeded ${result.configuredTimeoutMs}ms (elapsed ${result.duration_ms}ms${result.killEscalated ? ' - escalated' : ''}).` + (base ? `\n${base}` : '');
+                                    }
+                                    return base;
+                                })(),
                                 exitCode: result.exitCode,
                                 executionTime: result.duration_ms,
+                                executionStartIso: new Date(Date.now() - (result.duration_ms || 0)).toISOString(),
+                                executionEndIso: new Date().toISOString(),
                                 securityAssessment: {
                                     level: securityAssessment.level,
                                     reason: securityAssessment.reason,
                                     blocked: securityAssessment.blocked
                                 },
-                                auditId: requestId
+                                auditId: requestId,
+                                timedOut: result.timedOut || false,
+                                configuredTimeoutMs: result.configuredTimeoutMs,
+                                killEscalated: result.killEscalated || false,
+                                truncated: !!(result.error && result.error.includes('TRUNCATED')),
+                                error: result.error
                             }
                         };
                     }
@@ -2647,6 +2668,7 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
                         console.error(`📜 Executing PowerShell Script (${validatedArgs.script.length} characters)`);
                         const scriptTimeout = validatedArgs.aiAgentTimeout || validatedArgs.timeout || ENTERPRISE_CONFIG.limits.defaultTimeoutMs;
                         console.error(`⏱️  Timeout: ${scriptTimeout}ms${validatedArgs.aiAgentTimeout ? ' (AI Agent Override)' : ''}`);
+                        console.error(`[DEBUG] Received timeout params => timeout: ${validatedArgs.timeout ?? 'undefined'} aiAgentTimeout: ${validatedArgs.aiAgentTimeout ?? 'undefined'}`);
                         console.error(`🛡️  Security Level: ${securityAssessment.level} (${securityAssessment.risk} RISK)`);
                         
                         // Security enforcement for scripts
@@ -2766,21 +2788,34 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
                         });
                         
                         return {
-                            content: [{ 
-                                type: 'text' as const,
-                                text: JSON.stringify(result, null, 2)
-                            }],
+                            content: [
+                                { type: 'text' as const, text: JSON.stringify(result, null, 2) },
+                                { type: 'text' as const, text: `SUMMARY: elapsed=${result.duration_ms}ms configuredTimeout=${result.configuredTimeoutMs}ms timedOut=${result.timedOut||false} killEscalated=${result.killEscalated||false}` }
+                            ],
                             structuredContent: {
                                 success: result.success,
-                                output: result.stdout || result.stderr || '',
+                                output: (() => {
+                                    const base = result.stdout || result.stderr || '';
+                                    if (result.timedOut) {
+                                        return `[TIMEOUT] Script exceeded ${result.configuredTimeoutMs}ms (elapsed ${result.duration_ms}ms${result.killEscalated ? ' - escalated' : ''}).` + (base ? `\n${base}` : '');
+                                    }
+                                    return base;
+                                })(),
                                 exitCode: result.exitCode,
                                 executionTime: result.duration_ms,
+                                executionStartIso: new Date(Date.now() - (result.duration_ms || 0)).toISOString(),
+                                executionEndIso: new Date().toISOString(),
                                 securityAssessment: {
                                     level: securityAssessment.level,
                                     reason: securityAssessment.reason,
                                     blocked: securityAssessment.blocked
                                 },
-                                auditId: requestId
+                                auditId: requestId,
+                                timedOut: result.timedOut || false,
+                                configuredTimeoutMs: result.configuredTimeoutMs,
+                                killEscalated: result.killEscalated || false,
+                                truncated: !!(result.error && result.error.includes('TRUNCATED')),
+                                error: result.error
                             }
                         };
                     }
