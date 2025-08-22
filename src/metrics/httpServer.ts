@@ -40,6 +40,7 @@ export interface ExecutionEventPayload {
   exitCode?: number | null;
   success?: boolean;
   confirmed?: boolean;     // whether this was a confirmed command
+  timedOut?: boolean;      // whether the execution timed out
 }
 
 export class MetricsHttpServer {
@@ -287,6 +288,7 @@ export class MetricsHttpServer {
     <section class="card"><h3>RISKY</h3><div class="metric" id="m_risky">0</div></section>
     <section class="card"><h3>BLOCKED</h3><div class="metric" id="m_blocked">0</div></section>
     <section class="card"><h3>CONFIRM?</h3><div class="metric" id="m_confirm">0</div></section>
+  <section class="card"><h3>TIMEOUTS</h3><div class="metric" id="m_timeouts">0</div></section>
     <section class="card"><h3>AVG ms</h3><div class="metric" id="m_avg">0</div></section>
     <section class="card"><h3>P95 ms</h3><div class="metric" id="m_p95">0</div></section>
     <section class="card"><h3>CPU%</h3><div class="metric" id="m_cpu">0</div></section>
@@ -329,7 +331,7 @@ export class MetricsHttpServer {
   const lastEvtAge = document.getElementById('lastEvtAge');
   const replayCountEl = document.getElementById('replayCount');
   const uptimeEl = document.getElementById('uptime');
-  const metricsIds = { total:'m_total', safe:'m_safe', risky:'m_risky', blocked:'m_blocked', confirm:'m_confirm', avg:'m_avg', p95:'m_p95', cpu:'m_cpu', rss:'m_rss', heap:'m_heap', lag:'m_lag'};
+  const metricsIds = { total:'m_total', safe:'m_safe', risky:'m_risky', blocked:'m_blocked', confirm:'m_confirm', timeouts:'m_timeouts', avg:'m_avg', p95:'m_p95', cpu:'m_cpu', rss:'m_rss', heap:'m_heap', lag:'m_lag'};
   const levelOrder = ['SAFE','RISKY','DANGEROUS','CRITICAL','BLOCKED','UNKNOWN'];
   const activeLevels = new Set(levelOrder);
   let lastEventTs = Date.now();
@@ -361,8 +363,9 @@ export class MetricsHttpServer {
     if(!activeLevels.has(ev.level)) tr.style.display='none'; 
     
     const markers = [];
-    if (ev.blocked) markers.push('<span style="color:#ff5f56;font-weight:600">BLOCKED</span>');
-    if (ev.truncated) markers.push('<span style="color:#ffa500">TRUNC</span>');
+  if (ev.blocked) markers.push('<span style="color:#ff5f56;font-weight:600">BLOCKED</span>');
+  if (ev.truncated) markers.push('<span style="color:#ffa500">TRUNC</span>');
+  if (ev.timedOut) markers.push('<span style="color:#ff00ff">TIMEOUT</span>');
     if (isConfirmed) markers.push('<span style="background:#ffd700;color:#111;padding:2px 4px;border-radius:4px;font-size:.55rem;font-weight:600;letter-spacing:.5px">CONFIRMED</span>');
     tr.innerHTML='<td>'+ev.id+'</td>'+
       '<td class="level">'+ev.level+'</td>'+
@@ -391,7 +394,8 @@ export class MetricsHttpServer {
       document.getElementById(metricsIds.blocked).textContent=m.blockedCommands;
   document.getElementById(metricsIds.avg).textContent=m.averageDurationMs;
   if('confirmationRequired' in m) document.getElementById(metricsIds.confirm).textContent=m.confirmationRequired;
-      document.getElementById(metricsIds.p95).textContent=m.p95DurationMs;
+  document.getElementById(metricsIds.p95).textContent=m.p95DurationMs;
+  if('timeouts' in m) document.getElementById(metricsIds.timeouts).textContent=m.timeouts;
       const p=m.performance||{};
       if('cpuPercent'in p) document.getElementById(metricsIds.cpu).textContent=p.cpuPercent.toFixed(1);
       if('rssMB'in p) document.getElementById(metricsIds.rss).textContent=p.rssMB.toFixed(0);

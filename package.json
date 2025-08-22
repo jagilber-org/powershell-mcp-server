@@ -16,13 +16,14 @@
     "clean": "rmdir /s /q dist 2>nul & mkdir dist",
     "compliance:check": "powershell -ExecutionPolicy Bypass -File Simple-MCPCheck.ps1",
     "compliance:report": "powershell -ExecutionPolicy Bypass -File Check-MCPCompliance.ps1 -SaveReport",
-  "precommit": "npm run compliance:check && npm run build",
-  "test:stress": "npm run build && node tests/stress-test.mjs",
-  "stats:codebase": "powershell -ExecutionPolicy Bypass -File tools/codebase-stats.ps1",
-  "baseline:daily": "npm run stats:codebase && powershell -ExecutionPolicy Bypass -Command \"$env:STRESS_REQUESTS=100; $env:STRESS_CONCURRENCY=15; node tests/stress-test.mjs\""
+    "precommit": "npm run compliance:check && npm run build",
+    "test:stress": "npm run build && node tests/stress-test.mjs",
+    "stats:codebase": "powershell -ExecutionPolicy Bypass -File tools/codebase-stats.ps1",
+    "baseline:daily": "npm run stats:codebase && powershell -ExecutionPolicy Bypass -Command \"$env:STRESS_REQUESTS=100; $env:STRESS_CONCURRENCY=15; node tests/stress-test.mjs\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.6.0",
+    "commander": "^12.1.0",
     "zod": "^3.23.8",
     "zod-to-json-schema": "^3.23.3"
   },

@@ -485,5 +485,9 @@ flowchart LR
 
 The server blends deterministic security classification, explicit confirmation semantics, rigorous audit logging, proactive threat tracking, and live observability. Diagrams above map each logical layer so agents and humans can reason about trust boundaries, side effects, and extension points.
 
+### Timeout Escalation (Implementation Note)
+
+Execution timeouts now perform a two‑stage termination: SIGTERM at the configured threshold followed by an automatic SIGKILL escalation after a short grace window (min 2s, max 5s, ~10% of timeout). Metrics record each timeout (TIMEOUTS counter) and dashboard rows display a TIMEOUT marker when `timedOut=true`.
+
 ---
 End of Architecture Document

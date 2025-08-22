@@ -28,6 +28,8 @@ import { spawn, ChildProcess, SpawnOptionsWithoutStdio } from 'child_process';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
+import { metricsRegistry } from './metrics/registry.js';
+import { metricsHttpServer } from './metrics/httpServer.js';
 
 // ============================================================================
 // PHASE 1 HARDENING: Config-driven limits & path enforcement
@@ -684,7 +686,7 @@ const SyntaxCheckSchema = z.object({
 
 /** Help system schema */
 const HelpSchema = z.object({
-    topic: z.string().optional().describe('Specific help topic: security, monitoring, authentication, examples, capabilities, or ai-agents'),
+    topic: z.string().optional().describe('Specific help topic: security, monitoring, authentication, examples, capabilities, ai-agents, working-directory, or prompts'),
     key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
 });
 
@@ -794,6 +796,8 @@ class EnterprisePowerShellMCPServer {
         
         // Set server instance for logging
         setMCPServer(this.server);
+        // Start metrics HTTP server (Phase 2 scaffold)
+        metricsHttpServer.start();
         
         // Enhanced authentication logging
         this.logAuthenticationStatus();
@@ -1193,12 +1197,20 @@ class EnterprisePowerShellMCPServer {
             let stdout = '';
             let stderr = '';
             let timedOut = false;
+            let killEscalated = false;
             
             // Set up timeout
             const timeoutHandle = setTimeout(() => {
                 timedOut = true;
                 if (childProcess && !childProcess.killed) {
-                    childProcess.kill('SIGTERM');
+                    try { childProcess.kill('SIGTERM'); } catch {}
+                    // Escalate after grace window
+                    setTimeout(() => {
+                        if (childProcess && !childProcess.killed) {
+                            killEscalated = true;
+                            try { childProcess.kill('SIGKILL'); } catch {}
+                        }
+                    }, Math.min(5000, Math.max(2000, Math.floor(timeout * 0.1))));
                 }
             }, timeout);
             
@@ -1274,7 +1286,7 @@ class EnterprisePowerShellMCPServer {
                 workingDirectory,
                 processId: childProcess?.pid,
                 timedOut,
-                ...(timedOut ? { error: `Command timed out after ${timeout}ms` } : {}),
+                ...(timedOut ? { error: `Command timed out after ${timeout}ms${killEscalated ? ' (escalated)' : ''}` } : {}),
                 ...(truncated ? { error: (timedOut ? 'TIMEOUT_AND_TRUNCATED' : 'OUTPUT_TRUNCATED') } : {})
             };
             
@@ -1341,7 +1353,7 @@ ${content}
     
     /** Generate comprehensive help for AI agents */
     generateHelpForAIAgents(topic?: string): string {
-        const helpSections = {
+    const helpSections = {
             overview: `
 # 🤖 Enterprise PowerShell MCP Server - AI Agent Guide
 
@@ -1674,8 +1686,32 @@ When **disabled** (default): Commands can use any workingDirectory without restr
 - Enable enforcement in production environments
 - Configure allowedWriteRoots to include safe temporary directories
 - Use dedicated sandbox directories for untrusted operations
-- Always specify workingDirectory for file operations`
-        };
+- Always specify workingDirectory for file operations`,
+            prompts: `
+# 🧩 Prompt Library & Reproduction Guide
+
+## Purpose
+Provides deterministic, phase-based prompts to recreate this project from an empty workspace. Useful for audit, portability, disaster recovery, or spinning up a fresh environment.
+
+## Retrieval Tool
+Use the agent-prompts tool to access structured prompt phases or specific sections.
+
+### Examples
+\nFetch all prompts (markdown):
+{ "tool": "agent-prompts", "params": { "format": "markdown" } }
+\nFetch Phase 8 only (markdown):
+{ "tool": "agent-prompts", "params": { "category": "Phase 8" } }
+\nFetch JSON summary of all categories:
+{ "tool": "agent-prompts", "params": { "format": "json" } }
+
+## Categories
+Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus companion sections).
+
+## Notes
+- Do not mutate earlier phases retroactively; add migrations instead.
+- Always emit MACHINE_VERIFICATION_BLOCK after each phase when reconstructing.
+- Keep this file stable; modifications should update help and tool accordingly.`
+    };
         
         if (topic && helpSections[topic as keyof typeof helpSections]) {
             return helpSections[topic as keyof typeof helpSections];
@@ -1699,7 +1735,7 @@ When **disabled** (default): Commands can use any workingDirectory without restr
             summary: {
                 successRate: '0%',
                 securityEnforcement: 'NEEDS_REVIEW',
-                safeExecution: 'NEEDS_REVIEW'
+                safeExecution: 'NEEDS_REVIEW',
             },
             recommendations: []
         };
@@ -1852,7 +1888,7 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                                 securityAssessment: {
                                     type: 'object',
                                     properties: {
-                                        level: { type: 'string', enum: ['SAFE', 'RISKY', 'DANGEROUS', 'CRITICAL', 'UNKNOWN'], description: 'Security classification level' },
+                                        level: { type: 'string', enum: ['SAFE', 'RISKY', 'DANGEROUS', 'CRITICAL', 'BLOCKED', 'UNKNOWN'], description: 'Security classification level' },
                                         reason: { type: 'string', description: 'Explanation for security classification' },
                                         blocked: { type: 'boolean', description: 'Whether command was blocked by security policy' }
                                     },
@@ -1942,7 +1978,7 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                                 securityAssessment: {
                                     type: 'object',
                                     properties: {
-                                        level: { type: 'string', enum: ['SAFE', 'RISKY', 'DANGEROUS', 'CRITICAL', 'UNKNOWN'], description: 'Security classification level' },
+                                        level: { type: 'string', enum: ['SAFE', 'RISKY', 'DANGEROUS', 'CRITICAL', 'BLOCKED', 'UNKNOWN'], description: 'Security classification level' },
                                         reason: { type: 'string', description: 'Explanation for security classification' },
                                         blocked: { type: 'boolean', description: 'Whether script was blocked by security policy' }
                                     },
@@ -1978,7 +2014,7 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                                 securityAssessment: {
                                     type: 'object',
                                     properties: {
-                                        level: { type: 'string', enum: ['SAFE', 'RISKY', 'DANGEROUS', 'CRITICAL', 'UNKNOWN'], description: 'Security classification level' },
+                                        level: { type: 'string', enum: ['SAFE', 'RISKY', 'DANGEROUS', 'CRITICAL', 'BLOCKED', 'UNKNOWN'], description: 'Security classification level' },
                                         reason: { type: 'string', description: 'Explanation for security classification' },
                                         blocked: { type: 'boolean', description: 'Whether file execution was blocked by security policy' }
                                     },
@@ -1986,7 +2022,8 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                                 },
                                 auditId: { type: 'string', description: 'Unique identifier for audit trail' }
                             },
-                            required: ['success', 'output', 'securityAssessment', 'filePath']
+                            required: ['success', 'output', 'securityAssessment', 'filePath'
+                            ]
                         },
                         annotations: {
                             audience: ['assistant'],
@@ -2087,8 +2124,8 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                                     type: 'object',
                                     properties: {
                                         successRate: { type: 'string', description: 'Success percentage as string' },
-                                        securityEnforcement: { type: 'string', enum: ['EXCELLENT', 'GOOD', 'NEEDS_REVIEW'], description: 'Security enforcement rating' },
-                                        safeExecution: { type: 'string', enum: ['EXCELLENT', 'GOOD', 'NEEDS_REVIEW'], description: 'Safe execution rating' }
+                                        securityEnforcement: { type: 'string', enum: ['WORKING', 'NEEDS_REVIEW'], description: 'Security enforcement status' },
+                                        safeExecution: { type: 'string', enum: ['WORKING', 'NEEDS_REVIEW'], description: 'Safe execution status' }
                                     },
                                     required: ['successRate', 'securityEnforcement', 'safeExecution']
                                 }
@@ -2186,6 +2223,39 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                             }
                         }
                     },
+                    {
+                        name: 'agent-prompts',
+                        title: 'Prompt Library Retrieval',
+                        description: 'Retrieve phase-based reproduction prompts from docs/AGENT-PROMPTS.md. Supports optional category filter and markdown or JSON formatted output.',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                category: { type: 'string', description: 'Optional case-insensitive substring to match a specific phase/category heading' },
+                                format: { type: 'string', enum: ['markdown', 'json'], description: 'Output format (default markdown)' },
+                                key: { type: 'string', description: 'Authentication key (required if server has authentication enabled)' }
+                            },
+                            required: []
+                        },
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                format: { type: 'string', enum: ['markdown', 'json'], description: 'Format of returned content' },
+                                categories: { type: 'array', items: { type: 'string' }, description: 'All detected prompt category headings' },
+                                category: { type: 'string', description: 'Matched category (if filter applied)' },
+                                content: { type: 'string', description: 'Prompt content (markdown or JSON stringified)' }
+                            },
+                            required: ['format', 'categories', 'content']
+                        },
+                        annotations: {
+                            audience: ['assistant', 'user'],
+                            priority: 0.95,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: false,
+                                classification: 'safe'
+                            }
+                        }
+                    },
                 ] as Tool[],
             };
         });
@@ -2260,15 +2330,75 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                         toolName: name,
                         resetMs: rl.resetMs
                     });
-                    throw new McpError(
-                        ErrorCode.InvalidRequest,
-                        `Rate limit exceeded. Try again in ${rl.resetMs}ms.`
-                    );
+                                        // Emit rate limit as BLOCKED event to dashboard
+                                        try { metricsHttpServer.publishExecution({
+                                            id: requestId,
+                                            level: 'BLOCKED',
+                                            durationMs: 0,
+                                            blocked: true,
+                                            truncated: false,
+                                            timestamp: new Date().toISOString(),
+                                            preview: '[RATE LIMIT]',
+                                            success: false,
+                                            exitCode: null
+                                        }); metricsRegistry.record({ level: 'BLOCKED' as any, blocked: true, durationMs: 0, truncated: false }); } catch {}
+                                        throw new McpError(
+                                                ErrorCode.InvalidRequest,
+                                                `Rate limit exceeded. Try again in ${rl.resetMs}ms.`
+                                        );
                 }
                 enhancedRequestInfo['rateLimit'] = { remaining: rl.remaining, resetMs: rl.resetMs };
 
                 // Route to appropriate handler
                 switch (name) {
+                    case 'agent-prompts': {
+                        const categoryFilter = args?.category as string | undefined;
+                        const format = (args?.format as string | undefined) === 'json' ? 'json' : 'markdown';
+                        const promptsPath = path.join(process.cwd(), 'docs', 'AGENT-PROMPTS.md');
+                        if (!fs.existsSync(promptsPath)) {
+                            throw new McpError(ErrorCode.InvalidRequest, 'Prompt library file not found at docs/AGENT-PROMPTS.md');
+                        }
+                        const raw = fs.readFileSync(promptsPath, 'utf8');
+                        // Extract headings starting with '## ' (ignore top-level # )
+                        const lines = raw.split(/\r?\n/);
+                        const headings: { line: number; text: string }[] = [];
+                        lines.forEach((l, idx) => {
+                            const m = l.match(/^##\s+(.+?)\s*$/);
+                            if (m) headings.push({ line: idx, text: m[1].trim() });
+                        });
+                        const categories = headings.map(h => h.text);
+                        let selectedContent = raw;
+                        let matchedCategory: string | undefined;
+                        if (categoryFilter) {
+                            const match = headings.find(h => h.text.toLowerCase().includes(categoryFilter.toLowerCase()));
+                            if (match) {
+                                matchedCategory = match.text;
+                                const start = match.line;
+                                // find next heading or end
+                                const next = headings.find(h => h.line > start);
+                                const endLine = next ? next.line : lines.length;
+                                selectedContent = lines.slice(start, endLine).join('\n');
+                            } else {
+                                selectedContent = `# No category match for filter: ${categoryFilter}`;
+                            }
+                        }
+                        let outputContent: string;
+                        if (format === 'json') {
+                            const payload = categoryFilter && matchedCategory ? { category: matchedCategory, content: selectedContent } : { categories, content: selectedContent };
+                            outputContent = JSON.stringify(payload, null, 2);
+                        } else {
+                            outputContent = selectedContent;
+                        }
+                        return {
+                            content: [{ type: 'text', text: outputContent }],
+                            structuredContent: {
+                                format,
+                                categories,
+                                ...(matchedCategory ? { category: matchedCategory } : {}),
+                                content: outputContent
+                            }
+                        };
+                    }
                     case 'enforce-working-directory': {
                         if (!('enabled' in args) || typeof args.enabled !== 'boolean') {
                             throw new McpError(ErrorCode.InvalidParams, 'Missing boolean "enabled" parameter');
@@ -2315,7 +2445,8 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                             uptimeSeconds: Math.round((Date.now() - this.startTime.getTime())/1000),
                             metrics: {
                                 ...this.metrics,
-                                averageDurationMs: this.metrics.durationsMs.length ? Math.round(this.metrics.durationsMs.reduce((a,b)=>a+b,0)/this.metrics.durationsMs.length) : 0
+                                averageDurationMs: this.metrics.durationsMs.length ? Math.round(this.metrics.durationsMs.reduce((a,b)=>a+b,0)/this.metrics.durationsMs.length) : 0,
+                                registry: metricsRegistry.snapshot(!!reset)
                             },
                             threatStats: this.getThreatStats(),
                             dynamicPatterns: {
@@ -2373,7 +2504,17 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                                 serverPid: clientInfo.serverPid,
                                 blockingPolicy: 'ENTERPRISE_SECURITY_ENFORCEMENT'
                             });
-                            
+                                                        try { metricsHttpServer.publishExecution({
+                                                            id: requestId,
+                                                            level: 'BLOCKED',
+                                                            durationMs: 0,
+                                                            blocked: true,
+                                                            truncated: false,
+                                                            timestamp: new Date().toISOString(),
+                                                            preview: validatedArgs.command.substring(0,120),
+                                                            success: false,
+                                                            exitCode: null
+                                                        }); metricsRegistry.record({ level: 'BLOCKED' as any, blocked: true, durationMs: 0, truncated: false }); } catch {}
                             throw blockedError;
                         }
                         
@@ -2395,7 +2536,20 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                                 category: securityAssessment.category,
                                 confirmationInstructions: 'Add confirmed: true parameter'
                             });
-                            
+                                                        try { metricsHttpServer.publishExecution({
+                                                            id: requestId,
+                                                            level: securityAssessment.level,
+                                                            durationMs: 0,
+                                                            blocked: false,
+                                                            truncated: false,
+                                                            timestamp: new Date().toISOString(),
+                                                            preview: validatedArgs.command.substring(0,120)+' [CONFIRM?]',
+                                                            success: false,
+                                                            exitCode: null
+                                                        }); metricsRegistry.record({ level: 'UNKNOWN' as any, blocked:false, durationMs:0, truncated:false });
+                                                        // Increment confirmation-specific counter directly (not tied to level)
+                                                        try { (metricsRegistry as any).counts.CONFIRM++; } catch {}
+                                                        } catch {}
                             throw promptError;
                         }
                         
@@ -2415,6 +2569,26 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                         if (securityAssessment.blocked) this.metrics.blocked++;
                         if (result.error && result.error.includes('TRUNCATED')) this.metrics.truncated++;
                         if (result.duration_ms) this.metrics.durationsMs.push(result.duration_ms);
+                        metricsRegistry.record({
+                          level: securityAssessment.level,
+                          blocked: securityAssessment.blocked,
+                          durationMs: result.duration_ms,
+                          truncated: !!(result.error && result.error.includes('TRUNCATED'))
+                        });
+                                                metricsHttpServer.publishExecution({
+                                                    id: requestId,
+                                                    level: securityAssessment.level,
+                                                    durationMs: result.duration_ms,
+                                                    blocked: securityAssessment.blocked,
+                                                    truncated: !!(result.error && result.error.includes('TRUNCATED')),
+                                                    timestamp: new Date().toISOString(),
+                                                    preview: validatedArgs.command?.substring(0,120),
+                                                    success: result.success,
+                                                    exitCode: result.exitCode,
+                                                    confirmed: validatedArgs.confirmed || validatedArgs.override,
+                                                    timedOut: result.timedOut
+                                                });
+                        if (result.timedOut) { try { (metricsRegistry as any).counts.TIMEOUTS++; } catch {} }
                         
                         // Enhanced result logging
                         console.error(`✅ COMMAND COMPLETED [${requestId}]`);
@@ -2448,7 +2622,7 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                             content: [{ 
                                 type: 'text' as const,
                                 text: JSON.stringify(result, null, 2)
-                            }] as TextContent[],
+                            }],
                             structuredContent: {
                                 success: result.success,
                                 output: result.stdout || result.stderr || '',
@@ -2496,16 +2670,39 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                                 serverPid: clientInfo.serverPid,
                                 blockingPolicy: 'ENTERPRISE_SECURITY_ENFORCEMENT'
                             });
-                            
+                                                        try { metricsHttpServer.publishExecution({
+                                                            id: requestId,
+                                                            level: 'BLOCKED',
+                                                            durationMs: 0,
+                                                            blocked: true,
+                                                            truncated: false,
+                                                            timestamp: new Date().toISOString(),
+                                                            preview: validatedArgs.script.substring(0,120),
+                                                            success: false,
+                                                            exitCode: null
+                                                        }); metricsRegistry.record({ level: 'BLOCKED' as any, blocked: true, durationMs: 0, truncated: false }); } catch {}
                             throw blockedError;
                         }
                         
                         // Handle confirmation for scripts
                         if (securityAssessment.requiresPrompt && !validatedArgs.confirmed && !validatedArgs.override) {
-                            throw new McpError(
-                                ErrorCode.InvalidRequest,
-                                `⚠️ SCRIPT CONFIRMATION REQUIRED: ${securityAssessment.reason}. Add 'confirmed: true' to proceed.`
-                            );
+                                                        try { metricsHttpServer.publishExecution({
+                                                            id: requestId,
+                                                            level: securityAssessment.level,
+                                                            durationMs: 0,
+                                                            blocked: false,
+                                                            truncated: false,
+                                                            timestamp: new Date().toISOString(),
+                                                            preview: validatedArgs.script.substring(0,120)+' [CONFIRM?]',
+                                                            success: false,
+                                                            exitCode: null
+                                                        }); metricsRegistry.record({ level: 'UNKNOWN' as any, blocked:false, durationMs:0, truncated:false });
+                                                        try { (metricsRegistry as any).counts.CONFIRM++; } catch {}
+                                                        } catch {}
+                                                        throw new McpError(
+                                                                ErrorCode.InvalidRequest,
+                                                                `⚠️ SCRIPT CONFIRMATION REQUIRED: ${securityAssessment.reason}. Add 'confirmed: true' to proceed.`
+                                                        );
                         }
                         
                         // Execute the script with appropriate timeout
@@ -2522,6 +2719,26 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                         if (securityAssessment.blocked) this.metrics.blocked++;
                         if (result.error && result.error.includes('TRUNCATED')) this.metrics.truncated++;
                         if (result.duration_ms) this.metrics.durationsMs.push(result.duration_ms);
+                        metricsRegistry.record({
+                          level: securityAssessment.level,
+                          blocked: securityAssessment.blocked,
+                          durationMs: result.duration_ms,
+                          truncated: !!(result.error && result.error.includes('TRUNCATED'))
+                        });
+                                                metricsHttpServer.publishExecution({
+                                                    id: requestId,
+                                                    level: securityAssessment.level,
+                                                    durationMs: result.duration_ms,
+                                                    blocked: securityAssessment.blocked,
+                                                    truncated: !!(result.error && result.error.includes('TRUNCATED')),
+                                                    timestamp: new Date().toISOString(),
+                                                    preview: validatedArgs.script?.substring(0,120),
+                                                    success: result.success,
+                                                    exitCode: result.exitCode,
+                                                    confirmed: validatedArgs.confirmed || validatedArgs.override,
+                                                    timedOut: result.timedOut
+                                                });
+                        if (result.timedOut) { try { (metricsRegistry as any).counts.TIMEOUTS++; } catch {} }
                         
                         console.error(`✅ SCRIPT COMPLETED [${requestId}]`);
                         console.error(`📊 Result: ${result.success ? 'SUCCESS' : 'FAILED'}`);
@@ -2607,9 +2824,7 @@ When **disabled** (default): Commands can use any workingDirectory without restr
                         const validatedArgs = HelpSchema.parse(args);
                         
                         console.error(`📖 Generating Help Documentation`);
-                        if (validatedArgs.topic) {
-                            console.error(`📋 Topic: ${validatedArgs.topic}`);
-                        }
+                        console.error(`📋 Topic: ${validatedArgs.topic}`);
                         
                         const helpContent = this.generateHelpForAIAgents(validatedArgs.topic);
                         
