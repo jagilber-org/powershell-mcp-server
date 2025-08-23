@@ -1,0 +1,28 @@
+{
+  "security": {
+    "allowedWriteRoots": ["${TEMP}", "./sandbox"],
+    "requireConfirmationForUnknown": true,
+    "additionalSafe": [
+      "^Get-ChildItem"
+    ],
+    "additionalBlocked": [
+    ],
+    "suppressPatterns": [
+    ]
+  },
+  "rateLimit": {
+    "enabled": true,
+    "intervalMs": 5000,
+    "maxRequests": 8,
+    "burst": 12
+  },
+  "limits": {
+    "maxOutputKB": 128,
+    "maxLines": 1000,
+    "defaultTimeoutMs": 90000
+  },
+  "logging": {
+    "structuredAudit": true,
+    "truncateIndicator": "<TRUNCATED>"
+  }
+}

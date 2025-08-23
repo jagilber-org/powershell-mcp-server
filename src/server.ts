@@ -28,6 +28,94 @@ import { spawn, ChildProcess, SpawnOptionsWithoutStdio } from 'child_process';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
+import { metricsRegistry } from './metrics/registry.js';
+import { metricsHttpServer } from './metrics/httpServer.js';
+
+// ============================================================================
+// PHASE 1 HARDENING: Config-driven limits & path enforcement
+// ============================================================================
+
+interface EnterpriseConfig {
+    security: {
+        enforceAuth?: boolean; // optional
+        allowedWriteRoots: string[];
+        requireConfirmationForUnknown: boolean;
+    enforceWorkingDirectory?: boolean; // new flag to enable/disable working directory restriction
+    // Dynamic pattern override support (Phase 2)
+    additionalSafe?: string[];
+    additionalBlocked?: string[];
+    suppressPatterns?: string[]; // patterns (raw string or regex source) to remove from built-in sets
+    };
+    rateLimit?: {
+        enabled: boolean;
+        intervalMs: number; // window for refill
+        maxRequests: number; // tokens added per interval
+        burst: number; // maximum bucket capacity
+    };
+    limits: {
+        maxOutputKB: number;
+        maxLines: number;
+        defaultTimeoutMs: number;
+    };
+    logging: {
+        structuredAudit: boolean;
+        truncateIndicator: string;
+    };
+}
+
+const DEFAULT_CONFIG: EnterpriseConfig = {
+    security: {
+        enforceAuth: false,
+        allowedWriteRoots: ['.'],
+    requireConfirmationForUnknown: true,
+    enforceWorkingDirectory: false,
+    additionalSafe: [],
+    additionalBlocked: [],
+    suppressPatterns: []
+    },
+    rateLimit: {
+        enabled: true,
+        intervalMs: 5000,
+        maxRequests: 8,
+        burst: 12
+    },
+    limits: {
+        maxOutputKB: 256,
+        maxLines: 2000,
+        defaultTimeoutMs: 90000
+    },
+    logging: {
+        structuredAudit: true,
+        truncateIndicator: '<TRUNCATED>'
+    }
+};
+
+function loadEnterpriseConfig(): EnterpriseConfig {
+    const configPaths = [
+        path.join(process.cwd(), 'enterprise-config.json'),
+        path.join(process.cwd(), 'enterprise.config.json')
+    ];
+    for (const p of configPaths) {
+        if (fs.existsSync(p)) {
+            try {
+                const raw = fs.readFileSync(p, 'utf8');
+                const parsed = JSON.parse(raw);
+                return {
+                    security: { ...DEFAULT_CONFIG.security, ...parsed.security },
+                    // Ensure rateLimit block is merged (was previously omitted, disabling rate limiting)
+                    rateLimit: { ...DEFAULT_CONFIG.rateLimit, ...parsed.rateLimit },
+                    limits: { ...DEFAULT_CONFIG.limits, ...parsed.limits },
+                    logging: { ...DEFAULT_CONFIG.logging, ...parsed.logging }
+                };
+            } catch (e) {
+                console.error(`⚠️  Failed to parse enterprise config ${p}: ${e instanceof Error ? e.message : e}`);
+            }
+        }
+    }
+    return DEFAULT_CONFIG;
+}
+
+const ENTERPRISE_CONFIG = loadEnterpriseConfig();
 
 // ==============================================================================
 // TYPE DEFINITIONS - Enterprise-grade type safety
@@ -80,6 +168,8 @@ interface PowerShellExecutionResult {
     securityAssessment?: SecurityAssessment;
     processId?: number;
     timedOut?: boolean;
+    configuredTimeoutMs?: number;
+    killEscalated?: boolean;
     error?: string;
 }
 
@@ -105,6 +195,7 @@ interface AuditLogEntry {
     category: string;
     message: string;
     metadata?: Record<string, any>;
+    structured?: boolean;
 }
 
 /** MCP notification parameters */
@@ -462,9 +553,9 @@ function sanitizeMetadata(metadata: Record<string, any> | undefined): Record<str
 
 /** Enhanced audit logging with MCP compliance */
 async function auditLog(
-    level: string, 
-    category: string, 
-    message: string, 
+    level: string,
+    category: string,
+    message: string,
     metadata?: Record<string, any>
 ): Promise<void> {
     const timestamp = new Date().toISOString(); // 'o' format UTC
@@ -492,6 +583,7 @@ async function auditLog(
         } catch (error) {
             // Silently disable further notification attempts on first failure
             clientSupportsLogging = false;
+            console.error(`[WARN] MCP client logging notifications disabled after failure: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
     
@@ -507,6 +599,10 @@ async function auditLog(
     
     // File logging (always maintained for audit trail) - Pretty JSON format
     try {
+        if (ENTERPRISE_CONFIG.logging.structuredAudit) {
+            const ndjsonPath = path.join(LOG_DIR, `powershell-mcp-audit-${new Date().toISOString().split('T')[0]}.ndjson`);
+            fs.appendFileSync(ndjsonPath, JSON.stringify({ ...logEntry, structured: true }) + '\n');
+        }
         const fileLogEntry = `[AUDIT] ${JSON.stringify(logEntry, null, 2)}\n`;
         fs.appendFileSync(LOG_FILE, fileLogEntry);
     } catch (error) {
@@ -593,7 +689,7 @@ const SyntaxCheckSchema = z.object({
 
 /** Help system schema */
 const HelpSchema = z.object({
-    topic: z.string().optional().describe('Specific help topic: security, monitoring, authentication, examples, capabilities, or ai-agents'),
+    topic: z.string().optional().describe('Specific help topic: security, monitoring, authentication, examples, capabilities, ai-agents, working-directory, or prompts'),
     key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
 });
 
@@ -602,6 +698,27 @@ const AITestSchema = z.object({
     testSuite: z.string().optional().default('basic').describe('Test suite to run: basic, security, monitoring, or comprehensive'),
     skipDangerous: z.boolean().optional().default(true).describe('Skip dangerous command tests (recommended: true for safety)'),
     key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
+});
+
+/** Git status schema */
+const GitStatusSchema = z.object({
+    porcelain: z.boolean().optional().default(true).describe('Return git status in porcelain v1 format')
+});
+
+/** Git commit schema */
+const GitCommitSchema = z.object({
+    message: z.string().min(1).max(200).describe('Commit message (<=200 chars enforced)'),
+    addAll: z.boolean().optional().default(false).describe('Stage all changes (git add -A) before committing'),
+    signoff: z.boolean().optional().default(false).describe('Add Signed-off-by line'),
+    allowEmpty: z.boolean().optional().default(false).describe('Allow empty commit if no staged changes'),
+});
+
+/** Git push schema */
+const GitPushSchema = z.object({
+    remote: z.string().optional().default('origin').describe('Remote name'),
+    branch: z.string().optional().describe('Branch to push (defaults to current)'),
+    setUpstream: z.boolean().optional().default(false).describe('Add --set-upstream if pushing new branch'),
+    forceWithLease: z.boolean().optional().default(false).describe('Use --force-with-lease (discouraged; only if explicitly requested)')
 });
 
 // ==============================================================================
@@ -635,6 +752,50 @@ class EnterprisePowerShellMCPServer {
         sessionsWithThreats: 0
     };
     
+    // Phase 2: metrics & dynamic pattern caches
+    private metrics = {
+        commands: 0,
+        executions: 0,
+        blocked: 0,
+        truncated: 0,
+        byLevel: {
+            SAFE: 0, RISKY: 0, DANGEROUS: 0, CRITICAL: 0, BLOCKED: 0, UNKNOWN: 0
+        } as Record<SecurityLevel, number>,
+        durationsMs: [] as number[],
+        lastReset: new Date().toISOString()
+    };
+    private mergedPatterns?: {
+        safe: RegExp[];
+        risky: RegExp[];
+        blocked: RegExp[]; // union of registry/system/root/remote/critical/dangerous
+    };
+    
+    // Rate limiting (simple token bucket keyed by parent PID)
+    private rateBuckets: Map<number, { tokens: number; lastRefill: number }> = new Map();
+    
+    private enforceRateLimit(clientPid: number): { allowed: boolean; remaining: number; resetMs: number } {
+        const cfg = ENTERPRISE_CONFIG.rateLimit;
+        if (!cfg || !cfg.enabled) return { allowed: true, remaining: cfg?.burst || 0, resetMs: 0 };
+        const now = Date.now();
+        let bucket = this.rateBuckets.get(clientPid);
+        if (!bucket) {
+            bucket = { tokens: cfg.burst, lastRefill: now };
+            this.rateBuckets.set(clientPid, bucket);
+        }
+        // Refill
+        const since = now - bucket.lastRefill;
+        if (since >= cfg.intervalMs) {
+            const intervals = Math.floor(since / cfg.intervalMs);
+            bucket.tokens = Math.min(cfg.burst, bucket.tokens + intervals * cfg.maxRequests);
+            bucket.lastRefill += intervals * cfg.intervalMs;
+        }
+        if (bucket.tokens <= 0) {
+            return { allowed: false, remaining: 0, resetMs: cfg.intervalMs - (now - bucket.lastRefill) };
+        }
+        bucket.tokens--;
+        return { allowed: true, remaining: bucket.tokens, resetMs: cfg.intervalMs - (now - bucket.lastRefill) };
+    }
+    
     constructor(authKey?: string) {
         this.authKey = authKey;
         this.startTime = new Date();
@@ -650,13 +811,36 @@ class EnterprisePowerShellMCPServer {
             },
             {
                 capabilities: {
-                    tools: {},
+                    tools: {
+                        listChanged: true
+                    },
                 },
             }
         );
         
         // Set server instance for logging
         setMCPServer(this.server);
+        // Start metrics HTTP server (Phase 2 scaffold)
+        metricsHttpServer.start();
+        // Log dashboard URL (stderr + audit) once metrics server chooses its port
+        ((): void => {
+            let attempts = 0;
+            const maxAttempts = 12; // ~3s worst case
+            const tick = () => {
+                attempts++;
+                try {
+                    if (metricsHttpServer.isStarted()) {
+                        const dashPort = metricsHttpServer.getPort();
+                        const url = `http://127.0.0.1:${dashPort}/dashboard`;
+                        console.error(`📊 Metrics Dashboard: ${url} (events, metrics, performance)`);
+                        auditLog('INFO', 'DASHBOARD_READY', 'Metrics dashboard available', { url, port: dashPort });
+                        return; // stop without scheduling another
+                    }
+                } catch {}
+                if (attempts < maxAttempts) setTimeout(tick, 250);
+            };
+            setTimeout(tick, 250);
+        })();
         
         // Enhanced authentication logging
         this.logAuthenticationStatus();
@@ -715,6 +899,10 @@ class EnterprisePowerShellMCPServer {
     private validateAuthKey(providedKey?: string): boolean {
         // If no auth key is set, allow access (development mode)
         if (!this.authKey) {
+            if (ENTERPRISE_CONFIG.security.enforceAuth === true) {
+                // Misconfiguration: enforceAuth requested without key; degrade to warning and allow for now
+                auditLog('WARNING', 'AUTH_MISCONFIGURED', 'enforceAuth true but no MCP_AUTH_KEY set; allowing requests (development fallback)');
+            }
             return true;
         }
         
@@ -780,6 +968,21 @@ class EnterprisePowerShellMCPServer {
                     sessionId: this.sessionId,
                     riskLevel: 'CRITICAL'
                 });
+                // Surface suspicious pattern detections to metrics dashboard immediately
+                try {
+                    metricsHttpServer.publishExecution({
+                        id: `susp-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+                        level: 'CRITICAL',
+                        durationMs: 0,
+                        blocked: false, // not yet blocked by policy – classification continues
+                        truncated: false,
+                        timestamp: new Date().toISOString(),
+                        preview: command.substring(0,120) + ' [SUSPICIOUS]',
+                        success: false,
+                        exitCode: null
+                    });
+                    metricsRegistry.record({ level: 'CRITICAL' as any, blocked: false, durationMs: 0, truncated: false });
+                } catch {}
                 
                 return {
                     originalCommand: command,
@@ -847,6 +1050,21 @@ class EnterprisePowerShellMCPServer {
                 sessionId: this.sessionId,
                 threatCount: this.threatStats.uniqueThreats
             });
+            // Emit UNKNOWN event so it appears in dashboard even if later not executed
+            try {
+                metricsHttpServer.publishExecution({
+                    id: `unk-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+                    level: 'UNKNOWN',
+                    durationMs: 0,
+                    blocked: false,
+                    truncated: false,
+                    timestamp: new Date().toISOString(),
+                    preview: command.substring(0,120) + ' [UNKNOWN]',
+                    success: false,
+                    exitCode: null
+                });
+                metricsRegistry.record({ level: 'UNKNOWN' as any, blocked: false, durationMs: 0, truncated: false });
+            } catch {}
         }
     }
     
@@ -887,103 +1105,42 @@ class EnterprisePowerShellMCPServer {
         // Continue with existing security patterns
         // 🚫 BLOCKED PATTERNS - These commands are completely blocked
         
-        // Registry modifications
-        for (const pattern of REGISTRY_MODIFICATION_PATTERNS) {
-            if (new RegExp(pattern, 'i').test(command)) {
-                return {
-                    level: 'BLOCKED',
-                    risk: 'FORBIDDEN', 
-                    reason: `Registry modification blocked: ${pattern}`,
-                    color: 'RED',
-                    blocked: true,
-                    category: 'REGISTRY_MODIFICATION',
-                    patterns: [pattern],
-                    recommendations: ['Use read-only registry operations', 'Request administrator approval for modifications']
-                };
-            }
+        // Phase 2 dynamic pattern merging (lazy init)
+        if (!this.mergedPatterns) {
+            const sup = new Set((ENTERPRISE_CONFIG.security.suppressPatterns||[]).map(p=>p.toLowerCase()));
+            const addBlocked = (ENTERPRISE_CONFIG.security.additionalBlocked||[]).map(p=>new RegExp(p, 'i'));
+            const addSafe = (ENTERPRISE_CONFIG.security.additionalSafe||[]).map(p=>new RegExp(p, 'i'));
+            const filterSet = (arr: readonly string[]) => arr.filter(p=>!sup.has(p.toLowerCase())).map(p=>new RegExp(p,'i'));
+            const blocked = [
+                ...filterSet(REGISTRY_MODIFICATION_PATTERNS),
+                ...filterSet(SYSTEM_FILE_PATTERNS),
+                ...filterSet(ROOT_DELETION_PATTERNS),
+                ...filterSet(REMOTE_MODIFICATION_PATTERNS),
+                ...filterSet(CRITICAL_PATTERNS),
+                ...filterSet(DANGEROUS_COMMANDS),
+                ...addBlocked
+            ];
+            const risky = filterSet(RISKY_PATTERNS);
+            const safe = [...filterSet(SAFE_PATTERNS), ...addSafe];
+            this.mergedPatterns = { safe, risky, blocked };
         }
-        
-        // System file modifications
-        for (const pattern of SYSTEM_FILE_PATTERNS) {
-            if (command.includes(pattern) || command.includes(pattern.replace(/\\\\/g, '/'))) {
+
+        // BLOCKED
+        for (const rx of this.mergedPatterns.blocked) {
+            if (rx.test(command)) {
                 return {
-                    level: 'BLOCKED',
+                    level: /powershell|encodedcommand|invoke-webrequest|download|string|webclient|format-volume|set-itemproperty/i.test(rx.source) ? 'CRITICAL' : 'BLOCKED',
                     risk: 'FORBIDDEN',
-                    reason: `Windows system file modification blocked: ${pattern}`,
-                    color: 'RED',
-                    blocked: true,
-                    category: 'SYSTEM_FILE_MODIFICATION',
-                    patterns: [pattern],
-                    recommendations: ['Use temporary directories', 'Work with user-accessible paths only']
-                };
-            }
-        }
-        
-        // Root drive operations
-        for (const pattern of ROOT_DELETION_PATTERNS) {
-            if (new RegExp(pattern, 'i').test(command)) {
-                return {
-                    level: 'BLOCKED',
-                    risk: 'FORBIDDEN',
-                    reason: `Root drive operation blocked: ${pattern}`,
-                    color: 'RED',
-                    blocked: true,
-                    category: 'ROOT_DRIVE_DELETION',
-                    patterns: [pattern],
-                    recommendations: ['Use -WhatIf for testing', 'Work with non-system drives']
-                };
-            }
-        }
-        
-        // Remote modifications
-        for (const pattern of REMOTE_MODIFICATION_PATTERNS) {
-            if (new RegExp(pattern, 'i').test(command)) {
-                return {
-                    level: 'BLOCKED',
-                    risk: 'FORBIDDEN',
-                    reason: `Remote machine modification blocked: ${pattern}`,
-                    color: 'RED',
-                    blocked: true,
-                    category: 'REMOTE_MODIFICATION',
-                    patterns: [pattern],
-                    recommendations: ['Use localhost only', 'Request remote access approval']
-                };
-            }
-        }
-        
-        // 🔴 CRITICAL THREATS - Security exploits and malware patterns
-        for (const pattern of CRITICAL_PATTERNS) {
-            if (new RegExp(pattern, 'i').test(command)) {
-                return {
-                    level: 'CRITICAL',
-                    risk: 'EXTREME',
-                    reason: `Critical security threat detected: ${pattern}`,
+                    reason: `Blocked by security policy: ${rx.source}`,
                     color: 'RED',
                     blocked: true,
                     category: 'SECURITY_THREAT',
-                    patterns: [pattern],
-                    recommendations: ['Review command for malicious intent', 'Use safe alternatives']
+                    patterns: [rx.source],
+                    recommendations: ['Remove dangerous operations', 'Use read-only alternatives']
                 };
             }
         }
-        
-        // 🟣 DANGEROUS - System-level modifications
-        for (const dangerousCmd of DANGEROUS_COMMANDS) {
-            if (new RegExp(dangerousCmd, 'i').test(command)) {
-                return {
-                    level: 'DANGEROUS',
-                    risk: 'HIGH',
-                    reason: `Dangerous system operation: ${dangerousCmd}`,
-                    color: 'MAGENTA',
-                    blocked: true,
-                    category: 'SYSTEM_MODIFICATION',
-                    patterns: [dangerousCmd],
-                    recommendations: ['Use -WhatIf for testing', 'Request administrator approval']
-                };
-            }
-        }
-        
-        // Additional hardcoded dangerous patterns
+        // Additional hardcoded dangerous patterns (fallback)
         if (upperCommand.includes('FORMAT C:') ||
             upperCommand.includes('DEL /') ||
             upperCommand.includes('RMDIR /') ||
@@ -1004,34 +1161,34 @@ class EnterprisePowerShellMCPServer {
             };
         }
         
-        // 🟡 RISKY - Operations requiring confirmation
-        for (const pattern of RISKY_PATTERNS) {
-            if (new RegExp(pattern, 'i').test(command)) {
+        // RISKY
+        for (const rx of this.mergedPatterns.risky) {
+            if (rx.test(command)) {
                 return {
                     level: 'RISKY',
                     risk: 'MEDIUM',
-                    reason: `File/service modification operation: ${pattern}`,
+                    reason: `File/service modification operation: ${rx.source}`,
                     color: 'YELLOW',
                     blocked: false,
                     requiresPrompt: true,
                     category: 'FILE_OPERATION',
-                    patterns: [pattern],
+                    patterns: [rx.source],
                     recommendations: ['Add confirmed: true to proceed', 'Use -WhatIf for testing']
                 };
             }
         }
-        
-        // 🟢 SAFE - Explicitly safe operations
-        for (const pattern of SAFE_PATTERNS) {
-            if (new RegExp(pattern, 'i').test(command)) {
+
+        // SAFE
+        for (const rx of this.mergedPatterns.safe) {
+            if (rx.test(command)) {
                 return {
                     level: 'SAFE',
                     risk: 'LOW',
-                    reason: `Safe read-only operation: ${pattern}`,
+                    reason: `Safe read-only operation: ${rx.source}`,
                     color: 'GREEN',
                     blocked: false,
                     category: 'INFORMATION_GATHERING',
-                    patterns: [pattern],
+                    patterns: [rx.source],
                     recommendations: ['Command is safe to execute']
                 };
             }
@@ -1057,14 +1214,51 @@ class EnterprisePowerShellMCPServer {
     
     /** Execute PowerShell command with comprehensive security and error handling */
     async executePowerShellCommand(
-        command: string, 
-        timeout: number = 90000, 
+        command: string,
+        timeout: number = ENTERPRISE_CONFIG.limits.defaultTimeoutMs,
         workingDirectory?: string
     ): Promise<PowerShellExecutionResult> {
         const startTime = Date.now();
         let childProcess: ChildProcess | null = null;
+        let truncated = false;
+        let keptBytes = 0;
+        let keptLines = 0;
         
         try {
+            // Working directory enforcement (guarded by flag)
+            if (workingDirectory && ENTERPRISE_CONFIG.security.enforceWorkingDirectory) {
+                try {
+                    const real = fs.realpathSync(workingDirectory);
+                    const allowed = ENTERPRISE_CONFIG.security.allowedWriteRoots.some(root => {
+                        const expanded = root.replace('${TEMP}', os.tmpdir());
+                        const fullRoot = path.resolve(expanded);
+                        return real.startsWith(fullRoot);
+                    });
+                    if (!allowed) {
+                        return {
+                            success: false,
+                            stdout: '',
+                            stderr: `Working directory '${workingDirectory}' outside allowed roots`,
+                            exitCode: null,
+                            duration_ms: 0,
+                            command,
+                            workingDirectory,
+                            error: 'WORKING_DIRECTORY_POLICY_VIOLATION'
+                        };
+                    }
+                } catch (e) {
+                    return {
+                        success: false,
+                        stdout: '',
+                        stderr: `Failed to validate working directory: ${e instanceof Error ? (e as Error).message : e}`,
+                        exitCode: null,
+                        duration_ms: 0,
+                        command,
+                        workingDirectory,
+                        error: 'WORKING_DIRECTORY_VALIDATION_FAILED'
+                    };
+                }
+            }
             const options: SpawnOptionsWithoutStdio = {
                 shell: false,
                 ...(workingDirectory && { cwd: workingDirectory })
@@ -1076,25 +1270,68 @@ class EnterprisePowerShellMCPServer {
             let stdout = '';
             let stderr = '';
             let timedOut = false;
+            let killEscalated = false;
+            console.error(`⏱️  Scheduling timeout in ${timeout}ms for PowerShell process...`);
+            auditLog('INFO','EXEC_TIMEOUT_SCHEDULED','Timeout scheduled for PowerShell process',{ timeoutMs: timeout, commandPreview: command.substring(0,120) });
             
             // Set up timeout
-            const timeoutHandle = setTimeout(() => {
+        const timeoutHandle = setTimeout(() => {
                 timedOut = true;
                 if (childProcess && !childProcess.killed) {
-                    childProcess.kill('SIGTERM');
+            console.error(`⏱️  TIMEOUT TRIGGERED after ${timeout}ms (pid=${childProcess.pid}) – sending SIGTERM`);
+            auditLog('WARNING','EXEC_TIMEOUT_TRIGGERED','Execution timeout triggered; sent SIGTERM',{ timeoutMs: timeout, pid: childProcess.pid, commandPreview: command.substring(0,120) });
+                    try { childProcess.kill('SIGTERM'); } catch {}
+                    // Escalate after grace window
+                    setTimeout(() => {
+                        if (childProcess && !childProcess.killed) {
+                            killEscalated = true;
+                console.error(`⏱️  TIMEOUT ESCALATION (SIGKILL) pid=${childProcess.pid}`);
+                auditLog('ERROR','EXEC_TIMEOUT_ESCALATED','Timeout escalation SIGKILL issued',{ pid: childProcess.pid, commandPreview: command.substring(0,120) });
+                            try { childProcess.kill('SIGKILL'); } catch {}
+                        }
+                    }, Math.min(5000, Math.max(2000, Math.floor(timeout * 0.1))));
                 }
             }, timeout);
             
             // Collect output
+            const MAX_BYTES = ENTERPRISE_CONFIG.limits.maxOutputKB * 1024;
+            const MAX_LINES = ENTERPRISE_CONFIG.limits.maxLines;
+            const truncateIndicator = ENTERPRISE_CONFIG.logging.truncateIndicator;
+
             if (childProcess.stdout) {
                 childProcess.stdout.on('data', (data) => {
-                    stdout += data.toString();
+                    if (truncated) return;
+                    const chunk = data.toString();
+                    const lines = chunk.split(/\r?\n/);
+                    for (const line of lines) {
+                        if (truncated) break;
+                        const prospective = stdout + (stdout ? '\n' : '') + line;
+                        const prospectiveBytes = Buffer.byteLength(prospective, 'utf8');
+                        const prospectiveLines = keptLines + 1;
+                        if (prospectiveBytes > MAX_BYTES || prospectiveLines > MAX_LINES) {
+                            truncated = true;
+                            stdout += `\n${truncateIndicator}`;
+                            break;
+                        }
+                        stdout = prospective;
+                        keptBytes = prospectiveBytes;
+                        keptLines = prospectiveLines;
+                    }
                 });
             }
-            
+
             if (childProcess.stderr) {
                 childProcess.stderr.on('data', (data) => {
-                    stderr += data.toString();
+                    if (truncated) return;
+                    const chunk = data.toString();
+                    const prospective = stderr + chunk;
+                    const prospectiveBytes = Buffer.byteLength(stdout + prospective, 'utf8');
+                    if (prospectiveBytes > MAX_BYTES) {
+                        truncated = true;
+                        stderr += `\n${truncateIndicator}`;
+                    } else {
+                        stderr = prospective;
+                    }
                 });
             }
             
@@ -1128,7 +1365,10 @@ class EnterprisePowerShellMCPServer {
                 workingDirectory,
                 processId: childProcess?.pid,
                 timedOut,
-                ...(timedOut ? { error: `Command timed out after ${timeout}ms` } : {})
+                configuredTimeoutMs: timeout,
+                ...(killEscalated ? { killEscalated: true } : {}),
+                ...(timedOut ? { error: `Command timed out after ${timeout}ms${killEscalated ? ' (escalated)' : ''}` } : {}),
+                ...(truncated ? { error: (timedOut ? 'TIMEOUT_AND_TRUNCATED' : 'OUTPUT_TRUNCATED') } : {})
             };
             
         } catch (error) {
@@ -1194,7 +1434,7 @@ ${content}
     
     /** Generate comprehensive help for AI agents */
     generateHelpForAIAgents(topic?: string): string {
-        const helpSections = {
+    const helpSections = {
             overview: `
 # 🤖 Enterprise PowerShell MCP Server - AI Agent Guide
 
@@ -1206,6 +1446,9 @@ This MCP server provides secure, enterprise-grade PowerShell command execution w
 - **powershell-script**: Execute multi-line PowerShell scripts  
 - **powershell-file**: Execute PowerShell script files
 - **powershell-syntax-check**: Validate PowerShell syntax without execution
+- **server-stats**: Retrieve metrics, dynamic pattern overrides and rate limit snapshot
+- **enforce-working-directory**: Enable/disable working directory enforcement policy  
+- **get-working-directory-policy**: Check current working directory policy status
 - **help**: Get comprehensive help and guidance
 - **ai-agent-test**: Run validation tests for server functionality
 
@@ -1412,6 +1655,7 @@ Include authKey in all tool requests when server requires it:
 3. **Start with safe commands**: Use Get-* commands for information gathering
 4. **Handle confirmations**: Include 'confirmed: true' for risky operations
 5. **Monitor security levels**: Review classification in responses
+6. **Use terminal for stateful operations**: Long-running commands, session state, background jobs better suited for terminal tools
 
 ## Error Handling Best Practices
 - Check 'success' field in responses
@@ -1425,12 +1669,41 @@ Include authKey in all tool requests when server requires it:
 - Batch related operations when possible
 - Monitor execution time in responses
 
-## Working Directory Usage
-- Prefer specifying a workingDirectory for any command that accesses relative paths to ensure predictable file resolution.
-- Use isolated temp folders for write operations (creation, modification) to reduce risk of unintended file access.
-- Validate the directory exists before invoking tools; if missing, create it with least privileges required.
-- Never point workingDirectory at system directories (e.g. Windows, System32) or user profile roots when executing untrusted input.
-- For multi-step workflows, reuse the same workingDirectory to maintain context (e.g. generate file then read it).
+## Terminal vs MCP Tool Selection
+**Use Terminal Tools for:**
+- **Long-running commands**: Operations taking >30 seconds (e.g., large data processing, system scans)
+- **Session-dependent workflows**: Commands that modify environment variables, change directories, or maintain state
+- **Background jobs**: Start-Job, background processes, monitoring tasks that continue running
+- **Interactive commands**: Tools requiring user input or confirmation prompts
+- **Pipeline-heavy operations**: Complex PowerShell pipelines with multiple stages
+
+**Use MCP PowerShell Tools for:**
+- **Quick information gathering**: Get-* cmdlets, system status checks
+- **Isolated operations**: Single commands with clear input/output
+- **Security-classified operations**: Commands requiring audit logging and security assessment
+- **Syntax validation**: Testing PowerShell scripts before execution
+- **Enterprise compliance**: Operations requiring authentication and policy enforcement
+
+**Examples:**
+- Terminal: Start-Job -ScriptBlock { Get-EventLog -LogName System | Export-Csv log.csv }
+- MCP Tool: Get-Process | Select-Object -First 10
+- Terminal: $env:PATH += ";C:\\\\NewPath"; Get-Command MyTool
+- MCP Tool: Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+## Working Directory Usage & Enforcement
+The server offers an optional policy flag: **enforceWorkingDirectory** (default: false). When enabled, any provided workingDirectory must resolve under one of the configured roots in security.allowedWriteRoots (environment variables like \${TEMP} are expanded). If a directory is outside the allowed roots, the command is blocked with error WORKING_DIRECTORY_POLICY_VIOLATION.
+
+Guidelines:
+- Prefer specifying a workingDirectory for relative path operations.
+- Use isolated temp/sandbox folders for write operations.
+- Create the directory with least privileges if missing before execution.
+- Never target system or highly privileged paths for untrusted content.
+- Reuse a dedicated sandbox directory for multi-step workflows.
+
+Runtime Control Tools:
+{ "tool": "get-working-directory-policy" }
+{ "tool": "enforce-working-directory", "params": { "enabled": true } }
+{ "tool": "enforce-working-directory", "params": { "enabled": false } }
 
 ## Security Compliance
 - Never override security classifications without authorization
@@ -1449,8 +1722,77 @@ Use the ai-agent-test tool to validate functionality:
     "authKey": "your-key"
   }
 }
-\`\`\``
-        };
+\`\`\``,
+
+            'working-directory': `
+# 📁 Working Directory Management
+
+## Overview
+Control working directory enforcement policy to restrict where PowerShell commands can execute.
+
+## Policy Status
+Use \`get-working-directory-policy\` to check current settings:
+- **enforceWorkingDirectory**: Whether enforcement is active
+- **allowedWriteRoots**: Permitted directory roots  
+- **status**: Current enforcement state (ENFORCED/DISABLED)
+
+## Enable/Disable Enforcement  
+\`\`\`json
+// Enable enforcement
+{
+  "tool": "enforce-working-directory", 
+  "params": { "enabled": true }
+}
+
+// Disable enforcement  
+{
+  "tool": "enforce-working-directory",
+  "params": { "enabled": false }
+}
+\`\`\`
+
+## Check Current Policy
+\`\`\`json
+{
+  "tool": "get-working-directory-policy"
+}
+\`\`\`
+
+## How It Works
+When **enabled**: Commands with workingDirectory parameter must resolve under configured allowedWriteRoots (environment variables like \${TEMP} are expanded). Commands outside allowed roots are blocked with WORKING_DIRECTORY_POLICY_VIOLATION.
+
+When **disabled** (default): Commands can use any workingDirectory without restriction.
+
+## Best Practices
+- Enable enforcement in production environments
+- Configure allowedWriteRoots to include safe temporary directories
+- Use dedicated sandbox directories for untrusted operations
+- Always specify workingDirectory for file operations`,
+            prompts: `
+# 🧩 Prompt Library & Reproduction Guide
+
+## Purpose
+Provides deterministic, phase-based prompts to recreate this project from an empty workspace. Useful for audit, portability, disaster recovery, or spinning up a fresh environment.
+
+## Retrieval Tool
+Use the agent-prompts tool to access structured prompt phases or specific sections.
+
+### Examples
+\nFetch all prompts (markdown):
+{ "tool": "agent-prompts", "params": { "format": "markdown" } }
+\nFetch Phase 8 only (markdown):
+{ "tool": "agent-prompts", "params": { "category": "Phase 8" } }
+\nFetch JSON summary of all categories:
+{ "tool": "agent-prompts", "params": { "format": "json" } }
+
+## Categories
+Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus companion sections).
+
+## Notes
+- Do not mutate earlier phases retroactively; add migrations instead.
+- Always emit MACHINE_VERIFICATION_BLOCK after each phase when reconstructing.
+- Keep this file stable; modifications should update help and tool accordingly.`
+    };
         
         if (topic && helpSections[topic as keyof typeof helpSections]) {
             return helpSections[topic as keyof typeof helpSections];
@@ -1474,7 +1816,7 @@ Use the ai-agent-test tool to validate functionality:
             summary: {
                 successRate: '0%',
                 securityEnforcement: 'NEEDS_REVIEW',
-                safeExecution: 'NEEDS_REVIEW'
+                safeExecution: 'NEEDS_REVIEW',
             },
             recommendations: []
         };
@@ -1613,43 +1955,419 @@ Use the ai-agent-test tool to validate functionality:
             return {
                 tools: [
                     {
+                        name: 'log-test',
+                        title: 'Server Log Test / Health Ping',
+                        description: 'Emits an audit log entry and returns a simple payload so clients can verify log routing (stderr + notification).',
+                        inputSchema: { type: 'object', properties: { message: { type: 'string', description: 'Optional message to include in log' } } },
+                        outputSchema: { type: 'object', properties: { logged: { type: 'boolean' }, message: { type: 'string' }, timestamp: { type: 'string' } }, required: ['logged','timestamp'] },
+                        annotations: { audience: ['assistant'], priority: 0.1 }
+                    },
+                    {
+                        name: 'git-status',
+                        title: 'Git Status (Safe Read-Only)',
+                        description: 'Retrieve repository status (porcelain) via MCP (no direct terminal).',
+                        inputSchema: zodToJsonSchema(GitStatusSchema),
+                        outputSchema: { type: 'object', properties: { stdout: { type: 'string' }, porcelain: { type: 'boolean' } }, required: ['stdout'] },
+                        annotations: { audience: ['assistant'], priority: 0.2 }
+                    },
+                    {
+                        name: 'git-commit',
+                        title: 'Git Commit (Controlled)',
+                        description: 'Create a git commit with optional auto stage; enforces message length & logs audit trail.',
+                        inputSchema: zodToJsonSchema(GitCommitSchema),
+                        outputSchema: { type: 'object', properties: { success: { type:'boolean' }, summary: { type:'string' }, commit: { type:'string' } }, required:['success'] },
+                        annotations: { audience: ['assistant'], priority: 0.3 }
+                    },
+                    {
+                        name: 'git-push',
+                        title: 'Git Push (Controlled)',
+                        description: 'Push current (or specified) branch to remote with optional upstream. Rejects force unless explicitly allowed.',
+                        inputSchema: zodToJsonSchema(GitPushSchema),
+                        outputSchema: { type: 'object', properties: { success:{ type:'boolean' }, remote:{ type:'string' }, branch:{ type:'string' }, output:{ type:'string' } }, required:['success'] },
+                        annotations: { audience: ['assistant'], priority: 0.31 }
+                    },
+                    {
                         name: 'powershell-command',
-                        description: 'Execute a PowerShell command with enterprise-grade security classification and comprehensive audit logging. Supports timeout control, working directory specification, and security confirmation.',
+                        title: 'PowerShell Command Executor',
+                        description: 'Execute a single PowerShell command with enterprise security, audit logging, and timeout control. Supports working directory specification and security confirmation for risky operations.',
                         inputSchema: zodToJsonSchema(PowerShellCommandSchema),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                success: { type: 'boolean', description: 'Whether the command executed successfully' },
+                                output: { type: 'string', description: 'Command output or error message' },
+                                exitCode: { type: 'number', description: 'PowerShell exit code' },
+                                executionTime: { type: 'number', description: 'Execution time in milliseconds' },
+                                securityAssessment: {
+                                    type: 'object',
+                                    properties: {
+                                        level: { type: 'string', enum: ['SAFE', 'RISKY', 'DANGEROUS', 'CRITICAL', 'BLOCKED', 'UNKNOWN'], description: 'Security classification level' },
+                                        reason: { type: 'string', description: 'Explanation for security classification' },
+                                        blocked: { type: 'boolean', description: 'Whether command was blocked by security policy' }
+                                    },
+                                    required: ['level', 'reason', 'blocked']
+                                },
+                                auditId: { type: 'string', description: 'Unique identifier for audit trail' }
+                            },
+                            required: ['success', 'output', 'securityAssessment']
+                        },
+                        annotations: {
+                            audience: ['assistant'],
+                            priority: 0.8,
+                            security: {
+                                requiresConfirmation: true,
+                                auditLogged: true,
+                                classification: 'dynamic'
+                            }
+                        }
+                    },
+                    {
+                        name: 'enforce-working-directory',
+                        title: 'Working Directory Enforcement Control',
+                        description: 'Enable or disable the working directory enforcement security policy. When enabled, all commands with workingDirectory must resolve under configured allowedWriteRoots paths.',
+                        inputSchema: zodToJsonSchema(z.object({
+                            enabled: z.boolean().describe('Enable (true) or disable (false) working directory enforcement'),
+                            key: z.string().optional().describe('Authentication key (required if server has authentication enabled)')
+                        })),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                success: { type: 'boolean', description: 'Whether the operation succeeded' },
+                                previousState: { type: 'boolean', description: 'Previous enforcement state' },
+                                newState: { type: 'boolean', description: 'New enforcement state' },
+                                message: { type: 'string', description: 'Status message' }
+                            },
+                            required: ['success', 'previousState', 'newState', 'message']
+                        },
+                        annotations: {
+                            audience: ['assistant'],
+                            priority: 0.5,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: true,
+                                classification: 'administrative'
+                            }
+                        }
+                    },
+                    {
+                        name: 'get-working-directory-policy',
+                        title: 'Working Directory Policy Status',
+                        description: 'Get the current working directory enforcement policy status, configuration, and allowed root paths for security compliance.',
+                        inputSchema: zodToJsonSchema(z.object({
+                            key: z.string().optional().describe('Authentication key (required if server has authentication enabled)')
+                        })),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                enforceWorkingDirectory: { type: 'boolean', description: 'Whether working directory enforcement is enabled' },
+                                status: { type: 'string', enum: ['ENFORCED', 'DISABLED'], description: 'Current enforcement status' },
+                                allowedWriteRoots: { type: 'array', items: { type: 'string' }, description: 'List of allowed root directories' },
+                                description: { type: 'string', description: 'Human-readable policy description' }
+                            },
+                            required: ['enforceWorkingDirectory', 'status', 'allowedWriteRoots', 'description']
+                        },
+                        annotations: {
+                            audience: ['assistant', 'user'],
+                            priority: 0.8,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: false,
+                                classification: 'safe'
+                            }
+                        }
                     },
                     {
                         name: 'powershell-script',
-                        description: 'Execute a multi-line PowerShell script with full security assessment and audit trail. Ideal for complex operations requiring multiple commands.',
+                        title: 'PowerShell Script Executor', 
+                        description: 'Execute multi-line PowerShell scripts with comprehensive security assessment, audit trail, and enterprise controls. Ideal for complex operations requiring multiple commands.',
                         inputSchema: zodToJsonSchema(PowerShellScriptSchema),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                success: { type: 'boolean', description: 'Whether the script executed successfully' },
+                                output: { type: 'string', description: 'Script output or error message' },
+                                exitCode: { type: 'number', description: 'PowerShell exit code' },
+                                executionTime: { type: 'number', description: 'Execution time in milliseconds' },
+                                securityAssessment: {
+                                    type: 'object',
+                                    properties: {
+                                        level: { type: 'string', enum: ['SAFE', 'RISKY', 'DANGEROUS', 'CRITICAL', 'BLOCKED', 'UNKNOWN'], description: 'Security classification level' },
+                                        reason: { type: 'string', description: 'Explanation for security classification' },
+                                        blocked: { type: 'boolean', description: 'Whether script was blocked by security policy' }
+                                    },
+                                    required: ['level', 'reason', 'blocked']
+                                },
+                                auditId: { type: 'string', description: 'Unique identifier for audit trail' }
+                            },
+                            required: ['success', 'output', 'securityAssessment']
+                        },
+                        annotations: {
+                            audience: ['assistant'],
+                            priority: 0.7,
+                            security: {
+                                requiresConfirmation: true,
+                                auditLogged: true,
+                                classification: 'dynamic'
+                            }
+                        }
                     },
                     {
                         name: 'powershell-file',
-                        description: 'Execute a PowerShell script file with parameter support and comprehensive security analysis. Supports script files with complex parameter requirements.',
+                        title: 'PowerShell File Executor',
+                        description: 'Execute PowerShell script files (.ps1) with parameter support, security analysis, and audit logging. Supports complex scripts with parameter requirements.',
                         inputSchema: zodToJsonSchema(PowerShellFileSchema),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                success: { type: 'boolean', description: 'Whether the file executed successfully' },
+                                output: { type: 'string', description: 'File execution output or error message' },
+                                exitCode: { type: 'number', description: 'PowerShell exit code' },
+                                executionTime: { type: 'number', description: 'Execution time in milliseconds' },
+                                filePath: { type: 'string', description: 'Path to executed file' },
+                                securityAssessment: {
+                                    type: 'object',
+                                    properties: {
+                                        level: { type: 'string', enum: ['SAFE', 'RISKY', 'DANGEROUS', 'CRITICAL', 'BLOCKED', 'UNKNOWN'], description: 'Security classification level' },
+                                        reason: { type: 'string', description: 'Explanation for security classification' },
+                                        blocked: { type: 'boolean', description: 'Whether file execution was blocked by security policy' }
+                                    },
+                                    required: ['level', 'reason', 'blocked']
+                                },
+                                auditId: { type: 'string', description: 'Unique identifier for audit trail' }
+                            },
+                            required: ['success', 'output', 'securityAssessment', 'filePath'
+                            ]
+                        },
+                        annotations: {
+                            audience: ['assistant'],
+                            priority: 0.6,
+                            security: {
+                                requiresConfirmation: true,
+                                auditLogged: true,
+                                classification: 'dynamic',
+                                fileAccess: true
+                            }
+                        }
                     },
                     {
                         name: 'powershell-syntax-check',
-                        description: 'Validate PowerShell script syntax without execution. Perfect for pre-execution validation and development assistance.',
+                        title: 'PowerShell Syntax Validator',
+                        description: 'Validate PowerShell script syntax without execution. Provides syntax error detection and validation for development and pre-execution checks.',
                         inputSchema: zodToJsonSchema(SyntaxCheckSchema),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                isValid: { type: 'boolean', description: 'Whether the syntax is valid' },
+                                errors: {
+                                    type: 'array',
+                                    items: {
+                                        type: 'object',
+                                        properties: {
+                                            line: { type: 'number', description: 'Line number of error' },
+                                            column: { type: 'number', description: 'Column number of error' },
+                                            message: { type: 'string', description: 'Error message' },
+                                            severity: { type: 'string', enum: ['Error', 'Warning', 'Information'], description: 'Error severity' }
+                                        },
+                                        required: ['line', 'column', 'message', 'severity']
+                                    },
+                                    description: 'List of syntax errors found'
+                                },
+                                suggestions: {
+                                    type: 'array',
+                                    items: { type: 'string' },
+                                    description: 'Suggestions for fixing syntax errors'
+                                }
+                            },
+                            required: ['isValid', 'errors']
+                        },
+                        annotations: {
+                            audience: ['assistant', 'user'],
+                            priority: 0.9,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: true,
+                                classification: 'safe'
+                            }
+                        }
                     },
                     {
                         name: 'help',
-                        description: 'Get comprehensive help information about Enterprise PowerShell MCP Server capabilities, security policies, usage examples, and AI agent integration guidance.',
+                        title: 'Enterprise Help System',
+                        description: 'Get comprehensive help documentation about server capabilities, security policies, usage examples, and AI agent integration guidance. Supports topic-specific help.',
                         inputSchema: zodToJsonSchema(HelpSchema),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                topic: { type: 'string', description: 'Help topic requested (or "comprehensive" for all)' },
+                                content: { type: 'string', description: 'Help content in markdown format' },
+                                availableTopics: {
+                                    type: 'array',
+                                    items: { type: 'string' },
+                                    description: 'List of available help topics'
+                                }
+                            },
+                            required: ['topic', 'content', 'availableTopics']
+                        },
+                        annotations: {
+                            audience: ['assistant', 'user'],
+                            priority: 1.0,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: false,
+                                classification: 'safe'
+                            }
+                        }
                     },
                     {
                         name: 'ai-agent-test',
-                        description: 'Run comprehensive validation tests to verify MCP server functionality, security enforcement, and demonstrate capabilities for AI agents. Tests all security levels safely.',
+                        title: 'AI Agent Testing Framework',
+                        description: 'Run comprehensive validation tests to verify server functionality, security enforcement, and capabilities. Tests all security levels safely with configurable test suites.',
                         inputSchema: zodToJsonSchema(AITestSchema),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                testSuite: { type: 'string', description: 'Name of test suite executed' },
+                                timestamp: { type: 'string', description: 'ISO timestamp of test execution' },
+                                serverPid: { type: 'number', description: 'Server process ID' },
+                                skipDangerous: { type: 'boolean', description: 'Whether dangerous tests were skipped' },
+                                totalTests: { type: 'number', description: 'Total number of tests run' },
+                                passed: { type: 'number', description: 'Number of tests passed' },
+                                failed: { type: 'number', description: 'Number of tests failed' },
+                                summary: {
+                                    type: 'object',
+                                    properties: {
+                                        successRate: { type: 'string', description: 'Success percentage as string' },
+                                        securityEnforcement: { type: 'string', enum: ['WORKING', 'NEEDS_REVIEW'], description: 'Security enforcement status' },
+                                        safeExecution: { type: 'string', enum: ['WORKING', 'NEEDS_REVIEW'], description: 'Safe execution status' }
+                                    },
+                                    required: ['successRate', 'securityEnforcement', 'safeExecution']
+                                }
+                            },
+                            required: ['testSuite', 'timestamp', 'serverPid', 'skipDangerous', 'totalTests', 'passed', 'failed', 'summary']
+                        },
+                        annotations: {
+                            audience: ['assistant', 'user'],
+                            priority: 0.6,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: true,
+                                classification: 'testing'
+                            }
+                        }
                     },
                     {
                         name: 'threat-analysis',
-                        description: 'Get detailed threat tracking statistics including unknown commands, alias detection, and security threat analysis. Helps identify potential security risks and command patterns.',
+                        title: 'Security Threat Analytics',
+                        description: 'Get detailed threat tracking statistics including unknown commands, alias detection, suspicious patterns, and security risk analysis for audit and monitoring.',
                         inputSchema: zodToJsonSchema(z.object({
                             includeDetails: z.boolean().optional().describe('Include detailed threat entries in response'),
                             resetStats: z.boolean().optional().describe('Reset threat tracking statistics after retrieval'),
                             key: z.string().optional().describe('Authentication key (required if server has authentication enabled)')
                         })),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                unknownCommands: { type: 'number', description: 'Count of unknown/unclassified commands' },
+                                aliasesDetected: { type: 'number', description: 'Count of PowerShell aliases detected' },
+                                suspiciousPatterns: { type: 'number', description: 'Count of suspicious command patterns' },
+                                threatLevel: { type: 'string', enum: ['LOW', 'MODERATE', 'HIGH', 'CRITICAL'], description: 'Overall threat assessment level' },
+                                details: {
+                                    type: 'array',
+                                    items: {
+                                        type: 'object',
+                                        properties: {
+                                            type: { type: 'string', description: 'Type of threat detected' },
+                                            command: { type: 'string', description: 'Command or pattern detected' },
+                                            timestamp: { type: 'string', description: 'When threat was detected' },
+                                            severity: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], description: 'Severity level' }
+                                        }
+                                    },
+                                    description: 'Detailed threat entries (if includeDetails is true)'
+                                }
+                            },
+                            required: ['unknownCommands', 'aliasesDetected', 'suspiciousPatterns', 'threatLevel']
+                        },
+                        annotations: {
+                            audience: ['assistant'],
+                            priority: 0.4,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: true,
+                                classification: 'administrative'
+                            }
+                        }
+                    },
+                    {
+                        name: 'server-stats',
+                        title: 'Server Runtime Metrics',
+                        description: 'Retrieve comprehensive server performance and usage metrics including command counts by security level, execution times, threat statistics, and dynamic pattern overrides.',
+                        inputSchema: zodToJsonSchema(z.object({
+                            reset: z.boolean().optional().describe('Reset metrics after retrieval'),
+                            key: z.string().optional().describe('Authentication key (required if server has authentication enabled)')
+                        })),
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                uptimeSeconds: { type: 'number', description: 'Server uptime in seconds' },
+                                metrics: {
+                                    type: 'object',
+                                    properties: {
+                                        totalCommands: { type: 'number', description: 'Total commands executed' },
+                                        safeCommands: { type: 'number', description: 'Safe commands executed' },
+                                        riskyCommands: { type: 'number', description: 'Risky commands executed' },
+                                        dangerousCommands: { type: 'number', description: 'Dangerous commands executed' },
+                                        criticalCommands: { type: 'number', description: 'Critical commands executed' },
+                                        blockedCommands: { type: 'number', description: 'Blocked commands' },
+                                        truncatedOutputs: { type: 'number', description: 'Truncated outputs count' },
+                                        averageDurationMs: { type: 'number', description: 'Average execution duration in milliseconds' }
+                                    },
+                                    required: ['totalCommands', 'safeCommands', 'riskyCommands', 'dangerousCommands', 'criticalCommands', 'blockedCommands', 'truncatedOutputs', 'averageDurationMs']
+                                }
+                            },
+                            required: ['uptimeSeconds', 'metrics']
+                        },
+                        annotations: {
+                            audience: ['assistant'],
+                            priority: 0.3,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: false,
+                                classification: 'safe'
+                            }
+                        }
+                    },
+                    {
+                        name: 'agent-prompts',
+                        title: 'Prompt Library Retrieval',
+                        description: 'Retrieve phase-based reproduction prompts from docs/AGENT-PROMPTS.md. Supports optional category filter and markdown or JSON formatted output.',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                category: { type: 'string', description: 'Optional case-insensitive substring to match a specific phase/category heading' },
+                                format: { type: 'string', enum: ['markdown', 'json'], description: 'Output format (default markdown)' },
+                                key: { type: 'string', description: 'Authentication key (required if server has authentication enabled)' }
+                            },
+                            required: []
+                        },
+                        outputSchema: {
+                            type: 'object',
+                            properties: {
+                                format: { type: 'string', enum: ['markdown', 'json'], description: 'Format of returned content' },
+                                categories: { type: 'array', items: { type: 'string' }, description: 'All detected prompt category headings' },
+                                category: { type: 'string', description: 'Matched category (if filter applied)' },
+                                content: { type: 'string', description: 'Prompt content (markdown or JSON stringified)' }
+                            },
+                            required: ['format', 'categories', 'content']
+                        },
+                        annotations: {
+                            audience: ['assistant', 'user'],
+                            priority: 0.95,
+                            security: {
+                                requiresConfirmation: false,
+                                auditLogged: false,
+                                classification: 'safe'
+                            }
+                        }
                     },
                 ] as Tool[],
             };
@@ -1717,8 +2435,223 @@ Use the ai-agent-test tool to validate functionality:
 
                 console.error(`✅ Enterprise authentication passed for ${name}`);
 
+                // Rate limiting
+                const rl = this.enforceRateLimit(clientInfo.parentPid);
+                if (!rl.allowed) {
+                    auditLog('WARNING', 'RATE_LIMIT_EXCEEDED', 'Client exceeded rate limit', {
+                        clientPid: clientInfo.parentPid,
+                        toolName: name,
+                        resetMs: rl.resetMs
+                    });
+                                        // Emit rate limit as BLOCKED event to dashboard
+                                        try { metricsHttpServer.publishExecution({
+                                            id: requestId,
+                                            level: 'BLOCKED',
+                                            durationMs: 0,
+                                            blocked: true,
+                                            truncated: false,
+                                            timestamp: new Date().toISOString(),
+                                            preview: '[RATE LIMIT]',
+                                            success: false,
+                                            exitCode: null
+                                        }); metricsRegistry.record({ level: 'BLOCKED' as any, blocked: true, durationMs: 0, truncated: false }); } catch {}
+                                        throw new McpError(
+                                                ErrorCode.InvalidRequest,
+                                                `Rate limit exceeded. Try again in ${rl.resetMs}ms.`
+                                        );
+                }
+                enhancedRequestInfo['rateLimit'] = { remaining: rl.remaining, resetMs: rl.resetMs };
+
                 // Route to appropriate handler
                 switch (name) {
+                    case 'log-test': {
+                        const msg = (args?.message && typeof args.message === 'string') ? args.message : 'Log test ping';
+                        const ts = new Date().toISOString();
+                        console.error(`🧪 LOG-TEST: ${msg} @ ${ts}`);
+                        auditLog('INFO', 'LOG_TEST', 'Log test tool invoked', { message: msg, requestId });
+                        return {
+                            content: [{ type: 'text', text: `Log test emitted at ${ts}: ${msg}` }],
+                            structuredContent: { logged: true, message: msg, timestamp: ts }
+                        };
+                    }
+                    case 'git-status': {
+                        const validated = GitStatusSchema.parse(args || {});
+                        const porcelainFlag = validated.porcelain ? ['--porcelain'] : [];
+                        const res = spawn('git', ['status', ...porcelainFlag], { cwd: process.cwd(), shell: false });
+                        let stdout = '';
+                        let stderr = '';
+                        res.stdout?.on('data', d => stdout += d.toString());
+                        res.stderr?.on('data', d => stderr += d.toString());
+                        const exit = await new Promise<number>(resolve => res.on('close', code => resolve(code || 0)));
+                        auditLog(exit === 0 ? 'INFO' : 'ERROR', 'GIT_STATUS', 'Git status retrieved', { requestId, exitCode: exit });
+                        if (exit !== 0) throw new McpError(ErrorCode.InternalError, `git status failed: ${stderr.trim()}`);
+                        return { content:[{ type:'text', text: stdout || '(no output)' }], structuredContent: { stdout, porcelain: validated.porcelain } };
+                    }
+                    case 'git-commit': {
+                        const validated = GitCommitSchema.parse(args || {});
+                        // Stage all if requested
+                        if (validated.addAll) {
+                            spawn('git', ['add','-A'], { cwd: process.cwd(), shell:false });
+                        }
+                        const message = validated.message.trim();
+                        // Build commit args
+                        const commitArgs = ['commit','-m', message];
+                        if (validated.signoff) commitArgs.push('--signoff');
+                        if (validated.allowEmpty) commitArgs.push('--allow-empty');
+                        const proc = spawn('git', commitArgs, { cwd: process.cwd(), shell:false });
+                        let stdout=''; let stderr='';
+                        proc.stdout?.on('data', d => stdout += d.toString());
+                        proc.stderr?.on('data', d => stderr += d.toString());
+                        const exit = await new Promise<number>(resolve => proc.on('close', code => resolve(code || 0)));
+                        auditLog(exit===0?'INFO':'ERROR', 'GIT_COMMIT', 'Git commit attempted', { requestId, exitCode: exit, addAll: validated.addAll, allowEmpty: validated.allowEmpty });
+                        if (exit !== 0) throw new McpError(ErrorCode.InternalError, `git commit failed: ${stderr.trim()}`);
+                        // Extract commit hash if present
+                        const match = stdout.match(/\b([0-9a-f]{7,40})\b/);
+                        const hash = match ? match[1] : undefined;
+                        return { content:[{ type:'text', text: stdout.trim() }], structuredContent: { success:true, summary: stdout.trim(), commit: hash } };
+                    }
+                    case 'git-push': {
+                        const validated = GitPushSchema.parse(args || {});
+                        if (validated.forceWithLease) {
+                            // Require explicit override (not implemented) to protect repo
+                            throw new McpError(ErrorCode.InvalidRequest, 'Force push is disallowed via MCP tool. Perform manually with documented approval if required.');
+                        }
+                        // Determine current branch if not provided
+                        let branch = validated.branch;
+                        if (!branch) {
+                            const proc = spawn('git', ['rev-parse','--abbrev-ref','HEAD'], { cwd: process.cwd(), shell:false });
+                            let buf=''; proc.stdout?.on('data', d=>buf+=d.toString());
+                            await new Promise(r=>proc.on('close', ()=>{ branch = buf.trim(); r(null); }));
+                        }
+                        const argsPush = ['push'];
+                        if (validated.setUpstream) argsPush.push('--set-upstream');
+                        argsPush.push(validated.remote || 'origin');
+                        if (branch) argsPush.push(branch);
+                        const proc = spawn('git', argsPush, { cwd: process.cwd(), shell:false });
+                        let stdout=''; let stderr='';
+                        proc.stdout?.on('data', d => stdout += d.toString());
+                        proc.stderr?.on('data', d => stderr += d.toString());
+                        const exit = await new Promise<number>(resolve => proc.on('close', code => resolve(code || 0)));
+                        auditLog(exit===0?'INFO':'ERROR', 'GIT_PUSH', 'Git push attempted', { requestId, remote: validated.remote, branch, exitCode: exit, setUpstream: validated.setUpstream });
+                        if (exit !== 0) throw new McpError(ErrorCode.InternalError, `git push failed: ${stderr.trim()}`);
+                        return { content:[{ type:'text', text: stdout.trim() || 'Push successful.' }], structuredContent: { success:true, remote: validated.remote, branch, output: stdout.trim() } };
+                    }
+                    case 'agent-prompts': {
+                        const categoryFilter = args?.category as string | undefined;
+                        const format = (args?.format as string | undefined) === 'json' ? 'json' : 'markdown';
+                        const promptsPath = path.join(process.cwd(), 'docs', 'AGENT-PROMPTS.md');
+                        if (!fs.existsSync(promptsPath)) {
+                            throw new McpError(ErrorCode.InvalidRequest, 'Prompt library file not found at docs/AGENT-PROMPTS.md');
+                        }
+                        const raw = fs.readFileSync(promptsPath, 'utf8');
+                        // Extract headings starting with '## ' (ignore top-level # )
+                        const lines = raw.split(/\r?\n/);
+                        const headings: { line: number; text: string }[] = [];
+                        lines.forEach((l, idx) => {
+                            const m = l.match(/^##\s+(.+?)\s*$/);
+                            if (m) headings.push({ line: idx, text: m[1].trim() });
+                        });
+                        const categories = headings.map(h => h.text);
+                        let selectedContent = raw;
+                        let matchedCategory: string | undefined;
+                        if (categoryFilter) {
+                            const match = headings.find(h => h.text.toLowerCase().includes(categoryFilter.toLowerCase()));
+                            if (match) {
+                                matchedCategory = match.text;
+                                const start = match.line;
+                                // find next heading or end
+                                const next = headings.find(h => h.line > start);
+                                const endLine = next ? next.line : lines.length;
+                                selectedContent = lines.slice(start, endLine).join('\n');
+                            } else {
+                                selectedContent = `# No category match for filter: ${categoryFilter}`;
+                            }
+                        }
+                        let outputContent: string;
+                        if (format === 'json') {
+                            const payload = categoryFilter && matchedCategory ? { category: matchedCategory, content: selectedContent } : { categories, content: selectedContent };
+                            outputContent = JSON.stringify(payload, null, 2);
+                        } else {
+                            outputContent = selectedContent;
+                        }
+                        return {
+                            content: [{ type: 'text', text: outputContent }],
+                            structuredContent: {
+                                format,
+                                categories,
+                                ...(matchedCategory ? { category: matchedCategory } : {}),
+                                content: outputContent
+                            }
+                        };
+                    }
+                    case 'enforce-working-directory': {
+                        if (!('enabled' in args) || typeof args.enabled !== 'boolean') {
+                            throw new McpError(ErrorCode.InvalidParams, 'Missing boolean "enabled" parameter');
+                        }
+                        const oldValue = ENTERPRISE_CONFIG.security.enforceWorkingDirectory;
+                        ENTERPRISE_CONFIG.security.enforceWorkingDirectory = args.enabled;
+                        auditLog('INFO', 'WORKING_DIRECTORY_POLICY_CHANGED', `Working directory enforcement ${args.enabled ? 'enabled' : 'disabled'}`, { 
+                            oldValue, 
+                            newValue: args.enabled 
+                        });
+                        return { 
+                            content: [{ 
+                                type: 'text', 
+                                text: `Working directory enforcement ${args.enabled ? 'enabled' : 'disabled'}.\n\nWhen enabled, all commands with workingDirectory must resolve under configured allowedWriteRoots.\nCurrent status: ${args.enabled ? 'ENFORCED' : 'DISABLED'}` 
+                            }],
+                            structuredContent: {
+                                success: true,
+                                previousState: oldValue,
+                                newState: args.enabled,
+                                message: `Working directory enforcement ${args.enabled ? 'enabled' : 'disabled'}`
+                            }
+                        };
+                    }
+                    case 'get-working-directory-policy': {
+                        const policy = {
+                            enforceWorkingDirectory: ENTERPRISE_CONFIG.security.enforceWorkingDirectory,
+                            status: ENTERPRISE_CONFIG.security.enforceWorkingDirectory ? 'ENFORCED' : 'DISABLED',
+                            allowedWriteRoots: ENTERPRISE_CONFIG.security.allowedWriteRoots || [],
+                            description: ENTERPRISE_CONFIG.security.enforceWorkingDirectory 
+                                ? 'Working directory enforcement is ACTIVE. Commands with workingDirectory must resolve under allowedWriteRoots.'
+                                : 'Working directory enforcement is DISABLED. Commands can use any workingDirectory.'
+                        };
+                        return { 
+                            content: [{ 
+                                type: 'text', 
+                                text: JSON.stringify(policy, null, 2) 
+                            }],
+                            structuredContent: policy
+                        };
+                    }
+                    case 'server-stats': {
+                        const reset = args?.reset;
+                        const snapshot = {
+                            uptimeSeconds: Math.round((Date.now() - this.startTime.getTime())/1000),
+                            metrics: {
+                                ...this.metrics,
+                                averageDurationMs: this.metrics.durationsMs.length ? Math.round(this.metrics.durationsMs.reduce((a,b)=>a+b,0)/this.metrics.durationsMs.length) : 0,
+                                registry: metricsRegistry.snapshot(!!reset)
+                            },
+                            threatStats: this.getThreatStats(),
+                            dynamicPatterns: {
+                                enabled: !!(ENTERPRISE_CONFIG.security.additionalSafe?.length || ENTERPRISE_CONFIG.security.additionalBlocked?.length || ENTERPRISE_CONFIG.security.suppressPatterns?.length),
+                                additionalSafe: ENTERPRISE_CONFIG.security.additionalSafe || [],
+                                additionalBlocked: ENTERPRISE_CONFIG.security.additionalBlocked || [],
+                                suppressPatterns: ENTERPRISE_CONFIG.security.suppressPatterns || []
+                            },
+                            rateLimit: ENTERPRISE_CONFIG.rateLimit || { enabled: false },
+                            timestamp: new Date().toISOString()
+                        };
+                        if (reset) {
+                            this.metrics = { commands:0, executions:0, blocked:0, truncated:0, byLevel:{SAFE:0,RISKY:0,DANGEROUS:0,CRITICAL:0,BLOCKED:0,UNKNOWN:0}, durationsMs:[], lastReset:new Date().toISOString() };
+                        }
+                        auditLog('INFO', 'SERVER_STATS', 'Server metrics retrieved', { reset, snapshot });
+                        return { 
+                            content: [{ type:'text', text: JSON.stringify(snapshot,null,2) }],
+                            structuredContent: snapshot
+                        };
+                    }
                     case 'powershell-command': {
                         const validatedArgs = PowerShellCommandSchema.parse(args);
                         
@@ -1726,8 +2659,9 @@ Use the ai-agent-test tool to validate functionality:
                         const securityAssessment = this.classifyCommandSafety(validatedArgs.command);
                         
                         console.error(`🔨 Executing PowerShell Command: ${validatedArgs.command}`);
-                        const commandTimeout = validatedArgs.aiAgentTimeout || validatedArgs.timeout;
+                        const commandTimeout = validatedArgs.aiAgentTimeout || validatedArgs.timeout || ENTERPRISE_CONFIG.limits.defaultTimeoutMs;
                         console.error(`⏱️  Timeout: ${commandTimeout}ms${validatedArgs.aiAgentTimeout ? ' (AI Agent Override)' : ''}`);
+                        console.error(`[DEBUG] Received timeout params => timeout: ${validatedArgs.timeout ?? 'undefined'} aiAgentTimeout: ${validatedArgs.aiAgentTimeout ?? 'undefined'}`);
                         console.error(`🛡️  Security Level: ${securityAssessment.level} (${securityAssessment.risk} RISK)`);
                         console.error(`📋 Risk Reason: ${securityAssessment.reason}`);
                         console.error(`🎨 Classification Color: ${securityAssessment.color}`);
@@ -1756,7 +2690,17 @@ Use the ai-agent-test tool to validate functionality:
                                 serverPid: clientInfo.serverPid,
                                 blockingPolicy: 'ENTERPRISE_SECURITY_ENFORCEMENT'
                             });
-                            
+                                                        try { metricsHttpServer.publishExecution({
+                                                            id: requestId,
+                                                            level: 'BLOCKED',
+                                                            durationMs: 0,
+                                                            blocked: true,
+                                                            truncated: false,
+                                                            timestamp: new Date().toISOString(),
+                                                            preview: validatedArgs.command.substring(0,120),
+                                                            success: false,
+                                                            exitCode: null
+                                                        }); metricsRegistry.record({ level: 'BLOCKED' as any, blocked: true, durationMs: 0, truncated: false }); } catch {}
                             throw blockedError;
                         }
                         
@@ -1778,7 +2722,20 @@ Use the ai-agent-test tool to validate functionality:
                                 category: securityAssessment.category,
                                 confirmationInstructions: 'Add confirmed: true parameter'
                             });
-                            
+                                                        try { metricsHttpServer.publishExecution({
+                                                            id: requestId,
+                                                            level: securityAssessment.level,
+                                                            durationMs: 0,
+                                                            blocked: false,
+                                                            truncated: false,
+                                                            timestamp: new Date().toISOString(),
+                                                            preview: validatedArgs.command.substring(0,120)+' [CONFIRM?]',
+                                                            success: false,
+                                                            exitCode: null
+                                                        }); metricsRegistry.record({ level: 'UNKNOWN' as any, blocked:false, durationMs:0, truncated:false });
+                                                        // Increment confirmation-specific counter directly (not tied to level)
+                                                        try { (metricsRegistry as any).counts.CONFIRM++; } catch {}
+                                                        } catch {}
                             throw promptError;
                         }
                         
@@ -1791,6 +2748,33 @@ Use the ai-agent-test tool to validate functionality:
                         );
                         
                         result.securityAssessment = securityAssessment;
+                        // metrics update
+                        this.metrics.commands++;
+                        this.metrics.executions++;
+                        this.metrics.byLevel[securityAssessment.level]++;
+                        if (securityAssessment.blocked) this.metrics.blocked++;
+                        if (result.error && result.error.includes('TRUNCATED')) this.metrics.truncated++;
+                        if (result.duration_ms) this.metrics.durationsMs.push(result.duration_ms);
+                        metricsRegistry.record({
+                          level: securityAssessment.level,
+                          blocked: securityAssessment.blocked,
+                          durationMs: result.duration_ms,
+                          truncated: !!(result.error && result.error.includes('TRUNCATED'))
+                        });
+                                                metricsHttpServer.publishExecution({
+                                                    id: requestId,
+                                                    level: securityAssessment.level,
+                                                    durationMs: result.duration_ms,
+                                                    blocked: securityAssessment.blocked,
+                                                    truncated: !!(result.error && result.error.includes('TRUNCATED')),
+                                                    timestamp: new Date().toISOString(),
+                                                    preview: validatedArgs.command?.substring(0,120),
+                                                    success: result.success,
+                                                    exitCode: result.exitCode,
+                                                    confirmed: validatedArgs.confirmed || validatedArgs.override,
+                                                    timedOut: result.timedOut
+                                                });
+                        if (result.timedOut) { try { (metricsRegistry as any).counts.TIMEOUTS++; } catch {} }
                         
                         // Enhanced result logging
                         console.error(`✅ COMMAND COMPLETED [${requestId}]`);
@@ -1816,14 +2800,40 @@ Use the ai-agent-test tool to validate functionality:
                             category: securityAssessment.category,
                             clientPid: clientInfo.parentPid,
                             serverPid: clientInfo.serverPid,
-                            workingDirectory: validatedArgs.workingDirectory
+                            workingDirectory: validatedArgs.workingDirectory,
+                            truncated: !!(result.error && result.error.includes('TRUNCATED'))
                         });
                         
                         return {
-                            content: [{ 
-                                type: 'text' as const,
-                                text: JSON.stringify(result, null, 2)
-                            }] as TextContent[]
+                            content: [
+                                { type: 'text' as const, text: JSON.stringify(result, null, 2) },
+                                { type: 'text' as const, text: `SUMMARY: elapsed=${result.duration_ms}ms configuredTimeout=${result.configuredTimeoutMs}ms timedOut=${result.timedOut||false} killEscalated=${result.killEscalated||false}` }
+                            ],
+                            structuredContent: {
+                                success: result.success,
+                                output: (() => {
+                                    const base = result.stdout || result.stderr || '';
+                                    if (result.timedOut) {
+                                        return `[TIMEOUT] Command exceeded ${result.configuredTimeoutMs}ms (elapsed ${result.duration_ms}ms${result.killEscalated ? ' - escalated' : ''}).` + (base ? `\n${base}` : '');
+                                    }
+                                    return base;
+                                })(),
+                                exitCode: result.exitCode,
+                                executionTime: result.duration_ms,
+                                executionStartIso: new Date(Date.now() - (result.duration_ms || 0)).toISOString(),
+                                executionEndIso: new Date().toISOString(),
+                                securityAssessment: {
+                                    level: securityAssessment.level,
+                                    reason: securityAssessment.reason,
+                                    blocked: securityAssessment.blocked
+                                },
+                                auditId: requestId,
+                                timedOut: result.timedOut || false,
+                                configuredTimeoutMs: result.configuredTimeoutMs,
+                                killEscalated: result.killEscalated || false,
+                                truncated: !!(result.error && result.error.includes('TRUNCATED')),
+                                error: result.error
+                            }
                         };
                     }
                     
@@ -1834,8 +2844,9 @@ Use the ai-agent-test tool to validate functionality:
                         const securityAssessment = this.classifyCommandSafety(validatedArgs.script);
                         
                         console.error(`📜 Executing PowerShell Script (${validatedArgs.script.length} characters)`);
-                        const scriptTimeout = validatedArgs.aiAgentTimeout || validatedArgs.timeout;
+                        const scriptTimeout = validatedArgs.aiAgentTimeout || validatedArgs.timeout || ENTERPRISE_CONFIG.limits.defaultTimeoutMs;
                         console.error(`⏱️  Timeout: ${scriptTimeout}ms${validatedArgs.aiAgentTimeout ? ' (AI Agent Override)' : ''}`);
+                        console.error(`[DEBUG] Received timeout params => timeout: ${validatedArgs.timeout ?? 'undefined'} aiAgentTimeout: ${validatedArgs.aiAgentTimeout ?? 'undefined'}`);
                         console.error(`🛡️  Security Level: ${securityAssessment.level} (${securityAssessment.risk} RISK)`);
                         
                         // Security enforcement for scripts
@@ -1859,16 +2870,39 @@ Use the ai-agent-test tool to validate functionality:
                                 serverPid: clientInfo.serverPid,
                                 blockingPolicy: 'ENTERPRISE_SECURITY_ENFORCEMENT'
                             });
-                            
+                                                        try { metricsHttpServer.publishExecution({
+                                                            id: requestId,
+                                                            level: 'BLOCKED',
+                                                            durationMs: 0,
+                                                            blocked: true,
+                                                            truncated: false,
+                                                            timestamp: new Date().toISOString(),
+                                                            preview: validatedArgs.script.substring(0,120),
+                                                            success: false,
+                                                            exitCode: null
+                                                        }); metricsRegistry.record({ level: 'BLOCKED' as any, blocked: true, durationMs: 0, truncated: false }); } catch {}
                             throw blockedError;
                         }
                         
                         // Handle confirmation for scripts
                         if (securityAssessment.requiresPrompt && !validatedArgs.confirmed && !validatedArgs.override) {
-                            throw new McpError(
-                                ErrorCode.InvalidRequest,
-                                `⚠️ SCRIPT CONFIRMATION REQUIRED: ${securityAssessment.reason}. Add 'confirmed: true' to proceed.`
-                            );
+                                                        try { metricsHttpServer.publishExecution({
+                                                            id: requestId,
+                                                            level: securityAssessment.level,
+                                                            durationMs: 0,
+                                                            blocked: false,
+                                                            truncated: false,
+                                                            timestamp: new Date().toISOString(),
+                                                            preview: validatedArgs.script.substring(0,120)+' [CONFIRM?]',
+                                                            success: false,
+                                                            exitCode: null
+                                                        }); metricsRegistry.record({ level: 'UNKNOWN' as any, blocked:false, durationMs:0, truncated:false });
+                                                        try { (metricsRegistry as any).counts.CONFIRM++; } catch {}
+                                                        } catch {}
+                                                        throw new McpError(
+                                                                ErrorCode.InvalidRequest,
+                                                                `⚠️ SCRIPT CONFIRMATION REQUIRED: ${securityAssessment.reason}. Add 'confirmed: true' to proceed.`
+                                                        );
                         }
                         
                         // Execute the script with appropriate timeout
@@ -1879,6 +2913,32 @@ Use the ai-agent-test tool to validate functionality:
                         );
                         
                         result.securityAssessment = securityAssessment;
+                        this.metrics.commands++;
+                        this.metrics.executions++;
+                        this.metrics.byLevel[securityAssessment.level]++;
+                        if (securityAssessment.blocked) this.metrics.blocked++;
+                        if (result.error && result.error.includes('TRUNCATED')) this.metrics.truncated++;
+                        if (result.duration_ms) this.metrics.durationsMs.push(result.duration_ms);
+                        metricsRegistry.record({
+                          level: securityAssessment.level,
+                          blocked: securityAssessment.blocked,
+                          durationMs: result.duration_ms,
+                          truncated: !!(result.error && result.error.includes('TRUNCATED'))
+                        });
+                                                metricsHttpServer.publishExecution({
+                                                    id: requestId,
+                                                    level: securityAssessment.level,
+                                                    durationMs: result.duration_ms,
+                                                    blocked: securityAssessment.blocked,
+                                                    truncated: !!(result.error && result.error.includes('TRUNCATED')),
+                                                    timestamp: new Date().toISOString(),
+                                                    preview: validatedArgs.script?.substring(0,120),
+                                                    success: result.success,
+                                                    exitCode: result.exitCode,
+                                                    confirmed: validatedArgs.confirmed || validatedArgs.override,
+                                                    timedOut: result.timedOut
+                                                });
+                        if (result.timedOut) { try { (metricsRegistry as any).counts.TIMEOUTS++; } catch {} }
                         
                         console.error(`✅ SCRIPT COMPLETED [${requestId}]`);
                         console.error(`📊 Result: ${result.success ? 'SUCCESS' : 'FAILED'}`);
@@ -1901,14 +2961,40 @@ Use the ai-agent-test tool to validate functionality:
                             category: securityAssessment.category,
                             clientPid: clientInfo.parentPid,
                             serverPid: clientInfo.serverPid,
-                            workingDirectory: validatedArgs.workingDirectory
+                            workingDirectory: validatedArgs.workingDirectory,
+                            truncated: !!(result.error && result.error.includes('TRUNCATED'))
                         });
                         
                         return {
-                            content: [{ 
-                                type: 'text' as const,
-                                text: JSON.stringify(result, null, 2)
-                            }]
+                            content: [
+                                { type: 'text' as const, text: JSON.stringify(result, null, 2) },
+                                { type: 'text' as const, text: `SUMMARY: elapsed=${result.duration_ms}ms configuredTimeout=${result.configuredTimeoutMs}ms timedOut=${result.timedOut||false} killEscalated=${result.killEscalated||false}` }
+                            ],
+                            structuredContent: {
+                                success: result.success,
+                                output: (() => {
+                                    const base = result.stdout || result.stderr || '';
+                                    if (result.timedOut) {
+                                        return `[TIMEOUT] Script exceeded ${result.configuredTimeoutMs}ms (elapsed ${result.duration_ms}ms${result.killEscalated ? ' - escalated' : ''}).` + (base ? `\n${base}` : '');
+                                    }
+                                    return base;
+                                })(),
+                                exitCode: result.exitCode,
+                                executionTime: result.duration_ms,
+                                executionStartIso: new Date(Date.now() - (result.duration_ms || 0)).toISOString(),
+                                executionEndIso: new Date().toISOString(),
+                                securityAssessment: {
+                                    level: securityAssessment.level,
+                                    reason: securityAssessment.reason,
+                                    blocked: securityAssessment.blocked
+                                },
+                                auditId: requestId,
+                                timedOut: result.timedOut || false,
+                                configuredTimeoutMs: result.configuredTimeoutMs,
+                                killEscalated: result.killEscalated || false,
+                                truncated: !!(result.error && result.error.includes('TRUNCATED')),
+                                error: result.error
+                            }
                         };
                     }
                     
@@ -1938,7 +3024,12 @@ Use the ai-agent-test tool to validate functionality:
                             content: [{ 
                                 type: 'text' as const,
                                 text: JSON.stringify(result, null, 2)
-                            }]
+                            }],
+                            structuredContent: {
+                                isValid: result.isValid,
+                                errors: result.errors,
+                                suggestions: []
+                            }
                         };
                     }
                     
@@ -1946,9 +3037,7 @@ Use the ai-agent-test tool to validate functionality:
                         const validatedArgs = HelpSchema.parse(args);
                         
                         console.error(`📖 Generating Help Documentation`);
-                        if (validatedArgs.topic) {
-                            console.error(`📋 Topic: ${validatedArgs.topic}`);
-                        }
+                        console.error(`📋 Topic: ${validatedArgs.topic}`);
                         
                         const helpContent = this.generateHelpForAIAgents(validatedArgs.topic);
                         
@@ -1968,7 +3057,12 @@ Use the ai-agent-test tool to validate functionality:
                             content: [{ 
                                 type: 'text' as const,
                                 text: helpContent
-                            }]
+                            }],
+                            structuredContent: {
+                                topic: validatedArgs.topic || 'comprehensive',
+                                content: helpContent,
+                                availableTopics: ['security', 'monitoring', 'authentication', 'examples', 'capabilities', 'ai-agents', 'working-directory']
+                            }
                         };
                     }
                     
@@ -2003,7 +3097,8 @@ Use the ai-agent-test tool to validate functionality:
                             content: [{
                                 type: 'text' as const,
                                 text: JSON.stringify(testResults, null, 2)
-                            }]
+                            }],
+                            structuredContent: testResults
                         };
                     }
                     
