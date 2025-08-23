@@ -583,6 +583,7 @@ async function auditLog(
         } catch (error) {
             // Silently disable further notification attempts on first failure
             clientSupportsLogging = false;
+            console.error(`[WARN] MCP client logging notifications disabled after failure: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
     
@@ -800,6 +801,15 @@ class EnterprisePowerShellMCPServer {
         setMCPServer(this.server);
         // Start metrics HTTP server (Phase 2 scaffold)
         metricsHttpServer.start();
+        // Log dashboard URL once metrics server chooses its port
+        setTimeout(() => {
+            try {
+                if (metricsHttpServer.isStarted()) {
+                    const dashPort = metricsHttpServer.getPort();
+                    console.error(`📊 Metrics Dashboard: http://127.0.0.1:${dashPort}/dashboard (events, metrics, performance)`);
+                }
+            } catch {}
+        }, 400);
         
         // Enhanced authentication logging
         this.logAuthenticationStatus();
@@ -1911,6 +1921,14 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
             return {
                 tools: [
                     {
+                        name: 'log-test',
+                        title: 'Server Log Test / Health Ping',
+                        description: 'Emits an audit log entry and returns a simple payload so clients can verify log routing (stderr + notification).',
+                        inputSchema: { type: 'object', properties: { message: { type: 'string', description: 'Optional message to include in log' } } },
+                        outputSchema: { type: 'object', properties: { logged: { type: 'boolean' }, message: { type: 'string' }, timestamp: { type: 'string' } }, required: ['logged','timestamp'] },
+                        annotations: { audience: ['assistant'], priority: 0.1 }
+                    },
+                    {
                         name: 'powershell-command',
                         title: 'PowerShell Command Executor',
                         description: 'Execute a single PowerShell command with enterprise security, audit logging, and timeout control. Supports working directory specification and security confirmation for risky operations.',
@@ -2388,6 +2406,16 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
 
                 // Route to appropriate handler
                 switch (name) {
+                    case 'log-test': {
+                        const msg = (args?.message && typeof args.message === 'string') ? args.message : 'Log test ping';
+                        const ts = new Date().toISOString();
+                        console.error(`🧪 LOG-TEST: ${msg} @ ${ts}`);
+                        auditLog('INFO', 'LOG_TEST', 'Log test tool invoked', { message: msg, requestId });
+                        return {
+                            content: [{ type: 'text', text: `Log test emitted at ${ts}: ${msg}` }],
+                            structuredContent: { logged: true, message: msg, timestamp: ts }
+                        };
+                    }
                     case 'agent-prompts': {
                         const categoryFilter = args?.category as string | undefined;
                         const format = (args?.format as string | undefined) === 'json' ? 'json' : 'markdown';

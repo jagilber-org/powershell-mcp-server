@@ -109,6 +109,11 @@ export class MetricsHttpServer {
     tryListen();
   }
 
+  /** Return bound port if started (or initial desired port before start). */
+  getPort(): number { return this.opts.port; }
+  /** Whether server has successfully started */
+  isStarted(): boolean { return this.started; }
+
   stop(): void {
     this.server?.close();
     this.started = false;
