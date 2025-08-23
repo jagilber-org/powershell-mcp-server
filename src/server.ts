@@ -700,6 +700,27 @@ const AITestSchema = z.object({
     key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
 });
 
+/** Git status schema */
+const GitStatusSchema = z.object({
+    porcelain: z.boolean().optional().default(true).describe('Return git status in porcelain v1 format')
+});
+
+/** Git commit schema */
+const GitCommitSchema = z.object({
+    message: z.string().min(1).max(200).describe('Commit message (<=200 chars enforced)'),
+    addAll: z.boolean().optional().default(false).describe('Stage all changes (git add -A) before committing'),
+    signoff: z.boolean().optional().default(false).describe('Add Signed-off-by line'),
+    allowEmpty: z.boolean().optional().default(false).describe('Allow empty commit if no staged changes'),
+});
+
+/** Git push schema */
+const GitPushSchema = z.object({
+    remote: z.string().optional().default('origin').describe('Remote name'),
+    branch: z.string().optional().describe('Branch to push (defaults to current)'),
+    setUpstream: z.boolean().optional().default(false).describe('Add --set-upstream if pushing new branch'),
+    forceWithLease: z.boolean().optional().default(false).describe('Use --force-with-lease (discouraged; only if explicitly requested)')
+});
+
 // ==============================================================================
 // ENTERPRISE MCP SERVER CLASS
 // ==============================================================================
@@ -1942,6 +1963,30 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
                         annotations: { audience: ['assistant'], priority: 0.1 }
                     },
                     {
+                        name: 'git-status',
+                        title: 'Git Status (Safe Read-Only)',
+                        description: 'Retrieve repository status (porcelain) via MCP (no direct terminal).',
+                        inputSchema: zodToJsonSchema(GitStatusSchema),
+                        outputSchema: { type: 'object', properties: { stdout: { type: 'string' }, porcelain: { type: 'boolean' } }, required: ['stdout'] },
+                        annotations: { audience: ['assistant'], priority: 0.2 }
+                    },
+                    {
+                        name: 'git-commit',
+                        title: 'Git Commit (Controlled)',
+                        description: 'Create a git commit with optional auto stage; enforces message length & logs audit trail.',
+                        inputSchema: zodToJsonSchema(GitCommitSchema),
+                        outputSchema: { type: 'object', properties: { success: { type:'boolean' }, summary: { type:'string' }, commit: { type:'string' } }, required:['success'] },
+                        annotations: { audience: ['assistant'], priority: 0.3 }
+                    },
+                    {
+                        name: 'git-push',
+                        title: 'Git Push (Controlled)',
+                        description: 'Push current (or specified) branch to remote with optional upstream. Rejects force unless explicitly allowed.',
+                        inputSchema: zodToJsonSchema(GitPushSchema),
+                        outputSchema: { type: 'object', properties: { success:{ type:'boolean' }, remote:{ type:'string' }, branch:{ type:'string' }, output:{ type:'string' } }, required:['success'] },
+                        annotations: { audience: ['assistant'], priority: 0.31 }
+                    },
+                    {
                         name: 'powershell-command',
                         title: 'PowerShell Command Executor',
                         description: 'Execute a single PowerShell command with enterprise security, audit logging, and timeout control. Supports working directory specification and security confirmation for risky operations.',
@@ -2428,6 +2473,68 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
                             content: [{ type: 'text', text: `Log test emitted at ${ts}: ${msg}` }],
                             structuredContent: { logged: true, message: msg, timestamp: ts }
                         };
+                    }
+                    case 'git-status': {
+                        const validated = GitStatusSchema.parse(args || {});
+                        const porcelainFlag = validated.porcelain ? ['--porcelain'] : [];
+                        const res = spawn('git', ['status', ...porcelainFlag], { cwd: process.cwd(), shell: false });
+                        let stdout = '';
+                        let stderr = '';
+                        res.stdout?.on('data', d => stdout += d.toString());
+                        res.stderr?.on('data', d => stderr += d.toString());
+                        const exit = await new Promise<number>(resolve => res.on('close', code => resolve(code || 0)));
+                        auditLog(exit === 0 ? 'INFO' : 'ERROR', 'GIT_STATUS', 'Git status retrieved', { requestId, exitCode: exit });
+                        if (exit !== 0) throw new McpError(ErrorCode.InternalError, `git status failed: ${stderr.trim()}`);
+                        return { content:[{ type:'text', text: stdout || '(no output)' }], structuredContent: { stdout, porcelain: validated.porcelain } };
+                    }
+                    case 'git-commit': {
+                        const validated = GitCommitSchema.parse(args || {});
+                        // Stage all if requested
+                        if (validated.addAll) {
+                            spawn('git', ['add','-A'], { cwd: process.cwd(), shell:false });
+                        }
+                        const message = validated.message.trim();
+                        // Build commit args
+                        const commitArgs = ['commit','-m', message];
+                        if (validated.signoff) commitArgs.push('--signoff');
+                        if (validated.allowEmpty) commitArgs.push('--allow-empty');
+                        const proc = spawn('git', commitArgs, { cwd: process.cwd(), shell:false });
+                        let stdout=''; let stderr='';
+                        proc.stdout?.on('data', d => stdout += d.toString());
+                        proc.stderr?.on('data', d => stderr += d.toString());
+                        const exit = await new Promise<number>(resolve => proc.on('close', code => resolve(code || 0)));
+                        auditLog(exit===0?'INFO':'ERROR', 'GIT_COMMIT', 'Git commit attempted', { requestId, exitCode: exit, addAll: validated.addAll, allowEmpty: validated.allowEmpty });
+                        if (exit !== 0) throw new McpError(ErrorCode.InternalError, `git commit failed: ${stderr.trim()}`);
+                        // Extract commit hash if present
+                        const match = stdout.match(/\b([0-9a-f]{7,40})\b/);
+                        const hash = match ? match[1] : undefined;
+                        return { content:[{ type:'text', text: stdout.trim() }], structuredContent: { success:true, summary: stdout.trim(), commit: hash } };
+                    }
+                    case 'git-push': {
+                        const validated = GitPushSchema.parse(args || {});
+                        if (validated.forceWithLease) {
+                            // Require explicit override (not implemented) to protect repo
+                            throw new McpError(ErrorCode.InvalidRequest, 'Force push is disallowed via MCP tool. Perform manually with documented approval if required.');
+                        }
+                        // Determine current branch if not provided
+                        let branch = validated.branch;
+                        if (!branch) {
+                            const proc = spawn('git', ['rev-parse','--abbrev-ref','HEAD'], { cwd: process.cwd(), shell:false });
+                            let buf=''; proc.stdout?.on('data', d=>buf+=d.toString());
+                            await new Promise(r=>proc.on('close', ()=>{ branch = buf.trim(); r(null); }));
+                        }
+                        const argsPush = ['push'];
+                        if (validated.setUpstream) argsPush.push('--set-upstream');
+                        argsPush.push(validated.remote || 'origin');
+                        if (branch) argsPush.push(branch);
+                        const proc = spawn('git', argsPush, { cwd: process.cwd(), shell:false });
+                        let stdout=''; let stderr='';
+                        proc.stdout?.on('data', d => stdout += d.toString());
+                        proc.stderr?.on('data', d => stderr += d.toString());
+                        const exit = await new Promise<number>(resolve => proc.on('close', code => resolve(code || 0)));
+                        auditLog(exit===0?'INFO':'ERROR', 'GIT_PUSH', 'Git push attempted', { requestId, remote: validated.remote, branch, exitCode: exit, setUpstream: validated.setUpstream });
+                        if (exit !== 0) throw new McpError(ErrorCode.InternalError, `git push failed: ${stderr.trim()}`);
+                        return { content:[{ type:'text', text: stdout.trim() || 'Push successful.' }], structuredContent: { success:true, remote: validated.remote, branch, output: stdout.trim() } };
                     }
                     case 'agent-prompts': {
                         const categoryFilter = args?.category as string | undefined;

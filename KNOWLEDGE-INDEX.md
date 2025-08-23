@@ -154,6 +154,7 @@ See `SESSION-LEARNINGS.md` for detailed transformation from path-based to proces
 
 | Date (UTC) | Incident | Root Cause | Remediation | Permanent Safeguards |
 |-----------|----------|------------|-------------|----------------------|
+| 2025-08-23 | Attempted raw terminal execution of simple test command despite available MCP `powershell-command` tool | Skipped MCP gating checklist; did not activate/inspect tool surface first; incorrect assumption of tool unavailability | Enforce immediate MCP tool surface activation check; emit direct `powershell-command` payload instead of terminal; only proceed to terminal with fully populated Terminal Exception block | Added "Tool Surface Activation First" step to safeguard list; classify any bypass attempt as policy violation; require logging of gate evaluation when denial occurs |
 | 2025-08-23 | Assistant produced unsolicited scripts & repeated clarifications instead of executing MCP tool payload requests (user intent: direct tool invocation) | Failure to adhere to ULTRA-CRITICAL MCP-first minimal-response rule; over-elaboration when execution bridge unavailable | Defined payload-only mode; removed creation of helper scripts unless explicitly requested | Pre-check gate before responding: (a) Is user asking for action? → supply single tools/call payload only; (b) No multi-option responses unless user says "options"; (c) No new artifacts without explicit verbs: add / create / implement |
 
 Guideline Reinforcement:
@@ -162,6 +163,7 @@ Guideline Reinforcement:
 2. Action verbs (run, execute, list, test, commit) = Single MCP payload only.
 3. If execution channel missing: state once, still provide payloads; do not escalate with scripts.
 4. Any remediation steps must be appended here to preserve institutional memory.
+5. Always activate/verify MCP tool surface before any command; never propose terminal path without explicit gate evaluation + Terminal Exception block (all NO) logged.
 
 
 

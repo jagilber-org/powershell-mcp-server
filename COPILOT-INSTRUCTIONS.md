@@ -109,3 +109,14 @@ If this block is missing → Replace terminal proposal with an MCP tool plan aut
 
 ---
 _Last updated: 2025-08-23 (UTC)_
+
+### Addendum (2025-08-23): Critical Learning – Tool Surface Activation First
+
+An incident (see Knowledge Index Operational Incident Log) highlighted an improper fallback to raw terminal for a trivial test command while the generic `powershell-command` tool was available. Reinforced rule:
+
+1. ALWAYS enumerate/activate MCP tool surface first (treat generic `powershell-command` as present unless definitively absent).
+2. ANY attempt to propose or execute a terminal command without (a) explicit gate evaluation and (b) a fully populated Terminal Exception block is a policy violation and must be auto-replaced with an MCP tool payload.
+3. Record gate evaluation values (`toolExists`, `genericPossible`, `losesAudit`, `gitToolExists`, `priorReplaced`) when denying terminal usage for observability.
+4. Classify bypass attempts as procedural defects; append remediation to Knowledge Index.
+
+This addendum will be merged into the main body upon next structural revision; retained separately for high-visibility until then.

@@ -16,16 +16,27 @@ async function run() {
     try {
       const msg = JSON.parse(line);
       if (msg.id === 3) {
-        console.log('\n📩 Response for policy test');
+        console.log('\n🔧 Enforcement enable response received');
+        const text = msg?.result?.content?.[0]?.text;
+        if (text) { try { const body = JSON.parse(text); console.log('New enforcement state:', body.newState); } catch {} }
+      } else if (msg.id === 4) {
+        console.log('\n Response for policy test');
         try {
-          const body = JSON.parse(msg.result.content[0].text);
-          console.log('Success:', body.success);
-          console.log('Error:', body.error);
-          console.log('Stderr:', body.stderr);
-          if (body.error === 'WORKING_DIRECTORY_POLICY_VIOLATION') {
-            console.log('✅ Policy violation correctly detected');
+          const text = msg?.result?.content?.[0]?.text;
+          if (!text) {
+            console.log('No content payload');
           } else {
-            console.log('❌ Expected policy violation not detected');
+            const body = JSON.parse(text);
+            console.log('Success:', body.success);
+            console.log('Error:', body.error);
+            console.log('Stderr:', body.stderr);
+            if (body.error === 'WORKING_DIRECTORY_POLICY_VIOLATION' && body.success === false) {
+              console.log('✅ Policy violation correctly detected');
+            } else if (body.success === true && !body.error) {
+              console.log('❌ Expected violation but command succeeded');
+            } else {
+              console.log('❌ Unexpected outcome');
+            }
           }
         } catch(e) { console.log('Parse error', e); }
         server.kill();
@@ -34,8 +45,13 @@ async function run() {
   });
   send({ jsonrpc:'2.0', id:1, method:'initialize', params:{ protocolVersion:'2024-11-05', capabilities:{}, clientInfo:{name:'test',version:'1.0.0'} }}, server);
   setTimeout(()=> send({ jsonrpc:'2.0', id:2, method:'tools/list', params:{} }, server), 1000);
+  // Enable working directory enforcement first using correct tool name
   setTimeout(()=> {
-    send({ jsonrpc:'2.0', id:3, method:'tools/call', params:{ name:'powershell-command', arguments:{ command:'Get-ChildItem', workingDirectory:'C:/Windows/System32' } } }, server);
-  }, 2000);
+    send({ jsonrpc:'2.0', id:3, method:'tools/call', params:{ name:'enforce-working-directory', arguments:{ enabled:true } } }, server);
+  }, 1800);
+  // Then attempt command in disallowed directory to trigger violation
+  setTimeout(()=> {
+    send({ jsonrpc:'2.0', id:4, method:'tools/call', params:{ name:'powershell-command', arguments:{ command:'Get-ChildItem', workingDirectory:'C:/Windows/System32' } } }, server);
+  }, 2600);
 }
 run();
