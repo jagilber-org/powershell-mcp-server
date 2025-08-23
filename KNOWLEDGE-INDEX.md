@@ -1,5 +1,42 @@
 # 📚 Knowledge Index
 
+> 🚨🚨🚨 ULTRA-CRITICAL ENFORCEMENT BANNER (DO NOT BYPASS) 🚨🚨🚨
+>
+> ABSOLUTE RULE: **DO NOT ISSUE RAW TERMINAL COMMANDS WHEN AN MCP TOOL CAN ACHIEVE THE OUTCOME. ALWAYS ROUTE THROUGH A REGISTERED MCP SERVER TOOL INSTEAD OF DIRECT TERMINAL.**
+>
+> WHY THIS IS NON-NEGOTIABLE:
+>
+> - Maintains security classification (SAFE/RISKY/DANGEROUS/CRITICAL/BLOCKED/UNKNOWN) & confirmation gating.
+> - Preserves audit invariants (stderr, pretty log, NDJSON) and metrics/rate-limit lineage.
+> - Ensures timeout escalation metadata (timedOut, configuredTimeoutMs, killEscalated) is captured.
+> - Guarantees threat & alias tracking signals reach dashboard + history endpoint.
+> - Enables reproducibility & deterministic enforcement (no invisible side-paths).
+>
+> MCP GATING CHECKLIST (ALL must be NO to even CONSIDER terminal) — evaluate across ALL registered MCP servers (aggregate tool surface):
+>
+> 1. Exists specialized MCP tool (on any registered server: git-status/commit/push, log-test, server-stats, ai-agent-test, GitHub/Issue tools, etc.)?
+> 2. Can generic `powershell-command` run the shell/PowerShell you were about to run? (Usually YES.)
+> 3. Would using terminal cause loss of audit/metrics/security classification? (If YES → BLOCK.)
+> 4. Is this routine repo hygiene (git ops) now covered by git-* tools? (If YES → use tools.)
+> 5. Has a similar prior terminal attempt been replaced by a tool this session? (If YES → use tool.)
+>
+> If ANY answer = YES → Terminal usage is FORBIDDEN.
+>
+> MANDATORY TERMINAL EXCEPTION BLOCK (only if all above = NO):
+>
+> 
+> ```text
+> Terminal Exception:
+> Reason: <concise justification>
+> Gate Evaluation: toolExists=<true/false>; genericPossible=<true/false>; losesAudit=<true/false>; gitToolExists=<true/false>; priorReplaced=<true/false>
+> Risk Mitigation: <steps to minimize risk>
+> ```
+> Without this exact formatted block the attempt is INVALID and must be auto-replaced with an MCP tool plan.
+>
+> FINAL FALLBACK PRINCIPLE: When uncertain, ALWAYS default to MCP tool invocation. Ambiguity is treated as a BLOCK → choose MCP.
+
+> Copilot / AI Agent Note: Procedural assistant behavior (how to choose tools, escalation sequence, prohibited behaviors) is defined in `COPILOT-INSTRUCTIONS.md`. This knowledge index only summarizes the universal rule above to avoid circular duplication.
+
 > Consolidated, living reference of architectural principles, security patterns, documentation conventions, and operational learnings for the PowerShell MCP Server.
 >
 > Sources: `docs/ARCHITECTURE.md`, `SESSION-LEARNINGS.md`, commit history (notably diagram + dark theme refinements up to 537c25b).
@@ -110,6 +147,23 @@ See `SESSION-LEARNINGS.md` for detailed transformation from path-based to proces
 | 621888a | 2025-08-22 | Docs/Diagrams | Final Mermaid fixes (metrics & pattern overrides). |
 | 7022c2b | 2025-08-22 | Docs/Diagrams | Fixed classification, rate limiter, WD enforcement diagrams. |
 | (earlier) | 2025-08-22 | Docs/Theming | Added dark theme JSON init across diagrams. |
+
+---
+
+## 9.1 Operational Incident Log (Assistant Behavior)
+
+| Date (UTC) | Incident | Root Cause | Remediation | Permanent Safeguards |
+|-----------|----------|------------|-------------|----------------------|
+| 2025-08-23 | Assistant produced unsolicited scripts & repeated clarifications instead of executing MCP tool payload requests (user intent: direct tool invocation) | Failure to adhere to ULTRA-CRITICAL MCP-first minimal-response rule; over-elaboration when execution bridge unavailable | Defined payload-only mode; removed creation of helper scripts unless explicitly requested | Pre-check gate before responding: (a) Is user asking for action? → supply single tools/call payload only; (b) No multi-option responses unless user says "options"; (c) No new artifacts without explicit verbs: add / create / implement |
+
+Guideline Reinforcement:
+
+1. "Learn &lt;server&gt;" = Request tools/list output first; no source inspection until requested.
+2. Action verbs (run, execute, list, test, commit) = Single MCP payload only.
+3. If execution channel missing: state once, still provide payloads; do not escalate with scripts.
+4. Any remediation steps must be appended here to preserve institutional memory.
+
+
 
 ---
 
