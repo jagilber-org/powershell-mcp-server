@@ -1251,18 +1251,21 @@ class EnterprisePowerShellMCPServer {
             let timedOut = false;
             let killEscalated = false;
             console.error(`⏱️  Scheduling timeout in ${timeout}ms for PowerShell process...`);
+            auditLog('INFO','EXEC_TIMEOUT_SCHEDULED','Timeout scheduled for PowerShell process',{ timeoutMs: timeout, commandPreview: command.substring(0,120) });
             
             // Set up timeout
-            const timeoutHandle = setTimeout(() => {
+        const timeoutHandle = setTimeout(() => {
                 timedOut = true;
                 if (childProcess && !childProcess.killed) {
             console.error(`⏱️  TIMEOUT TRIGGERED after ${timeout}ms (pid=${childProcess.pid}) – sending SIGTERM`);
+            auditLog('WARNING','EXEC_TIMEOUT_TRIGGERED','Execution timeout triggered; sent SIGTERM',{ timeoutMs: timeout, pid: childProcess.pid, commandPreview: command.substring(0,120) });
                     try { childProcess.kill('SIGTERM'); } catch {}
                     // Escalate after grace window
                     setTimeout(() => {
                         if (childProcess && !childProcess.killed) {
                             killEscalated = true;
                 console.error(`⏱️  TIMEOUT ESCALATION (SIGKILL) pid=${childProcess.pid}`);
+                auditLog('ERROR','EXEC_TIMEOUT_ESCALATED','Timeout escalation SIGKILL issued',{ pid: childProcess.pid, commandPreview: command.substring(0,120) });
                             try { childProcess.kill('SIGKILL'); } catch {}
                         }
                     }, Math.min(5000, Math.max(2000, Math.floor(timeout * 0.1))));
