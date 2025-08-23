@@ -801,15 +801,25 @@ class EnterprisePowerShellMCPServer {
         setMCPServer(this.server);
         // Start metrics HTTP server (Phase 2 scaffold)
         metricsHttpServer.start();
-        // Log dashboard URL once metrics server chooses its port
-        setTimeout(() => {
-            try {
-                if (metricsHttpServer.isStarted()) {
-                    const dashPort = metricsHttpServer.getPort();
-                    console.error(`📊 Metrics Dashboard: http://127.0.0.1:${dashPort}/dashboard (events, metrics, performance)`);
-                }
-            } catch {}
-        }, 400);
+        // Log dashboard URL (stderr + audit) once metrics server chooses its port
+        ((): void => {
+            let attempts = 0;
+            const maxAttempts = 12; // ~3s worst case
+            const tick = () => {
+                attempts++;
+                try {
+                    if (metricsHttpServer.isStarted()) {
+                        const dashPort = metricsHttpServer.getPort();
+                        const url = `http://127.0.0.1:${dashPort}/dashboard`;
+                        console.error(`📊 Metrics Dashboard: ${url} (events, metrics, performance)`);
+                        auditLog('INFO', 'DASHBOARD_READY', 'Metrics dashboard available', { url, port: dashPort });
+                        return; // stop without scheduling another
+                    }
+                } catch {}
+                if (attempts < maxAttempts) setTimeout(tick, 250);
+            };
+            setTimeout(tick, 250);
+        })();
         
         // Enhanced authentication logging
         this.logAuthenticationStatus();
