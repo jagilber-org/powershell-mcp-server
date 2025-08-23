@@ -154,6 +154,11 @@ export class MetricsHttpServer {
   this.writeJson(res, response);
       return;
     }
+  if (path === '/api/metrics/history') {
+      const history = (metricsRegistry as any).getHistory ? (metricsRegistry as any).getHistory() : [];
+      this.writeJson(res, { records: history, lastReset: metricsRegistry.snapshot(false).lastReset });
+      return;
+    }
   if (path.startsWith('/api/debug/emit')) {
       if (!this.isDebug(url)) { this.writeDenied(res); return; }
       const params = this.parseQuery(url);

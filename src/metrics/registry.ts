@@ -45,6 +45,8 @@ export class MetricsRegistry {
   };
   private durations: number[] = [];
   private lastReset = new Date().toISOString();
+  private history: Array<ExecutionRecord & { ts: string; seq: number }> = [];
+  private seq = 0;
 
   record(rec: ExecutionRecord): void {
     this.counts.TOTAL++;
@@ -52,12 +54,21 @@ export class MetricsRegistry {
     if (rec.blocked) this.counts.BLOCKED++;
     if (rec.truncated) this.counts.TRUNCATED++;
     if (rec.durationMs >= 0) this.durations.push(rec.durationMs);
+    // Append to history (cap 1000)
+    this.history.push({ ...rec, ts: new Date().toISOString(), seq: ++this.seq });
+    if (this.history.length > 1000) this.history.shift();
+    if (process.env.METRICS_DEBUG === 'true') {
+      // eslint-disable-next-line no-console
+      console.error(`[METRICS][RECORD] seq=${this.seq} level=${rec.level} blocked=${rec.blocked} truncated=${rec.truncated} total=${this.counts.TOTAL}`);
+    }
   }
 
   reset(): void {
     Object.keys(this.counts).forEach(k => (this.counts[k] = 0));
     this.durations = [];
     this.lastReset = new Date().toISOString();
+  this.history = [];
+  this.seq = 0;
   }
 
   snapshot(resetAfter = false): MetricsSnapshot {
@@ -89,6 +100,10 @@ export class MetricsRegistry {
     const sorted = [...this.durations].sort((a, b) => a - b);
     const idx = Math.min(sorted.length - 1, Math.floor(p * sorted.length) - 1);
     return sorted[Math.max(0, idx)];
+  }
+
+  getHistory(): Array<ExecutionRecord & { ts: string; seq: number }> {
+    return [...this.history];
   }
 }
 
