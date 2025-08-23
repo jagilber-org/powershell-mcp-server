@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env n
 // Test that a long-running PowerShell command is forcibly timed out and reported.
 import { spawn } from 'child_process';
 
@@ -29,6 +29,14 @@ server.stdout.on('data', d=>{
         console.error('⚠️ Elapsed time outside expected bounds: '+elapsed+'ms');
       } else {
         console.log('✅ Timeout behavior within expected range');
+      }
+      if(!m.result?.structuredContent){
+        console.error('❌ Missing structuredContent in timeout response');
+      } else {
+        const sc = m.result.structuredContent;
+        if(!sc.timedOut){ console.error('❌ structuredContent.timedOut missing/false'); }
+        if(sc.configuredTimeoutMs !== 1000){ console.error('⚠️ configuredTimeoutMs unexpected:', sc.configuredTimeoutMs); }
+        if(sc.executionTime < 900 || sc.executionTime > 4000){ console.error('⚠️ executionTime out of expected range', sc.executionTime); }
       }
       server.kill();
     }
