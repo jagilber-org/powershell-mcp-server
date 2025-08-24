@@ -202,5 +202,12 @@ export async function runPowerShellTool(args: any){
   metricsRegistry.record({ level: assessment.level as any, blocked: assessment.blocked, durationMs: result.duration_ms || 0, truncated: !!result.truncated });
   try { metricsHttpServer.publishExecution({ id:`exec-${Date.now()}`, level: assessment.level, durationMs: result.duration_ms||0, blocked: assessment.blocked, truncated: !!result.truncated, timestamp:new Date().toISOString(), preview: command.substring(0,120), success: result.success, exitCode: result.exitCode, confirmed: args.confirmed||false, timedOut: result.timedOut }); } catch {}
   auditLog('INFO','POWERSHELL_EXEC','Command executed', { level: assessment.level, reason: assessment.reason, durationMs: result.duration_ms, success: result.success });
-  return { content:[ { type:'text', text: JSON.stringify({ ...result, securityAssessment: assessment }, null, 2) } ], structuredContent: { ...result, securityAssessment: assessment } };
+  const responseObject = { ...result, securityAssessment: assessment };
+  // To reduce duplicate rendering in clients that show both `content` and `structuredContent`,
+  // only place human-readable stream data in `content` (stdout/stderr) while full metadata lives in structuredContent.
+  const content:any[] = [];
+  if(responseObject.stdout){ content.push({ type:'text', text: responseObject.stdout }); }
+  if(responseObject.stderr){ content.push({ type:'text', text: responseObject.stderr }); }
+  if(content.length===0){ content.push({ type:'text', text: `[exit=${responseObject.exitCode} success=${responseObject.success}]` }); }
+  return { content, structuredContent: responseObject };
 }
