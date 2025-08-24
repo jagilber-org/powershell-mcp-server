@@ -21,7 +21,14 @@ async function killProcessTreeWindows(pid: number): Promise<{ ok: boolean; stdou
   });
 }
 
-export async function executePowerShell(command: string, timeout: number, workingDirectory?: string){
+interface AdaptiveConfig {
+  enabled: boolean;              // whether adaptive extension is enabled
+  extendWindowMs: number;        // if remaining time <= this AND recent activity, extend
+  extendStepMs: number;          // amount to extend per step
+  maxTotalMs: number;            // hard cap on external timeout
+}
+
+export async function executePowerShell(command: string, timeout: number, workingDirectory?: string, opts?: { internalTimerMs?: number; adaptive?: AdaptiveConfig }){
   const start = Date.now();
   let resolvedCwd: string | undefined = undefined;
   if(workingDirectory){
@@ -57,7 +64,10 @@ export async function executePowerShell(command: string, timeout: number, workin
   }
   // Internal self-destruct timer: inject a lightweight timer that exits the host slightly before external timeout
   const lead = ENTERPRISE_CONFIG.limits.internalSelfDestructLeadMs || 300;
-  const internalMs = Math.max(100, timeout - lead);
+  const adaptive = opts?.adaptive && opts.adaptive.enabled ? opts.adaptive : undefined;
+  // Internal timer should cover maximum potential runtime if adaptive enabled
+  const internalTarget = adaptive ? Math.min(Math.max(100, (adaptive.maxTotalMs||timeout) - lead), (adaptive.maxTotalMs||timeout)) : timeout;
+  const internalMs = opts?.internalTimerMs ? Math.max(100, opts.internalTimerMs - lead) : Math.max(100, internalTarget - lead);
   const injected = `[System.Threading.Timer]::new({[Environment]::Exit(124)}, $null, ${internalMs}, 0)|Out-Null; $ProgressPreference='SilentlyContinue'; Set-StrictMode -Version Latest; ${command}`;
   // Pass cwd only if provided (avoids unexpected directory requirement). If not supplied, node inherits server cwd.
   const child = spawn(shellExe, ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command', injected], { windowsHide:true, cwd: resolvedCwd });
@@ -71,10 +81,12 @@ export async function executePowerShell(command: string, timeout: number, workin
   const graceAfterSignal = 1500; // ms to wait after first TERM
   const hardKillTotal = timeout + graceAfterSignal + 2000; // absolute deadline for watchdog (ms)
 
+  let lastActivity = Date.now();
   const handleData = (buf:Buffer, isErr:boolean)=>{
     if(overflow) return; // ignore after overflow triggered
     const str = buf.toString('utf8');
     if(isErr) stderr += str; else stdout += str;
+    lastActivity = Date.now();
     const target = isErr? stderr: stdout;
     if(Buffer.byteLength(target,'utf8') >= chunkBytes){
       const text = isErr? stderr: stdout;
@@ -103,7 +115,9 @@ export async function executePowerShell(command: string, timeout: number, workin
       arr.push({ seq: arr.length, text, bytes }); totalBytes += bytes;
     };
     flushBuf(stdout,false); flushBuf(stderr,true);
-  returnResult({ success: !timedOut && exitCode===0 && !overflow, stdout: stdoutChunks.map(c=>c.text).join('').slice(0,2000), stderr: stderrChunks.map(c=>c.text).join('').slice(0,2000), exitCode, duration_ms: duration, timedOut, configuredTimeoutMs: timeout, killEscalated, killTreeAttempted, killTreeResult, watchdogTriggered, shellExe, workingDirectory: resolvedCwd, chunks:{ stdout: stdoutChunks, stderr: stderrChunks }, overflow, totalBytes });
+    // If internal self-destruct triggered (exit code 124) treat as timeout for downstream logic
+    if(exitCode === 124 && !timedOut){ timedOut = true; }
+  returnResult({ success: !timedOut && exitCode===0 && !overflow, stdout: stdoutChunks.map(c=>c.text).join('').slice(0,2000), stderr: stderrChunks.map(c=>c.text).join('').slice(0,2000), exitCode, duration_ms: duration, timedOut, internalSelfDestruct: exitCode===124, configuredTimeoutMs: timeout, killEscalated, killTreeAttempted, killTreeResult, watchdogTriggered, shellExe, workingDirectory: resolvedCwd, chunks:{ stdout: stdoutChunks, stderr: stderrChunks }, overflow, totalBytes });
   };
 
   let returnResult: (r:any)=>void; const resultPromise = new Promise<any>(res=> returnResult = res);
@@ -115,7 +129,10 @@ export async function executePowerShell(command: string, timeout: number, workin
     }
   };
 
-  const timeoutHandle = setTimeout(()=>{
+  let currentExternalTimeout = timeout;
+  let adaptiveExtensions = 0;
+  let extended = false;
+  const scheduleExternalTimeout = (ms:number)=> setTimeout(()=>{
     timedOut=true;
     try{ child.kill('SIGTERM'); }catch{}
     // escalate after grace
@@ -138,11 +155,37 @@ export async function executePowerShell(command: string, timeout: number, workin
         setTimeout(async ()=>{ if(!child.killed) verify(); }, 200);
       }
     }, graceAfterSignal);
-  }, timeout);
+  }, ms);
+  let timeoutHandle = scheduleExternalTimeout(timeout);
+
+  // Adaptive extension loop
+  let adaptiveCheckTimer: NodeJS.Timeout | null = null;
+  if(adaptive){
+    const check = ()=>{
+      if(resolved || timedOut) return;
+      const now = Date.now();
+      const remaining = (start + currentExternalTimeout) - now;
+      if(remaining <= adaptive.extendWindowMs){
+        const recentActivity = (now - lastActivity) <= adaptive.extendWindowMs;
+        const elapsed = now - start;
+        const canExtend = recentActivity && (elapsed + adaptive.extendStepMs) <= adaptive.maxTotalMs;
+        if(canExtend){
+          clearTimeout(timeoutHandle);
+          currentExternalTimeout += adaptive.extendStepMs;
+          timeoutHandle = scheduleExternalTimeout(currentExternalTimeout - elapsed);
+          adaptiveExtensions += 1; extended = true;
+        }
+      }
+      if(!resolved && !timedOut && (Date.now()-start) < adaptive.maxTotalMs){
+        adaptiveCheckTimer = setTimeout(check, Math.min( adaptive.extendWindowMs/2, 1000));
+      }
+    };
+    adaptiveCheckTimer = setTimeout(check, Math.min(adaptive.extendWindowMs/2, 1000));
+  }
 
   // Watchdog: force resolve even if we never get 'close' (rare but can happen with stuck handles)
   const watchdogHandle = setTimeout(async ()=>{
-    if(resolved) return; watchdogTriggered=true;
+  if(resolved) return; watchdogTriggered=true;
     // final brutal attempt before giving up
     try{ if(child.pid) await attemptProcessTreeKill(); }catch{}
     finish(null);
@@ -151,7 +194,7 @@ export async function executePowerShell(command: string, timeout: number, workin
   child.on('error', _e=>{ /* capture in stderr already */ });
   child.on('close', code=> finish(code));
 
-  return resultPromise;
+  return resultPromise.then(r=> ({ ...r, effectiveTimeoutMs: currentExternalTimeout, adaptiveExtensions, adaptiveExtended: extended, adaptiveMaxTotalMs: adaptive?.maxTotalMs }));
 }
 
 export async function runPowerShellTool(args: any){
@@ -171,7 +214,19 @@ export async function runPowerShellTool(args: any){
     timeoutSeconds = (ENTERPRISE_CONFIG.limits.defaultTimeoutMs || 90000) / 1000;
   }
   const timeout = Math.round(timeoutSeconds * 1000);
-  let result = await executePowerShell(command, timeout, args.workingDirectory);
+  // Adaptive timeout configuration
+  const adaptiveEnabled = !!args.adaptiveTimeout || !!args.progressAdaptive;
+  let adaptiveConfig: AdaptiveConfig | undefined = undefined;
+  if(adaptiveEnabled){
+    const maxTotalSec = args.adaptiveMaxTotalSec || args.adaptiveMaxSec || Math.min(timeoutSeconds*3, 180); // cap 3x or 180s
+    adaptiveConfig = {
+      enabled: true,
+      extendWindowMs: (args.adaptiveExtendWindowMs || 2000),
+      extendStepMs: (args.adaptiveExtendStepMs || 5000),
+      maxTotalMs: Math.round(maxTotalSec*1000)
+    };
+  }
+  let result = await executePowerShell(command, timeout, args.workingDirectory, adaptiveConfig ? { adaptive: adaptiveConfig } : undefined);
   // Output overflow protection
   const maxKB = ENTERPRISE_CONFIG.limits.maxOutputKB || 512;
   const maxLines = ENTERPRISE_CONFIG.limits.maxLines || 4000;
@@ -208,6 +263,12 @@ export async function runPowerShellTool(args: any){
   const content:any[] = [];
   if(responseObject.stdout){ content.push({ type:'text', text: responseObject.stdout }); }
   if(responseObject.stderr){ content.push({ type:'text', text: responseObject.stderr }); }
-  if(content.length===0){ content.push({ type:'text', text: `[exit=${responseObject.exitCode} success=${responseObject.success}]` }); }
+  if(content.length===0){
+    const flags: string[] = [];
+    if(responseObject.timedOut) flags.push('timedOut=true');
+    if(responseObject.internalSelfDestruct) flags.push('internalSelfDestruct');
+    if(responseObject.truncated) flags.push('truncated');
+    content.push({ type:'text', text: `[exit=${responseObject.exitCode} success=${responseObject.success}${flags.length?' '+flags.join(' '):''}]` });
+  }
   return { content, structuredContent: responseObject };
 }

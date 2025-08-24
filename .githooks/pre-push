@@ -1,0 +1,5 @@
+#!/usr/bin/env pwsh
+# Thin wrapper to PowerShell script for pre-push validation
+$script = Join-Path $PSScriptRoot 'pre-push.ps1'
+& $script
+exit $LASTEXITCODE

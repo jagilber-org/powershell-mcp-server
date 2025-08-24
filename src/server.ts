@@ -1466,15 +1466,21 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
     
     /** Unified tool dispatcher created during consolidation refactor */
     private async handleToolCall(name: string, args: any, requestId: string){
+        // Log all tool activity to VS Code output panel
+        this.logToolActivity(name, args, requestId, 'started');
+        
         try {
             switch(name){
                 case 'emit-log': {
                     const message = args.message || '(no message)';
                     auditLog('INFO','EMIT_LOG', message, { requestId });
-                    return { content:[{ type:'text', text: JSON.stringify({ ok:true, message }) }] };
+                    const result = { content:[{ type:'text', text: JSON.stringify({ ok:true, message }) }] };
+                    this.logToolActivity(name, args, requestId, 'completed', result);
+                    return result;
                 }
                 case 'run-powershell': {
                     const result = await runPowerShellTool(args);
+                    this.logToolActivity(name, args, requestId, 'completed', result);
                     return result;
                 }
                 case 'run-powershellscript': {
@@ -1482,7 +1488,9 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
                     if(args.scriptFile && !args.script && !args.command){
                         const fp = path.isAbsolute(args.scriptFile) ? args.scriptFile : path.join(args.workingDirectory||process.cwd(), args.scriptFile);
                         if(!fs.existsSync(fp)){
-                            return { content:[{ type:'text', text: JSON.stringify({ error: 'Script file not found', scriptFile: fp }) }] };
+                            const errorResult = { content:[{ type:'text', text: JSON.stringify({ error: 'Script file not found', scriptFile: fp }) }] };
+                            this.logToolActivity(name, args, requestId, 'error', errorResult);
+                            return errorResult;
                         }
                         try {
                             const content = fs.readFileSync(fp,'utf8');
@@ -1490,27 +1498,38 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
                             args.command = content;
                             args._sourceFile = fp;
                         } catch(e){
-                            return { content:[{ type:'text', text: JSON.stringify({ error: 'Failed to read script file', message: (e as Error).message }) }] };
+                            const errorResult = { content:[{ type:'text', text: JSON.stringify({ error: 'Failed to read script file', message: (e as Error).message }) }] };
+                            this.logToolActivity(name, args, requestId, 'error', errorResult);
+                            return errorResult;
                         }
                     } else if(args.script && !args.command){
                         args.command = args.script;
                     }
                     const result = await runPowerShellTool(args);
                     if(result?.structuredContent){ result.structuredContent.sourceFile = args._sourceFile; }
+                    this.logToolActivity(name, args, requestId, 'completed', result);
                     return result;
                 }
                 case 'powershell-syntax-check': {
                     const script = args.script || (args.filePath && fs.existsSync(args.filePath) ? fs.readFileSync(args.filePath,'utf8') : '');
-                    if(!script) return { content:[{ type:'text', text: JSON.stringify({ ok:false, error:'No script content provided' }) }] };
+                    if(!script) {
+                        const errorResult = { content:[{ type:'text', text: JSON.stringify({ ok:false, error:'No script content provided' }) }] };
+                        this.logToolActivity(name, args, requestId, 'error', errorResult);
+                        return errorResult;
+                    }
                     // Extremely lightweight heuristic syntax validation (balanced braces / parentheses)
                     const stack: string[] = []; const pairs: Record<string,string> = { '(':')','{':'}','[':']' };
                     let balanced = true; for(const ch of script){ if(pairs[ch]) stack.push(ch); else if(Object.values(pairs).includes(ch)){ const last = stack.pop(); if(!last || pairs[last]!==ch){ balanced=false; break; } } }
                     const ok = balanced && stack.length===0;
-                    return { content:[{ type:'text', text: JSON.stringify({ ok, issues: ok? []:['Unbalanced delimiters detected'] }, null, 2) }] };
+                    const result = { content:[{ type:'text', text: JSON.stringify({ ok, issues: ok? []:['Unbalanced delimiters detected'] }, null, 2) }] };
+                    this.logToolActivity(name, args, requestId, 'completed', result);
+                    return result;
                 }
                 case 'server-stats': {
                     const snap = metricsRegistry.snapshot(false);
-                    return { content:[{ type:'text', text: JSON.stringify(snap, null, 2) }] };
+                    const result = { content:[{ type:'text', text: JSON.stringify(snap, null, 2) }] };
+                    this.logToolActivity(name, args, requestId, 'completed', result);
+                    return result;
                 }
                 case 'memory-stats': {
                     try {
@@ -1519,9 +1538,13 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
                         // Include rss, heapUsed, external; convert to MB for readability
                         const toMB = (n:number)=> Math.round((n/1024/1024)*100)/100;
                         const stats = { rssMB: toMB(mem.rss), heapUsedMB: toMB(mem.heapUsed), heapTotalMB: toMB(mem.heapTotal), externalMB: toMB(mem.external||0), arrayBuffersMB: toMB((mem as any).arrayBuffers||0), timestamp: new Date().toISOString(), gcRequested: !!args.gc };
-                        return { content:[{ type:'text', text: JSON.stringify(stats, null, 2) }], structuredContent: stats };
+                        const result = { content:[{ type:'text', text: JSON.stringify(stats, null, 2) }], structuredContent: stats };
+                        this.logToolActivity(name, args, requestId, 'completed', result);
+                        return result;
                     } catch(e){
-                        return { content:[{ type:'text', text: JSON.stringify({ error: (e as Error).message }) }] };
+                        const errorResult = { content:[{ type:'text', text: JSON.stringify({ error: (e as Error).message }) }] };
+                        this.logToolActivity(name, args, requestId, 'error', errorResult);
+                        return errorResult;
                     }
                 }
                 case 'agent-prompts': {
@@ -1534,58 +1557,82 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
                             const regex = new RegExp(`(^#+.*${category}.*$)[\s\S]*?(?=^# )`,'im');
                             const m = raw.match(regex); if(m) output = m[0];
                         }
+                        let result;
                         if(format==='json'){
-                            return { content:[{ type:'text', text: JSON.stringify({ category: category||'all', content: output.split(/\r?\n/) }, null, 2) }] };
+                            result = { content:[{ type:'text', text: JSON.stringify({ category: category||'all', content: output.split(/\r?\n/) }, null, 2) }] };
                         } else {
-                            return { content:[{ type:'text', text: output }] };
+                            result = { content:[{ type:'text', text: output }] };
                         }
+                        this.logToolActivity(name, args, requestId, 'completed', result);
+                        return result;
                     } catch(e){
-                        return { content:[{ type:'text', text: JSON.stringify({ error: (e as Error).message }) }] };
+                        const errorResult = { content:[{ type:'text', text: JSON.stringify({ error: (e as Error).message }) }] };
+                        this.logToolActivity(name, args, requestId, 'error', errorResult);
+                        return errorResult;
                     }
                 }
                 case 'working-directory-policy': {
+                    let result;
                     if(args.action==='get' || !args.action){
-                        return { content:[{ type:'text', text: JSON.stringify(ENTERPRISE_CONFIG.security, null, 2) }] };
+                        result = { content:[{ type:'text', text: JSON.stringify(ENTERPRISE_CONFIG.security, null, 2) }] };
                     } else if(args.action==='set'){
                         if(typeof args.enabled === 'boolean') ENTERPRISE_CONFIG.security.enforceWorkingDirectory = args.enabled;
                         if(Array.isArray(args.allowedWriteRoots)) ENTERPRISE_CONFIG.security.allowedWriteRoots = args.allowedWriteRoots;
                         auditLog('INFO','WORKING_DIR_POLICY_UPDATE','Policy updated',{ requestId, enforce: ENTERPRISE_CONFIG.security.enforceWorkingDirectory, roots: ENTERPRISE_CONFIG.security.allowedWriteRoots });
-                        return { content:[{ type:'text', text: JSON.stringify({ ok:true, policy: ENTERPRISE_CONFIG.security }, null, 2) }] };
+                        result = { content:[{ type:'text', text: JSON.stringify({ ok:true, policy: ENTERPRISE_CONFIG.security }, null, 2) }] };
+                    } else {
+                        result = { content:[{ type:'text', text: JSON.stringify({ error:'Unknown action' }) }] };
                     }
-                    return { content:[{ type:'text', text: JSON.stringify({ error:'Unknown action' }) }] };
+                    this.logToolActivity(name, args, requestId, 'completed', result);
+                    return result;
                 }
                 case 'threat-analysis': {
                     const threats = Array.from(this.unknownThreats.values()).sort((a,b)=> b.count-a.count);
-                    return { content:[{ type:'text', text: JSON.stringify({ summary: this.threatStats, threats }, null, 2) }] };
+                    const result = { content:[{ type:'text', text: JSON.stringify({ summary: this.threatStats, threats }, null, 2) }] };
+                    this.logToolActivity(name, args, requestId, 'completed', result);
+                    return result;
                 }
                 case 'learn': {
                     const action = args.action;
+                    let result;
                     if(action==='list'){
                         const data = aggregateCandidates(args.limit, args.minCount);
-                        return { content:[{ type:'text', text: JSON.stringify({ candidates:data }, null, 2) }] };
+                        result = { content:[{ type:'text', text: JSON.stringify({ candidates:data }, null, 2) }] };
                     } else if(action==='recommend'){
                         const rec = recommendCandidates(args.limit, args.minCount);
-                        return { content:[{ type:'text', text: JSON.stringify({ recommendations:rec }, null, 2) }] };
+                        result = { content:[{ type:'text', text: JSON.stringify({ recommendations:rec }, null, 2) }] };
                     } else if(action==='queue'){
                         const res = queueCandidates(args.normalized||[]);
-                        return { content:[{ type:'text', text: JSON.stringify({ queued: res }, null, 2) }] };
+                        result = { content:[{ type:'text', text: JSON.stringify({ queued: res }, null, 2) }] };
                     } else if(action==='approve'){
                         const res = approveQueuedCandidates(args.normalized||[]);
-                        return { content:[{ type:'text', text: JSON.stringify({ approved: res }, null, 2) }] };
+                        result = { content:[{ type:'text', text: JSON.stringify({ approved: res }, null, 2) }] };
                     } else if(action==='remove'){
                         const res = removeFromQueue(args.normalized||[]);
-                        return { content:[{ type:'text', text: JSON.stringify({ removed: res }, null, 2) }] };
+                        result = { content:[{ type:'text', text: JSON.stringify({ removed: res }, null, 2) }] };
+                    } else {
+                        result = { content:[{ type:'text', text: JSON.stringify({ error:'Unknown learn action' }) }] };
                     }
-                    return { content:[{ type:'text', text: JSON.stringify({ error:'Unknown learn action' }) }] };
+                    this.logToolActivity(name, args, requestId, 'completed', result);
+                    return result;
                 }
                 case 'ai-agent-tests': {
+                    let result;
                     if(typeof this.runAIAgentTests === 'function'){
                         const suite = args.testSuite || 'basic';
                         const skip = args.skipDangerous !== false; // default true
                         // Basic harness placeholder; call existing method if available
-                        try { const r = await this.runAIAgentTests(suite, skip); return { content:[{ type:'text', text: JSON.stringify(r, null, 2) }] }; } catch(e){ return { content:[{ type:'text', text: JSON.stringify({ error:(e as Error).message }) }] }; }
+                        try { 
+                            const r = await this.runAIAgentTests(suite, skip); 
+                            result = { content:[{ type:'text', text: JSON.stringify(r, null, 2) }] }; 
+                        } catch(e){ 
+                            result = { content:[{ type:'text', text: JSON.stringify({ error:(e as Error).message }) }] }; 
+                        }
+                    } else {
+                        result = { content:[{ type:'text', text: JSON.stringify({ error:'AI agent tests not implemented' }) }] };
                     }
-                    return { content:[{ type:'text', text: JSON.stringify({ error:'AI agent tests not implemented' }) }] };
+                    this.logToolActivity(name, args, requestId, 'completed', result);
+                    return result;
                 }
                 case 'help': {
                     const topic = (args.topic||'').toLowerCase();
@@ -1597,13 +1644,21 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
                         'working-directory': 'Policy enforced roots: '+ (ENTERPRISE_CONFIG.security.allowedWriteRoots||[]).join(', '),
                         timeouts: 'Timeout parameters are always SECONDS. Use "timeout" (preferred). Alias "aiAgentTimeoutSec" also accepted; older "aiAgentTimeout" still mapped. Default = '+ ((ENTERPRISE_CONFIG.limits.defaultTimeoutMs||90000)/1000)+'s.' 
                     };
-                    if(topic && help[topic]) return { content:[{ type:'text', text: help[topic] }] };
-                    return { content:[{ type:'text', text: JSON.stringify(help, null, 2) }] };
+                    let result;
+                    if(topic && help[topic]) {
+                        result = { content:[{ type:'text', text: help[topic] }] };
+                    } else {
+                        result = { content:[{ type:'text', text: JSON.stringify(help, null, 2) }] };
+                    }
+                    this.logToolActivity(name, args, requestId, 'completed', result);
+                    return result;
                 }
                 default:
+                    this.logToolActivity('unknown-tool', 'ERROR', `Unknown tool: ${name}`, {});
                     return { content:[{ type:'text', text: JSON.stringify({ error: 'Unknown tool: '+name }) }] };
             }
         } catch(error){
+            this.logToolActivity(name, 'ERROR', `Tool invocation failed: ${error instanceof Error ? error.message : String(error)}`, args);
             auditLog('ERROR','TOOL_CALL_FAIL','Tool invocation failed',{ name, error: error instanceof Error ? error.message : String(error), requestId });
             return { content:[{ type:'text', text: JSON.stringify({ error: error instanceof Error ? error.message : String(error) }) }] };
         }

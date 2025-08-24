@@ -15,10 +15,11 @@
  *  - /api/metrics : JSON snapshot
  *  - /events  : Server-Sent Events stream of executions (security redactions applied upstream)
  */
-import http, { IncomingMessage, ServerResponse } from 'http';
+import * as http from 'http';
+import { IncomingMessage, ServerResponse } from 'http';
 import { metricsRegistry } from './registry.js';
 import { EventEmitter } from 'events';
-import os from 'os';
+import * as os from 'os';
 import { aggregateCandidates, queueCandidates, listQueuedCandidates, approveQueuedCandidates, removeFromQueue } from '../learning.js';
 import { ENTERPRISE_CONFIG } from '../core/config.js';
 

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 // Lightweight Phase A learning support for UNKNOWN commands.
 // SECURITY: This module NEVER persists raw commands; it stores only redacted + hashed forms.

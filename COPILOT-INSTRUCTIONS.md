@@ -112,15 +112,40 @@ If this block is missing → Replace terminal proposal with an MCP tool plan aut
 - Keep instructions concise; link to `KNOWLEDGE-INDEX.md` for deeper rationale.
 
 ---
-_Last updated: 2025-08-23 (UTC)_
+## 16. Local Quality Gates (Git Hooks)
+Mandatory local enforcement exists via git hooks:
+- pre-commit: PII scan + build + targeted quick tests.
+- pre-push: full build + full jest test suite (prevents pushing red builds or failing tests).
 
-### Addendum (2025-08-23): Critical Learning – Tool Surface Activation First
+Operational Rules:
+1. Do NOT bypass hooks by using `--no-verify` unless user explicitly overrides (must record rationale in response if suggested).
+2. If a commit/push fails, surface concise hook failure output and propose remediation (fix tests, adjust code, etc.).
+3. When generating changes, assume these hooks will run; avoid large unrelated refactors in the same commit that could mask failure root cause.
 
-An incident (see Knowledge Index Operational Incident Log) highlighted an improper fallback to raw terminal for a trivial test command while the generic `powershell-command` tool was available. Reinforced rule:
+## 17. Output Structure Integrity (Recent Learning)
+To avoid duplication and excessive token usage:
+- `content` MUST contain only concise human-readable stdout/stderr (and minimal status lines when no output).
+- Full rich execution object (classification, timing, truncation, chunks, safety flags) lives exclusively in `structuredContent`.
+- NEVER re-embed the entire JSON result inside `content` (prior defect fixed 2025-08-24).
+- If more data is needed, request follow-up execution with narrower scope instead of inflating `content`.
 
-1. ALWAYS enumerate/activate MCP tool surface first (treat generic `powershell-command` as present unless definitively absent).
-2. ANY attempt to propose or execute a terminal command without (a) explicit gate evaluation and (b) a fully populated Terminal Exception block is a policy violation and must be auto-replaced with an MCP tool payload.
-3. Record gate evaluation values (`toolExists`, `genericPossible`, `losesAudit`, `gitToolExists`, `priorReplaced`) when denying terminal usage for observability.
-4. Classify bypass attempts as procedural defects; append remediation to Knowledge Index.
+## 18. Working Directory Enforcement Reminder
+- Processes are spawned with an explicitly validated working directory (canonical realpath) honoring allowed roots.
+- When proposing file operations, ensure paths remain inside permitted roots; otherwise expect classification elevation or rejection.
 
-This addendum will be merged into the main body upon next structural revision; retained separately for high-visibility until then.
+## 19. Consolidated Critical Activation Rules (Merged Addendum)
+1. ALWAYS enumerate/activate available MCP tool surface first (assume `powershell-command` exists by default).
+2. ANY terminal proposal WITHOUT (a) prior gate evaluation and (b) a fully populated Terminal Exception block is invalid → auto-replace with tool plan.
+3. Record gating variable values in denial messaging for observability: `toolExists`, `genericPossible`, `losesAudit`, `gitToolExists`, `priorReplaced`.
+4. Treat improper bypass attempts as procedural defects; document remediation in `KNOWLEDGE-INDEX.md` incident log.
+
+## 20. Changelog
+2025-08-24 (later):
+- Added adaptive timeout extension (auto-extend when recent output and near expiry). New args: adaptiveTimeout (bool), adaptiveExtendWindowMs (default 2000), adaptiveExtendStepMs (default 5000), adaptiveMaxTotalSec (cap 3x initial or 180s). Structured fields: effectiveTimeoutMs, adaptiveExtensions, adaptiveExtended, adaptiveMaxTotalMs.
+2025-08-24:
+- Merged prior addendum into core instructions (section 19).
+- Added quality gate hook policy (section 16).
+- Documented output duplication fix & `content` vs `structuredContent` contract (section 17).
+- Added explicit working directory enforcement reminder (section 18).
+
+_Last updated: 2025-08-24 (UTC)_

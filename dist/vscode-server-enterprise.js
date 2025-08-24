@@ -20,6 +20,8 @@ import { spawn } from 'child_process';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
+import { metricsRegistry } from './metrics/registry.js';
+import { ENTERPRISE_CONFIG } from './core/config.js';
 // ==============================================================================
 // SECURITY PATTERNS - Comprehensive threat detection
 // ==============================================================================
@@ -790,8 +792,27 @@ class EnterprisePowerShellMCPServer {
                 shell: false,
                 ...(workingDirectory && { cwd: workingDirectory })
             };
-            // Start PowerShell process
-            childProcess = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], options);
+            // Prefer pwsh.exe (PowerShell Core) if present; fallback to Windows PowerShell
+            let shellExe;
+            if (ENTERPRISE_CONFIG?.powershell?.executable) {
+                shellExe = ENTERPRISE_CONFIG.powershell.executable;
+            }
+            else {
+                if (typeof ENTERPRISE_CONFIG._detectedPwsh === 'undefined') {
+                    try {
+                        const test = spawn('pwsh.exe', ['-NoLogo', '-NoProfile', '-Command', '"$PSVersionTable.PSEdition"'], { windowsHide: true });
+                        let out = '';
+                        test.stdout?.on('data', d => out += d.toString());
+                        test.on('close', code => { ENTERPRISE_CONFIG._detectedPwsh = (code === 0 && /core/i.test(out)); });
+                    }
+                    catch {
+                        ENTERPRISE_CONFIG._detectedPwsh = false;
+                    }
+                    ENTERPRISE_CONFIG._detectedPwsh = ENTERPRISE_CONFIG._detectedPwsh ?? false;
+                }
+                shellExe = ENTERPRISE_CONFIG._detectedPwsh ? 'pwsh.exe' : 'powershell.exe';
+            }
+            childProcess = spawn(shellExe, ['-NoProfile', '-NonInteractive', '-Command', command], options);
             let stdout = '';
             let stderr = '';
             let timedOut = false;
@@ -831,6 +852,12 @@ class EnterprisePowerShellMCPServer {
             });
             const duration = Date.now() - startTime;
             const success = !timedOut && exitCode === 0;
+            if (timedOut) {
+                try {
+                    metricsRegistry.incrementTimeout();
+                }
+                catch { }
+            }
             return {
                 success,
                 stdout: stdout.trim(),

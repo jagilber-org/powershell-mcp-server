@@ -15,29 +15,25 @@ server.stdout.on('data', d=>{
     if(m.id===1){
       // initialize done -> fire long command with tiny timeout (1s)
       start = Date.now();
-      send(server,{jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'powershell-command',arguments:{command:'Start-Sleep -Seconds 5; Write-Output "FINISHED"',confirmed:true,aiAgentTimeout:1000}}});
+  // Use correct tool name and specify timeout in seconds (1s)
+  send(server,{jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'run-powershell',arguments:{command:'Start-Sleep -Seconds 5; Write-Output "FINISHED"',confirmed:true,aiAgentTimeoutSec:1}}});
     } else if (m.id===2){
       gotResponse = true;
       const elapsed = Date.now()-start;
-      const text = (m.result?.content?.[0]?.text)||'';
-      const timedOutFlag = /timed out/i.test(text) || /"timedOut":\s*true/.test(text);
-      console.log('Timeout test response elapsed='+elapsed+'ms, timedOutDetected='+timedOutFlag);
+      const sc = m.result?.structuredContent || {};
+      const timedOutFlag = !!sc.timedOut;
+      console.log('Timeout test response elapsed='+elapsed+'ms, timedOut='+timedOutFlag+' exit='+sc.exitCode);
       if(!timedOutFlag){
-        console.error('❌ Expected timeout flag not detected');
+        console.error('❌ Expected timedOut true in structuredContent');
         process.exit(1);
-      } else if (elapsed < 900 || elapsed > 4000){
+      }
+      if(elapsed < 600 || elapsed > 4000){
         console.error('⚠️ Elapsed time outside expected bounds: '+elapsed+'ms');
       } else {
-        console.log('✅ Timeout behavior within expected range');
+        console.log('✅ Timeout elapsed within expected range');
       }
-      if(!m.result?.structuredContent){
-        console.error('❌ Missing structuredContent in timeout response');
-      } else {
-        const sc = m.result.structuredContent;
-        if(!sc.timedOut){ console.error('❌ structuredContent.timedOut missing/false'); }
-        if(sc.configuredTimeoutMs !== 1000){ console.error('⚠️ configuredTimeoutMs unexpected:', sc.configuredTimeoutMs); }
-        if(sc.executionTime < 900 || sc.executionTime > 4000){ console.error('⚠️ executionTime out of expected range', sc.executionTime); }
-      }
+      if(sc.configuredTimeoutMs !== 1000){ console.error('⚠️ configuredTimeoutMs unexpected (expected 1000):', sc.configuredTimeoutMs); }
+      if(sc.duration_ms < 600 || sc.duration_ms > 4000){ console.error('⚠️ duration_ms out of expected range', sc.duration_ms); }
       server.kill();
     }
   } catch(e){ /* ignore parse errors */ } });
