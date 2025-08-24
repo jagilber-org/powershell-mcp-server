@@ -45,6 +45,7 @@ export interface ExecutionEventPayload {
   confirmed?: boolean;     // whether this was a confirmed command
   timedOut?: boolean;      // whether the execution timed out
   candidateNorm?: string;  // normalized UNKNOWN candidate (learning)
+  toolName?: string;       // originating tool name (for non-powershell tool activity logging)
 }
 
 export class MetricsHttpServer {
@@ -332,7 +333,7 @@ export class MetricsHttpServer {
         ${debug?'<button id="emit">Emit Synthetic</button>':''}
       </div>
       <div id="eventTableWrap">
-        <table id="eventTable"><thead><tr><th style="width:46px">ID</th><th style="width:68px">Level</th><th style="width:70px">Dur</th><th style="width:60px">Code</th><th style="width:55px">OK</th><th style="width:82px">Time</th><th>Details / Preview</th></tr></thead><tbody></tbody></table>
+  <table id="eventTable"><thead><tr><th style="width:46px">ID</th><th style="width:78px">Tool</th><th style="width:68px">Level</th><th style="width:70px">Dur</th><th style="width:60px">Code</th><th style="width:55px">OK</th><th style="width:82px">Time</th><th>Details / Preview</th></tr></thead><tbody></tbody></table>
         <div id="empty">No events yet.</div>
       </div>
       <div id="statusBar">
@@ -416,6 +417,7 @@ export class MetricsHttpServer {
   if (ev.timedOut) markers.push('<span style="color:#ff00ff">TIMEOUT</span>');
     if (isConfirmed) markers.push('<span style="background:#ffd700;color:#111;padding:2px 4px;border-radius:4px;font-size:.55rem;font-weight:600;letter-spacing:.5px">CONFIRMED</span>');
     tr.innerHTML='<td>'+ev.id+'</td>'+
+      '<td>'+(ev.toolName||'')+'</td>'+
       '<td class="level">'+ev.level+'</td>'+
       '<td>'+ev.durationMs+'ms</td>'+
       '<td>'+(ev.exitCode===undefined||ev.exitCode===null?'':ev.exitCode)+'</td>'+
