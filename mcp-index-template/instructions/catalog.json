@@ -1,0 +1,31 @@
+{
+  "version": "0.1.0",
+  "entries": [
+    {
+      "id": "security.no_raw_terminal_if_tool",
+      "text": "Never invoke a raw terminal command if an MCP tool achieves the outcome.",
+      "category": "security",
+      "priority": 100,
+      "criticality": "blocking",
+      "scope": "global",
+      "target": "agent",
+      "status": "active",
+      "supersedes": [],
+      "examples": ["Use powershell-command instead of direct shell."],
+      "tags": ["gate:terminal"]
+    },
+    {
+      "id": "execution.confirm_unknown",
+      "text": "UNKNOWN or RISKY commands require explicit confirmed=true flag.",
+      "category": "execution",
+      "priority": 90,
+      "criticality": "blocking",
+      "scope": "action",
+      "target": "agent",
+      "status": "active",
+      "supersedes": [],
+      "examples": ["Setting confirmed for a risky file deletion attempt."],
+      "tags": ["safety","confirmation"]
+    }
+  ]
+}

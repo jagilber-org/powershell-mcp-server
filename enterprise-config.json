@@ -1,6 +1,6 @@
 {
   "security": {
-    "allowedWriteRoots": ["${TEMP}", "./sandbox"],
+  "allowedWriteRoots": ["${TEMP}", "./sandbox", "c:/github/jagilber"],
     "requireConfirmationForUnknown": true,
     "additionalSafe": [
       "^Get-ChildItem"

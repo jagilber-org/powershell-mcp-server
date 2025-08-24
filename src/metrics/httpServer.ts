@@ -19,6 +19,8 @@ import http, { IncomingMessage, ServerResponse } from 'http';
 import { metricsRegistry } from './registry.js';
 import { EventEmitter } from 'events';
 import os from 'os';
+import { aggregateCandidates, queueCandidates, listQueuedCandidates, approveQueuedCandidates, removeFromQueue } from '../learning.js';
+import { ENTERPRISE_CONFIG } from '../core/config.js';
 
 export interface MetricsHttpOptions {
   port: number;              // desired starting port
@@ -41,6 +43,7 @@ export interface ExecutionEventPayload {
   success?: boolean;
   confirmed?: boolean;     // whether this was a confirmed command
   timedOut?: boolean;      // whether the execution timed out
+  candidateNorm?: string;  // normalized UNKNOWN candidate (learning)
 }
 
 export class MetricsHttpServer {
@@ -99,7 +102,8 @@ export class MetricsHttpServer {
       this.server.listen(attemptPort, host, () => {
         this.started = true;
         // eslint-disable-next-line no-console
-        console.error(`[METRICS] HTTP server listening on http://${host}:${attemptPort}`);
+  const proto = 'http'; // internal loopback; no external exposure
+  console.error(`[METRICS] HTTP server listening on ${proto}://${host}:${attemptPort}`);
         this.opts.port = attemptPort; // record chosen
         this.startHeartbeat();
   this.startPerfSampler();
@@ -266,6 +270,8 @@ export class MetricsHttpServer {
   tr.confirmed{background:linear-gradient(90deg,rgba(255,215,0,.22),rgba(255,215,0,.05));border-left:4px solid #ffd700}
   tr.confirmed td.level{color:#ffd700 !important}
   tr.confirmed td{transition:background .3s}
+  tr.learn-selected{outline:2px solid #6366f1; box-shadow:0 0 0 2px #6366f1 inset; position:relative;}
+  tr.learn-selected:after{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(99,102,241,.15),rgba(99,102,241,0));}
   .bad{color:var(--danger)} .warn{color:var(--risky)} .good{color:var(--safe)}
   #filters{display:flex;flex-wrap:wrap;gap:.6rem;margin-bottom:.6rem}
   #filters label{display:flex;align-items:center;gap:.25rem;font-size:.62rem;padding:.25rem .45rem;border:1px solid var(--border);border-radius:6px;background:var(--panel-alt);cursor:pointer;user-select:none}
@@ -328,7 +334,26 @@ export class MetricsHttpServer {
         <table id="eventTable"><thead><tr><th style="width:46px">ID</th><th style="width:68px">Level</th><th style="width:70px">Dur</th><th style="width:60px">Code</th><th style="width:55px">OK</th><th style="width:82px">Time</th><th>Details / Preview</th></tr></thead><tbody></tbody></table>
         <div id="empty">No events yet.</div>
       </div>
-      <div id="statusBar"><span>Last Event: <span id="lastEvtAge">--</span></span><span>Replay Applied: <span id="replayCount">0</span></span></div>
+      <div id="statusBar">
+        <span>Last Event: <span id="lastEvtAge">--</span></span>
+        <span>Replay Applied: <span id="replayCount">0</span></span>
+        <span>Default Timeout: ${(ENTERPRISE_CONFIG.limits?.defaultTimeoutMs || 90000)/1000}s</span>
+        <span>WD Enf: ${ENTERPRISE_CONFIG.security?.enforceWorkingDirectory? 'ON':'OFF'}</span>
+        <span style="flex:1"></span>
+        <button id="learnBtn" title="Queue selected UNKNOWN row for review" style="background:#6366f1">Queue Selected</button>
+        <span id="learnMsg" style="font-size:.6rem;opacity:.75"></span>
+        <button id="showQueue" style="background:#374151">Queue Panel</button>
+      </div>
+  </section>
+  <section class="card" id="queuePanel" style="display:none;max-height:260px;overflow:auto">
+    <h3 style="margin-top:0">Learn Queue</h3>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem">
+      <button id="refreshQueue" style="background:#475569">Refresh</button>
+      <button id="approveSelected" style="background:#16a34a">Approve Selected</button>
+      <button id="removeSelected" style="background:#dc2626">Remove Selected</button>
+      <span id="queueMsg" style="font-size:.6rem;opacity:.75"></span>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:.62rem"><thead><tr><th></th><th>Normalized</th><th>Queued</th><th>Times</th><th>Last</th></tr></thead><tbody id="queueBody"></tbody></table>
   </section>
 </main>
 <script>
@@ -341,6 +366,17 @@ export class MetricsHttpServer {
   const lastEvtAge = document.getElementById('lastEvtAge');
   const replayCountEl = document.getElementById('replayCount');
   const uptimeEl = document.getElementById('uptime');
+  const learnBtn = document.getElementById('learnBtn');
+  const learnMsg = document.getElementById('learnMsg');
+  const queuePanel = document.getElementById('queuePanel');
+  const showQueueBtn = document.getElementById('showQueue');
+  const queueBody = document.getElementById('queueBody');
+  const queueMsg = document.getElementById('queueMsg');
+  const refreshQueueBtn = document.getElementById('refreshQueue');
+  const approveSelectedBtn = document.getElementById('approveSelected');
+  const removeSelectedBtn = document.getElementById('removeSelected');
+  let selectedCandidate = null; // normalized
+  let selectedRow = null;
   const metricsIds = { total:'m_total', safe:'m_safe', risky:'m_risky', blocked:'m_blocked', confirm:'m_confirm', timeouts:'m_timeouts', avg:'m_avg', p95:'m_p95', cpu:'m_cpu', rss:'m_rss', heap:'m_heap', lag:'m_lag'};
   const levelOrder = ['SAFE','RISKY','DANGEROUS','CRITICAL','BLOCKED','UNKNOWN'];
   const activeLevels = new Set(levelOrder);
@@ -359,9 +395,10 @@ export class MetricsHttpServer {
   function addRow(ev){ 
     if(ev.level==='HEARTBEAT') return; 
     emptyEl.style.display='none'; 
-    const tr=document.createElement('tr'); 
+  const tr=document.createElement('tr'); 
     tr.dataset.level=ev.level; 
     tr.className='level-'+ev.level; 
+  if(ev.candidateNorm) tr.dataset.candidate=ev.candidateNorm;
     
     // Check if this was a confirmed command
     const preview=(ev.preview||'').replace(/</g,'&lt;'); 
@@ -385,6 +422,17 @@ export class MetricsHttpServer {
       '<td>'+fmtTime(ev.timestamp)+'</td>'+
       '<td>'+ (markers.length?markers.join(' ')+' ':'') + (preview?preview:'') +'</td>';
     
+    // Row click selection for UNKNOWN learning
+    tr.addEventListener('click', (e)=>{
+      if(!tr.dataset.candidate) return; // only unknown
+      e.stopPropagation();
+      if(selectedRow && selectedRow!==tr) selectedRow.classList.remove('learn-selected');
+      selectedCandidate = tr.dataset.candidate;
+      tr.classList.add('learn-selected');
+      selectedRow = tr;
+      learnMsg.textContent='Selected '+selectedCandidate;
+      // Keep message until another action
+    });
     tableBody.appendChild(tr); 
     
     // Auto-scroll to bottom
@@ -584,11 +632,63 @@ export class MetricsHttpServer {
   // Count replayed by observing first N ids quickly
   setTimeout(()=>{ replayCountEl.textContent = tableBody.children.length; },1000);
   if(debug){ document.getElementById('emit').onclick=()=>{ fetch('/api/debug/emit?debug=true&level=SAFE&durationMs='+(Math.random()*60|0)).then(r=>r.json()).then(j=>{ addRow(j.synthetic); }); }; }
+
+  function renderQueue(items){
+    queueBody.innerHTML='';
+    if(!items || !items.length){ queueBody.innerHTML='<tr><td colspan=5 style="opacity:.6">Empty</td></tr>'; return; }
+    items.forEach(it=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML='<td><input type="checkbox" data-norm="'+it.normalized+'" /></td>'+
+        '<td style="font-family:monospace">'+it.normalized+'</td>'+
+        '<td>'+(it.added||'').replace('T',' ').split('.')[0]+'</td>'+
+        '<td style="text-align:right">'+(it.timesQueued||1)+'</td>'+
+        '<td>'+(it.lastQueued||'').replace('T',' ').split('.')[0]+'</td>';
+      queueBody.appendChild(tr);
+    });
+  }
+  async function loadQueue(){ try{ const r=await fetch('/api/learn-queue'); if(!r.ok) return; const j=await r.json(); renderQueue(j.queued||[]);}catch{} }
+  if(showQueueBtn){ showQueueBtn.addEventListener('click', ()=>{ queuePanel.style.display = queuePanel.style.display==='none'?'block':'none'; if(queuePanel.style.display==='block') loadQueue(); }); }
+  if(refreshQueueBtn){ refreshQueueBtn.addEventListener('click', loadQueue); }
+  if(approveSelectedBtn){ approveSelectedBtn.addEventListener('click', async ()=>{ const norms = Array.from(queueBody.querySelectorAll('input[type=checkbox]:checked')).map(cb=>cb.getAttribute('data-norm')); if(!norms.length){ queueMsg.textContent='Select entries'; setTimeout(()=>queueMsg.textContent='',2500); return; } queueMsg.textContent='Approving…'; try{ const r=await fetch('/api/learn-queue/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({normalized:norms})}); const j=await r.json(); if(r.ok){ queueMsg.textContent='Promoted '+j.promoted; loadQueue(); } else { queueMsg.textContent='Error '+(j.error||r.status); } }catch{ queueMsg.textContent='Network error'; } setTimeout(()=>queueMsg.textContent='',4000); }); }
+  if(removeSelectedBtn){ removeSelectedBtn.addEventListener('click', async ()=>{ const norms = Array.from(queueBody.querySelectorAll('input[type=checkbox]:checked')).map(cb=>cb.getAttribute('data-norm')); if(!norms.length){ queueMsg.textContent='Select entries'; setTimeout(()=>queueMsg.textContent='',2500); return; } queueMsg.textContent='Removing…'; try{ const r=await fetch('/api/learn-queue/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({normalized:norms})}); const j=await r.json(); if(r.ok){ queueMsg.textContent='Removed '+j.removed; loadQueue(); } else { queueMsg.textContent='Error '+(j.error||r.status); } }catch{ queueMsg.textContent='Network error'; } setTimeout(()=>queueMsg.textContent='',4000); }); }
+  if(learnBtn){ learnBtn.addEventListener('click', async ()=>{ if(!selectedCandidate){ learnMsg.textContent='Select an UNKNOWN row first'; setTimeout(()=>{ if(learnMsg.textContent.startsWith('Select')) learnMsg.textContent=''; },3000); return; } const normalized=selectedCandidate; learnBtn.disabled=true; learnBtn.textContent='Queuing…'; learnMsg.textContent=''; try{ const r=await fetch('/api/learn-candidate?normalized='+encodeURIComponent(normalized), {method:'POST'}); const j=await r.json(); if(r.ok){ learnMsg.textContent='Queued: '+(j.normalized||normalized); loadQueue(); } else { learnMsg.textContent='Error: '+(j.error||r.status); } } catch { learnMsg.textContent='Network error'; } finally { learnBtn.disabled=false; learnBtn.textContent='Queue Selected'; setTimeout(()=>{ if(learnMsg.textContent.startsWith('Queued')) learnMsg.textContent=''; },4000); } }); }
 })();
 </script>
 </body></html>`);
       return;
     }
+    if (path === '/api/unknown-candidates') {
+      try {
+        const list = aggregateCandidates(50);
+        this.writeJson(res, list);
+      } catch (e:any) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'aggregation_failed', message: e?.message }));
+      }
+      return;
+    }
+    if (path.startsWith('/api/learn-candidate')) {
+      const q = this.parseQuery(url);
+      const norm = q.normalized || '';
+      if (!norm) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'missing_normalized' }));
+        return;
+      }
+      try {
+        const queued = queueCandidates([norm], 'dashboard');
+        console.error('[LEARN] Queued normalized candidate via dashboard:', norm, queued);
+        this.writeJson(res, { ok: true, normalized: norm, queued: true, added: queued.added, skipped: queued.skipped, total: queued.total });
+      } catch (e:any) {
+        console.error('[LEARN] Queue failed for', norm, e?.message || e);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'queue_failed', message: e?.message || String(e) }));
+      }
+      return;
+    }
+    if (path === '/api/learn-queue') { try { this.writeJson(res, { queued: listQueuedCandidates() }); } catch(e:any){ res.writeHead(500,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({ error:'queue_list_failed', message:e?.message })); } return; }
+    if (path === '/api/learn-queue/approve' && req.method==='POST') { let body=''; req.on('data',d=> body+=d); req.on('end', ()=>{ try { const j=JSON.parse(body||'{}'); if(!Array.isArray(j.normalized)){ res.writeHead(400,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'normalized_required'})); return;} const r=approveQueuedCandidates(j.normalized,'dashboard'); this.writeJson(res,r); } catch(e:any){ res.writeHead(500,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'approve_failed', message:e?.message })); } }); return; }
+    if (path === '/api/learn-queue/remove' && req.method==='POST') { let body=''; req.on('data',d=> body+=d); req.on('end', ()=>{ try { const j=JSON.parse(body||'{}'); if(!Array.isArray(j.normalized)){ res.writeHead(400,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'normalized_required'})); return;} const r=removeFromQueue(j.normalized); this.writeJson(res,r); } catch(e:any){ res.writeHead(500,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'remove_failed', message:e?.message })); } }); return; }
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'not found' }));
   }

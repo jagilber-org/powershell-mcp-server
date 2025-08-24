@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/mcp/gates.list-v1.schema.json",
+  "x-schema-version": "list-v1",
+  "title": "MCP Gates List (list-v1)",
+  "description": "Schema for gates.json defining logical gates referencing instruction-derived inputs.",
+  "type": "object",
+  "required": ["version", "gates"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "schemaVersion": { "type": "string", "description": "Echo of x-schema-version (list-v1) for consumer convenience" },
+    "$schema": { "type": "string" },
+    "model": { "type": "string", "const": "gates-list" },
+    "description": { "type": "string" },
+    "gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id","description","logic","failureAction"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9_.-]+$" },
+          "description": { "type": "string" },
+          "inputs": { "type": "array", "items": { "type": "string" } },
+          "logic": { "type": "string", "description": "Boolean expression over inputs" },
+          "failureAction": { "type": "string", "enum": ["block","reject","warn"] },
+          "onFailMessage": { "type": "string" },
+          "record": { "type": "boolean", "default": true }
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,7 @@
 # 📚 Knowledge Index
 
+> Key Learning: The `activate_<category>_tools` functions are the reliable method for MCP tool enablement in VS Code environments, especially for automated/agent workflows.
+
 > 🚨🚨🚨 ULTRA-CRITICAL ENFORCEMENT BANNER (DO NOT BYPASS) 🚨🚨🚨
 >
 > ABSOLUTE RULE: **DO NOT ISSUE RAW TERMINAL COMMANDS WHEN AN MCP TOOL CAN ACHIEVE THE OUTCOME. ALWAYS ROUTE THROUGH A REGISTERED MCP SERVER TOOL INSTEAD OF DIRECT TERMINAL.**
@@ -14,7 +16,7 @@
 >
 > MCP GATING CHECKLIST (ALL must be NO to even CONSIDER terminal) — evaluate across ALL registered MCP servers (aggregate tool surface):
 >
-> 1. Exists specialized MCP tool (on any registered server: git-status/commit/push, log-test, server-stats, ai-agent-test, GitHub/Issue tools, etc.)?
+> 1. Exists specialized MCP tool (on any registered server: e.g., Git server tools, log-test, server-stats, ai-agent-test, GitHub/Issue tools, etc.)?
 > 2. Can generic `powershell-command` run the shell/PowerShell you were about to run? (Usually YES.)
 > 3. Would using terminal cause loss of audit/metrics/security classification? (If YES → BLOCK.)
 > 4. Is this routine repo hygiene (git ops) now covered by git-* tools? (If YES → use tools.)
@@ -23,14 +25,14 @@
 > If ANY answer = YES → Terminal usage is FORBIDDEN.
 >
 > MANDATORY TERMINAL EXCEPTION BLOCK (only if all above = NO):
->
-> 
-> ```text
-> Terminal Exception:
-> Reason: <concise justification>
-> Gate Evaluation: toolExists=<true/false>; genericPossible=<true/false>; losesAudit=<true/false>; gitToolExists=<true/false>; priorReplaced=<true/false>
-> Risk Mitigation: <steps to minimize risk>
-> ```
+
+```text
+Terminal Exception:
+Reason: <concise justification>
+Gate Evaluation: toolExists=<true/false>; genericPossible=<true/false>; losesAudit=<true/false>; gitToolExists=<true/false>; priorReplaced=<true/false>
+Risk Mitigation: <steps to minimize risk>
+```
+
 > Without this exact formatted block the attempt is INVALID and must be auto-replaced with an MCP tool plan.
 >
 > FINAL FALLBACK PRINCIPLE: When uncertain, ALWAYS default to MCP tool invocation. Ambiguity is treated as a BLOCK → choose MCP.

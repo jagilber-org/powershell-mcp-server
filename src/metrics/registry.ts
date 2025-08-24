@@ -63,6 +63,11 @@ export class MetricsRegistry {
     }
   }
 
+  /** Increment timeout counter (kept separate to avoid changing ExecutionRecord contract) */
+  incrementTimeout(): void {
+    this.counts.TIMEOUTS++;
+  }
+
   reset(): void {
     Object.keys(this.counts).forEach(k => (this.counts[k] = 0));
     this.durations = [];

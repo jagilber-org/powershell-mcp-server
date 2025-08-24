@@ -1,5 +1,7 @@
 # Copilot Operational Instructions
 
+> Key Learning: The `activate_<category>_tools` functions are the reliable method for MCP tool enablement in VS Code environments, especially for automated/agent workflows.
+
 > 🔥 ABSOLUTE RULE (STRONGER ENFORCEMENT – MIRRORS `KNOWLEDGE-INDEX.md`): **EVERY command (PowerShell, git, npm, node, OS utility, script) MUST be executed via an MCP tool provided by ANY registered MCP server (this server or others). Prefer `powershell-mcp-server` when functionality overlaps. Do NOT directly invoke a terminal command unless the mandatory Terminal Exception block (defined below) is produced.**
 
 > Single source of truth for AI assistant (GitHub Copilot Chat / MCP-aware agents) when interacting with this repository.
@@ -36,7 +38,7 @@ Benefits enforced by MCP tool path:
 3. Avoid raw shell unless classification layer is intentionally bypassed (must state reason).
 
 ## 3. Branch & Repo Operations
-- Git operations MUST use MCP git tools (`git-status`, `git-commit`, `git-push`) or equivalent git tools exposed by another MCP server if present.
+- Git operations should be handled by a dedicated Git MCP server (not included here). This server intentionally omits git-* tools to remain generic.
 - If additional git capability is needed (e.g., fetch, diff, log), FIRST propose adding a new MCP tool; do NOT drop to terminal.
 - PowerShell repo scripts (compliance, stats, stress) MUST be executed via `powershell-command` (or a future specialized tool) – never raw terminal.
 
@@ -80,12 +82,14 @@ Benefits enforced by MCP tool path:
 | powershell-script | Multi-line script (classified) |
 | powershell-file | Execute existing .ps1 with params |
 | powershell-syntax-check | Static validation only |
-| git-status | Safe repository status |
-| git-commit | Controlled commit creation |
-| git-push | Controlled push (no force) |
+| (git tools removed) | Use external Git MCP server |
 | server-stats | Metrics + threat snapshot |
 | ai-agent-test | Security & behavior test harness |
 | log-test | Emit diagnostic audit entry |
+| dashboard-info | Retrieve metrics dashboard URL/port/status |
+| list-unknown-candidates | Aggregated UNKNOWN candidate listing (redacted) |
+| recommend-unknown-candidates | Scored UNKNOWN recommendations (Phase B) |
+| promote-learned-candidates | Approve normalized candidates -> learned-safe list |
 
 ## 13. Terminal Exception (Mandatory Format)
 Only if ALL gating questions (mirroring Knowledge Index) are answered NO may a terminal command be proposed. The response MUST include this exact fenced block before any terminal usage:

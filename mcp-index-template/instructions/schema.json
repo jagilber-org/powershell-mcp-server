@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InstructionCatalog",
+  "type": "object",
+  "properties": {
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id","text","category","priority","criticality","scope","target","status"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9_.-]+$" },
+          "text": { "type": "string", "minLength": 5 },
+          "category": { "type": "string", "enum": ["security","execution","docs","governance","learning","tooling"] },
+          "priority": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "criticality": { "type": "string", "enum": ["blocking","strong","advisory"] },
+          "scope": { "type": "string", "enum": ["global","repo","session","action"] },
+          "target": { "type": "string", "enum": ["agent","human","both"] },
+          "status": { "type": "string", "enum": ["active","deprecated"] },
+          "supersedes": { "type": "array", "items": { "type":"string" }, "default": [] },
+          "examples": { "type": "array", "items": { "type":"string" } },
+          "tags": { "type": "array", "items": { "type":"string" } },
+          "checksum": { "type": "string" }
+        }
+      }
+    }
+  },
+  "required": ["version","entries"]
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/mcp/instruction-catalog.schema.json#1.0.0",
+  "x-schema-version": "1.0.0",
+  "title": "InstructionCatalog",
+  "description": "Schema for MCP instruction catalog entries (schemaVersion 1.0.0). 'version' inside a catalog file is the release version of the data set, not the schema version.",
+  "type": "object",
+  "properties": {
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "schemaVersion": { "type": "string", "description": "Schema version copied from x-schema-version for data consumer convenience" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id","text","category","priority","criticality","scope","target","status"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9_.-]+$" },
+          "text": { "type": "string", "minLength": 5 },
+          "rationale": { "type": "string", "description": "Short justification explaining why this instruction exists" },
+          "category": { "type": "string", "enum": ["security","execution","docs","governance","learning","tooling"] },
+          "priority": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "criticality": { "type": "string", "enum": ["blocking","strong","advisory"] },
+          "scope": { "type": "string", "enum": ["global","repo","session","action"] },
+          "target": { "type": "string", "enum": ["agent","human","both"] },
+          "status": { "type": "string", "enum": ["active","deprecated"] },
+          "supersedes": { "type": "array", "items": { "type":"string" }, "default": [] },
+          "examples": { "type": "array", "items": { "type":"string" } },
+          "tags": { "type": "array", "items": { "type":"string" } },
+          "checksum": { "type": "string" }
+        }
+      }
+    }
+  },
+  "required": ["version","entries"],
+  "additionalProperties": false
+}

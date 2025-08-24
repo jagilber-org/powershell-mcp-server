@@ -14,6 +14,6 @@
     "sourceMap": true,
     "moduleResolution": "node"
   },
-  "include": ["src/index.ts", "src/server.ts"],
+  "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "src/vscode-server.ts", "src/server-*.js", "src/extension.*", "src/test-*"]
 }

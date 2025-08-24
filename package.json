@@ -1,11 +1,13 @@
 {
   "name": "powershell-mcp-server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MCP server for PowerShell command execution",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+  "build:only": "tsc",
+  "build": "npm run build:only && jest --runInBand",
+    "build:test": "npm run build && npm run test:enterprise",
     "build:enterprise": "tsc src/server.ts --outDir dist --target ES2020 --module ESNext --moduleResolution Node --strict --declaration --sourceMap",
     "build:legacy": "tsc src/vscode-server.ts --outDir dist --target ES2020 --module ESNext --moduleResolution Node --declaration --sourceMap --noStrict",
     "dev": "npm run build && node dist/index.js",
@@ -19,7 +21,12 @@
     "precommit": "npm run compliance:check && npm run build",
     "test:stress": "npm run build && node tests/stress-test.mjs",
     "stats:codebase": "powershell -ExecutionPolicy Bypass -File tools/codebase-stats.ps1",
-    "baseline:daily": "npm run stats:codebase && powershell -ExecutionPolicy Bypass -Command \"$env:STRESS_REQUESTS=100; $env:STRESS_CONCURRENCY=15; node tests/stress-test.mjs\""
+    "baseline:daily": "npm run stats:codebase && powershell -ExecutionPolicy Bypass -Command \"$env:STRESS_REQUESTS=100; $env:STRESS_CONCURRENCY=15; node tests/stress-test.mjs\"",
+    "test:essential": "npm run build && node tests/run-essential.mjs",
+    "test:enterprise": "node tests/enterprise-suite.mjs",
+    "test:cross": "node tests/cross-server-compare.mjs",
+    "enumerate:external": "powershell -ExecutionPolicy Bypass -File tools/enumerate-external-tests.ps1 -OutputJson",
+  "test:jest": "npm run build:only && jest --runInBand"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.6.0",
@@ -28,7 +35,9 @@
     "zod-to-json-schema": "^3.23.3"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.12",
     "@types/node": "^20.0.0",
+    "jest": "^29.7.0",
     "typescript": "^5.5.4"
   }
 }

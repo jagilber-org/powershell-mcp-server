@@ -1,0 +1,27 @@
+{
+  "$schema": "./gates-schema.json",
+  "model": "gates-list",
+  "description": "Logical gates evaluated against agent action context",
+  "version": "0.1.0",
+  "schemaVersion": "list-v1",
+  "gates": [
+    {
+      "id": "terminal_exception_gate",
+      "description": "All blocking terminal preconditions must be false.",
+      "inputs": ["toolExists","genericPossible","losesAudit","gitToolExists","priorReplaced"],
+      "logic": "!(toolExists || genericPossible || losesAudit || gitToolExists || priorReplaced)",
+      "failureAction": "block",
+      "onFailMessage": "Terminal blocked: tool path available.",
+      "record": true
+    },
+    {
+      "id": "confirmation_gate",
+      "description": "RISKY/UNKNOWN must be confirmed.",
+      "inputs": ["classification","confirmedFlag"],
+      "logic": "!( (classification in ['RISKY','UNKNOWN']) && (confirmedFlag == false) )",
+      "failureAction": "reject",
+      "onFailMessage": "Confirmation required.",
+      "record": true
+    }
+  ]
+}

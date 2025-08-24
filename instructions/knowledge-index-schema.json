@@ -1,0 +1,41 @@
+{
+  "$id": "https://mcp.example.com/schemas/knowledge-index.schema.json",
+  "x-schema-version": "0.1.0",
+  "title": "MCP Knowledge Index",
+  "description": "Canonical machine-readable index of human/agent readable knowledge documents for an MCP instruction repository.",
+  "type": "object",
+  "required": ["version", "documents"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "string", "description": "Semantic version of the knowledge index dataset" },
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "path", "title"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$", "description": "Stable identifier (kebab-case)" },
+          "path": { "type": "string", "description": "Relative path to the markdown or other source file" },
+          "title": { "type": "string" },
+          "summary": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "category": { "type": "string", "enum": ["guide", "reference", "policy", "troubleshooting"], "description": "Document classification" },
+          "scope": { "type": "string", "enum": ["agent", "human", "both"], "default": "both" },
+          "lastUpdated": { "type": "string", "format": "date" },
+          "priority": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "relatedRules": { "type": "array", "items": { "type": "string" } },
+          "checksum": { "type": "string", "description": "SHA256 checksum of file contents (auto-filled)" },
+          "deprecated": { "type": "boolean" },
+          "supersedes": { "type": "string" },
+          "aliases": { "type": "array", "items": { "type": "string" } },
+          "external": { "type": "boolean", "description": "True if path references external/non-repo resource" },
+          "source": { "type": "string", "description": "Origin label (e.g., repo, learn, wiki)" },
+          "size": { "type": "integer", "minimum": 0, "description": "Size in bytes of source file (auto)" },
+          "embeddingsRef": { "type": "string", "description": "Reference key for vector/embedding index" }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

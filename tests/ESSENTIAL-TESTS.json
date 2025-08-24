@@ -1,0 +1,9 @@
+[
+  "tests/handshake-test.mjs",
+  "tests/test-mcp-protocol.mjs",
+  "tests/test-mcp-stdio.mjs",
+  "tests/test-output-truncation.mjs",
+  "tests/test-rate-limit.mjs",
+  "tests/test-timeout.mjs",
+  "tests/test-workingdirectory-policy.mjs"
+]
