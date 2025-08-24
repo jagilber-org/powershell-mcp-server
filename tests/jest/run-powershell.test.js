@@ -55,7 +55,7 @@ describe('run-powershell tool', ()=>{
     srv.kill();
     const msg = res['big'];
     expect(msg).toBeTruthy();
-    const structured = JSON.parse(msg.result?.content?.[0]?.text || '{}');
+  const structured = msg.result?.structuredContent || {};
     expect(structured.truncated||structured.overflow).toBe(true);
     expect(structured.chunks?.stdout?.length).toBeGreaterThan(0);
   },20000);
@@ -68,7 +68,7 @@ describe('run-powershell tool', ()=>{
     for(let i=0;i<160;i++){ if(res['overflowBig']) break; await new Promise(r=> setTimeout(r,120)); }
     srv.kill();
     const msg = res['overflowBig']; expect(msg).toBeTruthy();
-    const structured = JSON.parse(msg.result?.content?.[0]?.text || '{}');
+  const structured = msg.result?.structuredContent || {};
     expect(structured.overflow).toBe(true);
     expect(structured.truncated).toBe(true);
     expect(structured.chunks?.stdout?.length).toBeGreaterThan(0);
