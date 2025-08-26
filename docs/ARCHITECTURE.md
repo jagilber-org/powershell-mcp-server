@@ -4,7 +4,7 @@
 
 ---
 
-## 1. High-Level Component Architecture
+## 1. High-Level Component Architecture (Updated Aug 2025)
 
 ```mermaid
 %%{init: {'theme':'dark','themeVariables': { 'primaryColor': '#1e2730','primaryTextColor':'#e6f1ff','primaryBorderColor':'#4fa3ff','lineColor':'#6ea8ff','secondaryColor':'#2a3542','tertiaryColor':'#16202a','nodeTextColor':'#e6f1ff','clusterBkg':'#111a23','clusterBorder':'#4fa3ff','noteBkgColor':'#2d3640','noteTextColor':'#e6f1ff','fontFamily':'Segoe UI,Inter,Arial'}}}%%
@@ -24,14 +24,16 @@ flowchart LR
         C --> EXEC[PowerShell Executor]
         C --> LOG[Audit Logger]
         C --> THREAT[Threat / Alias Tracker]
-        C --> METRICS[Metrics Registry]
+    C --> METRICS[Metrics Registry]
         C --> PROMPTS[Prompt Retrieval]
         C --> CONFIG[Enterprise Config Loader]
+    C --> GITTOOLS[Git Tool Surface]
     end
 
     EXEC --> PS[PowerShell Host]
     SEC --> PATTERNS[Pattern Sets + Dynamic Overrides]
     METRICS --> HTTP[(HTTP / SSE Server)]
+    GITTOOLS --> EXEC
     HTTP --> DASH[Browser Dashboard]
     LOG --> FILES[(Log Files + NDJSON)]
     THREAT --> METRICS
@@ -205,6 +207,28 @@ Dashboard Visuals:
 - Live event table (highlight confirmed=true)
 - CPU & Event Loop Lag graph
 - Memory (RSS / Heap) graph
+- PowerShell per-invocation metrics columns (CPU seconds, Working Set MB) when feature flag enabled
+
+### 6.1 PowerShell Process Metrics Aggregation (Feature-Flagged)
+
+When `limits.capturePsProcessMetrics` (or env `MCP_CAPTURE_PS_METRICS=1`) is active, each PowerShell invocation appends a sentinel JSON object containing lightweight process stats (cumulative CPU time seconds and working set). The executor strips this sentinel from stdout, parses it, and forwards the numeric values to:
+
+1. `metricsHttpServer.publishExecution` (per-row `psMetrics` for live table columns `PS CPU(s)` & `WS(MB)`).
+2. `metricsRegistry.record()` as `psCpuSec` / `psWSMB` which aggregate into arrays.
+
+The registry snapshot then surfaces aggregated fields:
+
+| Field | Meaning |
+|-------|---------|
+| `psSamples` | Number of invocations with metrics captured |
+| `psCpuSecAvg` | Mean CPU seconds per invocation |
+| `psCpuSecP95` | 95th percentile CPU seconds |
+| `psWSMBAvg` | Mean Working Set MB |
+| `psWSMBP95` | 95th percentile Working Set MB |
+
+Dashboard cards for these stay hidden until `psSamples > 0` to avoid empty noise when disabled.
+
+Reset Strategy: Currently only a process restart or future planned reset endpoint clears arrays (no implicit decay). Consumers should snapshot externally if needing long‑term trends.
 
 ---
 

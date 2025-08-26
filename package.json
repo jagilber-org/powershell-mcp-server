@@ -1,15 +1,13 @@
 {
   "name": "powershell-mcp-server",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "MCP server for PowerShell command execution",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
   "build:only": "tsc",
   "build": "npm run build:only && jest --runInBand",
-    "build:test": "npm run build && npm run test:enterprise",
-    "build:enterprise": "tsc src/server.ts --outDir dist --target ES2020 --module ESNext --moduleResolution Node --strict --declaration --sourceMap",
-    "build:legacy": "tsc src/vscode-server.ts --outDir dist --target ES2020 --module ESNext --moduleResolution Node --declaration --sourceMap --noStrict",
+    
     "dev": "npm run build && node dist/index.js",
     "start": "node dist/index.js",
     "start:enterprise": "node dist/server.js",
@@ -19,14 +17,14 @@
     "compliance:check": "powershell -ExecutionPolicy Bypass -File Simple-MCPCheck.ps1",
     "compliance:report": "powershell -ExecutionPolicy Bypass -File Check-MCPCompliance.ps1 -SaveReport",
     "precommit": "npm run compliance:check && npm run build",
-    "test:stress": "npm run build && node tests/stress-test.mjs",
+    
     "stats:codebase": "powershell -ExecutionPolicy Bypass -File tools/codebase-stats.ps1",
-    "baseline:daily": "npm run stats:codebase && powershell -ExecutionPolicy Bypass -Command \"$env:STRESS_REQUESTS=100; $env:STRESS_CONCURRENCY=15; node tests/stress-test.mjs\"",
-    "test:essential": "npm run build && node tests/run-essential.mjs",
-    "test:enterprise": "node tests/enterprise-suite.mjs",
-    "test:cross": "node tests/cross-server-compare.mjs",
-    "enumerate:external": "powershell -ExecutionPolicy Bypass -File tools/enumerate-external-tests.ps1 -OutputJson",
-  "test:jest": "npm run build:only && jest --runInBand"
+  "baseline:daily": "npm run stats:codebase",
+    
+  "enumerate:external": "powershell -ExecutionPolicy Bypass -File tools/enumerate-external-tests.ps1 -OutputJson",
+  "check:stubs": "node scripts/check-stub-tests.mjs --strict",
+  "test:jest": "npm run build:only && jest --runInBand",
+  "pretest:jest": "node scripts/cleanup-legacy-psmetrics-tests.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.6.0",
@@ -37,7 +35,8 @@
   "devDependencies": {
     "@types/jest": "^29.5.12",
     "@types/node": "^20.0.0",
-    "jest": "^29.7.0",
+  "jest": "^29.7.0",
+  "ts-jest": "^29.2.5",
     "typescript": "^5.5.4"
   }
 }
