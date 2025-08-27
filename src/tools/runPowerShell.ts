@@ -172,7 +172,7 @@ export async function executePowerShell(command: string, timeout: number, workin
         if(canExtend){
           clearTimeout(timeoutHandle);
           currentExternalTimeout += adaptive.extendStepMs;
-          timeoutHandle = scheduleExternalTimeout(currentExternalTimeout - elapsed);
+            timeoutHandle = scheduleExternalTimeout(currentExternalTimeout - elapsed);
           adaptiveExtensions += 1; extended = true;
         }
       }
@@ -206,16 +206,23 @@ export async function runPowerShellTool(args: any){
     throw new McpError(ErrorCode.InvalidRequest, `Command length ${command.length} exceeds limit ${maxChars}`);
   }
   const assessment = classifyCommandSafety(command);
-  if(assessment.blocked) throw new McpError(ErrorCode.InvalidRequest, 'Blocked: '+assessment.reason);
-  if(assessment.requiresPrompt && !args.confirmed) throw new McpError(ErrorCode.InvalidRequest, 'Confirmation required: '+assessment.reason);
+  // For backward-compatible test expectations, return inline blocked message instead of throwing so tests that read content[0].text continue to work.
+  if(assessment.blocked){
+    auditLog('WARNING','BLOCKED_COMMAND','Blocked by security policy',{ reason: assessment.reason, patterns: assessment.patterns, level: assessment.level });
+    return { content:[{ type:'text', text: 'Blocked: '+assessment.reason }], structuredContent:{ success:false, blocked:true, securityAssessment: assessment, exitCode: null } };
+  }
+  if(assessment.requiresPrompt && !args.confirmed) {
+    // Maintain error path here so caller learns confirmation needed
+    throw new McpError(ErrorCode.InvalidRequest, 'Confirmation required: '+assessment.reason);
+  }
   // Timeout is always interpreted as seconds (agent contract) then converted to ms; default config already in ms
   let timeoutSeconds = args.aiAgentTimeoutSec || args.aiAgentTimeout || args.timeout;
 const warnings: string[] = [];
 const MAX_TIMEOUT_SECONDS = ENTERPRISE_CONFIG.limits?.maxTimeoutSeconds ?? 600;
 const usedLegacy = (!!args.aiAgentTimeout && !args.aiAgentTimeoutSec);
 const usedGeneric = (!!args.timeout && !args.aiAgentTimeoutSec && !args.aiAgentTimeout);
-if(usedLegacy){ warnings.push("Parameter 'aiAgentTimeout' is deprecated; use 'aiAgentTimeoutSec' (seconds)."); }
-if(usedGeneric){ warnings.push("Parameter 'timeout' is deprecated; use 'aiAgentTimeoutSec' (seconds)."); }
+if(usedLegacy){ warnings.push("Parameter 'aiAgentTimeout' is deprecated; use 'aiAgentTimeoutSec' (seconds)." ); }
+if(usedGeneric){ warnings.push("Parameter 'timeout' is deprecated; use 'aiAgentTimeoutSec' (seconds)." ); }
 if(typeof timeoutSeconds !== 'number' || timeoutSeconds <= 0){
   timeoutSeconds = (ENTERPRISE_CONFIG.limits.defaultTimeoutMs || 90000) / 1000;
 }
@@ -261,6 +268,14 @@ const timeout = Math.round(timeoutSeconds * 1000);
   result.stderr = processField(rebuild(result.chunks?.stderr||[]));
   if(truncated) result.truncated = true;
   if(result.overflow){ result.truncated = true; }
+  // Provide backward-compatible overflow strategy field
+  if(result.overflow){
+    result.overflowStrategy = 'terminate';
+  } else if(result.truncated){
+    result.overflowStrategy = 'truncate';
+  } else {
+    result.overflowStrategy = 'return';
+  }
   if(result.timedOut){ try{ metricsRegistry.incrementTimeout(); }catch{} }
   metricsRegistry.record({ level: assessment.level as any, blocked: assessment.blocked, durationMs: result.duration_ms || 0, truncated: !!result.truncated });
   try { metricsHttpServer.publishExecution({ id:`exec-${Date.now()}`, level: assessment.level, durationMs: result.duration_ms||0, blocked: assessment.blocked, truncated: !!result.truncated, timestamp:new Date().toISOString(), preview: command.substring(0,120), success: result.success, exitCode: result.exitCode, confirmed: args.confirmed||false, timedOut: result.timedOut, toolName: 'run-powershell' }); } catch {}
@@ -278,7 +293,7 @@ const timeout = Math.round(timeoutSeconds * 1000);
     if(responseObject.truncated) flags.push('truncated');
     content.push({ type:'text', text: `[exit=${responseObject.exitCode} success=${responseObject.success}${flags.length?' '+flags.join(' '):''}]` });
   }
+  // Optional appended classification summary so tests (or humans) can regex it if needed
+  content.push({ type:'text', text: `[classification=${assessment.level} blocked=${assessment.blocked} requiresPrompt=${assessment.requiresPrompt}]` });
   return { content, structuredContent: responseObject };
 }
-
-
