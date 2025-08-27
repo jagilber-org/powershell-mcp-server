@@ -44,12 +44,10 @@ export async function executePowerShell(command: string, timeout: number, workin
     }
   }
 
-  // Unified synchronous shell detection (race-free, searches well-known paths)
   const { exe: shellExe, source: shellSource, tried: shellTried } = detectShell();
 
   const lead = ENTERPRISE_CONFIG.limits.internalSelfDestructLeadMs || 300;
   const adaptive = opts?.adaptive && opts.adaptive.enabled ? opts.adaptive : undefined;
-  // Internal self-destruct must honor potential adaptive extensions up to maxTotalMs to avoid premature kill
   const internalMs = opts?.internalTimerMs ? Math.max(100, opts.internalTimerMs - lead) : Math.max(100, ((adaptive ? adaptive.maxTotalMs : timeout) - lead));
   const injected = `[System.Threading.Timer]::new({[Environment]::Exit(124)}, $null, ${internalMs}, 0)|Out-Null; $ProgressPreference='SilentlyContinue'; Set-StrictMode -Version Latest; ${command}`;
   const child = spawn(shellExe, ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command', injected], { windowsHide:true, cwd: resolvedCwd });
@@ -61,11 +59,11 @@ export async function executePowerShell(command: string, timeout: number, workin
   let totalBytes=0; let overflow=false;
   let timedOut=false; let killEscalated=false; let killTreeAttempted=false; let killTreeResult: any = null; let watchdogTriggered=false; let resolved=false;
   const graceAfterSignal = 1500;
-  // Watchdog base also must reflect adaptive max potential runtime
   const watchdogBase = adaptive ? adaptive.maxTotalMs : timeout;
   const hardKillTotal = watchdogBase + graceAfterSignal + 2000;
 
   let lastActivity = Date.now();
+  const adaptiveLog: any[] = [];
   const handleData = (buf:Buffer, isErr:boolean)=>{
     if(overflow) return;
     const str = buf.toString('utf8');
@@ -107,7 +105,7 @@ export async function executePowerShell(command: string, timeout: number, workin
       else if(exitCode !== 0) terminationReason = 'killed';
       else terminationReason = 'completed';
     }
-    returnResult({ success: !timedOut && exitCode===0 && !overflow, stdout: stdoutChunks.map(c=>c.text).join('').slice(0,2000), stderr: stderrChunks.map(c=>c.text).join('').slice(0,2000), exitCode, duration_ms: duration, timedOut, internalSelfDestruct: exitCode===124, configuredTimeoutMs: timeout, killEscalated, killTreeAttempted, killTreeResult, watchdogTriggered, shellExe, shellSource, shellTried, workingDirectory: resolvedCwd, chunks:{ stdout: stdoutChunks, stderr: stderrChunks }, overflow, totalBytes, terminationReason });
+    returnResult({ success: !timedOut && exitCode===0 && !overflow, stdout: stdoutChunks.map(c=>c.text).join('').slice(0,2000), stderr: stderrChunks.map(c=>c.text).join('').slice(0,2000), exitCode, duration_ms: duration, timedOut, internalSelfDestruct: exitCode===124, configuredTimeoutMs: timeout, killEscalated, killTreeAttempted, killTreeResult, watchdogTriggered, shellExe, shellSource, shellTried, workingDirectory: resolvedCwd, chunks:{ stdout: stdoutChunks, stderr: stderrChunks }, overflow, totalBytes, terminationReason, internalTimerMs: internalMs, watchdogHardKillTotalMs: hardKillTotal });
   };
 
   let returnResult: (r:any)=>void; const resultPromise = new Promise<any>(res=> returnResult = res);
@@ -132,7 +130,7 @@ export async function executePowerShell(command: string, timeout: number, workin
         const verifyUntil = Date.now() + (ENTERPRISE_CONFIG.limits.killVerifyWindowMs||1500);
         const verify = async ()=>{
           if(child.killed) return;
-          if(Date.now()>verifyUntil){ if(!child.killed) await attemptProcessTreeKill(); return; }
+            if(Date.now()>verifyUntil){ if(!child.killed) await attemptProcessTreeKill(); return; }
           if(process.platform==='win32' && child.pid){
             const tl = spawn('tasklist',['/FI',`PID eq ${child.pid}`]);
             let out=''; tl.stdout.on('data',d=> out+=d.toString());
@@ -153,16 +151,20 @@ export async function executePowerShell(command: string, timeout: number, workin
       if(resolved || timedOut) return;
       const now = Date.now();
       const remaining = (start + currentExternalTimeout) - now;
+      const elapsed = now - start;
       if(remaining <= adaptive.extendWindowMs){
         const recentActivity = (now - lastActivity) <= adaptive.extendWindowMs;
-        const elapsed = now - start;
         const canExtend = (recentActivity || firstAdaptiveDecision) && (elapsed + adaptive.extendStepMs) <= adaptive.maxTotalMs;
+        adaptiveLog.push({ t: elapsed, remaining, recentActivity, canExtend, extended:false, currentExternalTimeout, lastActivityDelta: now-lastActivity });
         if(canExtend){
           clearTimeout(timeoutHandle);
-            currentExternalTimeout += adaptive.extendStepMs;
+          currentExternalTimeout += adaptive.extendStepMs;
           timeoutHandle = scheduleExternalTimeout(currentExternalTimeout - elapsed);
           adaptiveExtensions += 1; extended = true; firstAdaptiveDecision = false;
+          adaptiveLog.push({ t: elapsed, action:'extended', newExternalTimeout: currentExternalTimeout });
         }
+      } else {
+        adaptiveLog.push({ t: elapsed, remaining, skipped:true });
       }
       if(!resolved && !timedOut && (Date.now()-start) < adaptive.maxTotalMs){
         adaptiveCheckTimer = setTimeout(check, Math.min( adaptive.extendWindowMs/2, 1000));
@@ -180,7 +182,7 @@ export async function executePowerShell(command: string, timeout: number, workin
   child.on('error', _e=>{ /* captured elsewhere */ });
   child.on('close', code=> finish(code));
 
-  return resultPromise.then(r=> ({ ...r, effectiveTimeoutMs: currentExternalTimeout, adaptiveExtensions, adaptiveExtended: extended, adaptiveMaxTotalMs: adaptive?.maxTotalMs }));
+  return resultPromise.then(r=> ({ ...r, effectiveTimeoutMs: currentExternalTimeout, adaptiveExtensions, adaptiveExtended: extended, adaptiveMaxTotalMs: adaptive?.maxTotalMs, adaptiveLog, lastActivityDeltaMs: lastActivity - start }));
 }
 
 export async function runPowerShellTool(args: any){
