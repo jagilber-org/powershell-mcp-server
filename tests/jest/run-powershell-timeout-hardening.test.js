@@ -27,17 +27,22 @@ describe('run-powershell timeout hardening', ()=>{
     expect(errTxt.includes("exceeds max allowed") || (msg.result?.content?.[0]?.text||"").includes("exceeds max allowed")).toBe(true);
   }, 12000);
 
-  test('forced hang process is terminated by timeout and watchdog/self-destruct', async ()=>{
+  test('forced hang MUST reach timeout (no early success output)', async ()=>{
     const srv = startServer(); await waitForReady(srv); const res = collect(srv);
-    // Infinite loop waiting on ReadKey keeps process active unless externally killed.
     const hangCommand = 'while($true) { try { [System.Console]::ReadKey($true) | Out-Null } catch { Start-Sleep -Milliseconds 100 } }';
-    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command: hangCommand, confirmed:true, timeout:2 }},'hardHang');
-    for(let i=0;i<120;i++){ if(res['hardHang']) break; await new Promise(r=> setTimeout(r,250)); }
+    const timeoutSec = 1; // keep very small so a genuine hang triggers quickly
+    const start = Date.now();
+    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command: hangCommand, confirmed:true, timeout: timeoutSec }},'hardHang');
+    for(let i=0;i<120;i++){ if(res['hardHang']) break; await new Promise(r=> setTimeout(r,120)); }
+    const elapsedMs = Date.now()-start;
     srv.kill();
     const msg = res['hardHang']; expect(msg).toBeTruthy();
     const structured = msg.result?.structuredContent || {};
+    // Must have timedOut or internal self destruct exit 124
     expect(structured.timedOut || structured.exitCode === 124).toBe(true);
-    if(structured.configuredTimeoutMs){ expect(structured.effectiveTimeoutMs >= structured.configuredTimeoutMs).toBe(true); }
+    // Should not report success and must not exit too early (< 80% of configured timeout)
     expect(structured.success).toBe(false);
-  }, 35000);
+    const configured = structured.configuredTimeoutMs || (timeoutSec*1000);
+    expect(elapsedMs).toBeGreaterThanOrEqual(Math.floor(configured*0.8));
+  }, 15000);
 });
