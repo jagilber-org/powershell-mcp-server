@@ -1,28 +1,35 @@
-{
-  "security": {
-  "allowedWriteRoots": ["${TEMP}", "./sandbox", "c:/github/jagilber"],
-    "requireConfirmationForUnknown": true,
-    "additionalSafe": [
-      "^Get-ChildItem"
-    ],
-    "additionalBlocked": [
-    ],
-    "suppressPatterns": [
-    ]
-  },
-  "rateLimit": {
-    "enabled": true,
-    "intervalMs": 5000,
-    "maxRequests": 8,
-    "burst": 12
-  },
-  "limits": {
-    "maxOutputKB": 128,
-    "maxLines": 1000,
-    "defaultTimeoutMs": 90000
-  },
-  "logging": {
-    "structuredAudit": true,
-    "truncateIndicator": "<TRUNCATED>"
-  }
+﻿{
+    "security":  {
+                     "allowedWriteRoots":  [
+                                               "${TEMP}",
+                                               "./sandbox",
+                                               "c:/github/jagilber"
+                                           ],
+                     "requireConfirmationForUnknown":  true,
+                     "additionalSafe":  [
+                                            "^Get-ChildItem"
+                                        ],
+                     "additionalBlocked":  [
+
+                                           ],
+                     "suppressPatterns":  [
+
+                                          ]
+                 },
+    "rateLimit":  {
+                      "enabled":  true,
+                      "intervalMs":  5000,
+                      "maxRequests":  8,
+                      "burst":  12
+                  },
+    "limits":  {
+                   "maxOutputKB":  128,
+                   "maxLines":  1000,
+                   "defaultTimeoutMs":  90000,
+                   "maxTimeoutSeconds":  600
+               },
+    "logging":  {
+                    "structuredAudit":  true,
+                    "truncateIndicator":  "\u003cTRUNCATED\u003e"
+                }
 }
