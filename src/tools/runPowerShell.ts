@@ -1,4 +1,4 @@
-﻿// Unified run-powershell tool implementation extracted from server
+// Unified run-powershell tool implementation extracted from server
 import { classifyCommandSafety } from '../security/classification.js';
 import { auditLog } from '../logging/audit.js';
 import { ENTERPRISE_CONFIG } from '../core/config.js';
@@ -9,6 +9,7 @@ import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { detectShell } from '../core/shellDetection.js';
 
 async function killProcessTreeWindows(pid: number): Promise<{ ok: boolean; stdout: string; stderr: string }>{
   return new Promise(resolve=>{
@@ -43,19 +44,9 @@ export async function executePowerShell(command: string, timeout: number, workin
     }
   }
 
-  let shellExe = ENTERPRISE_CONFIG?.powershell?.executable;
-  if(!shellExe){
-    if(typeof ENTERPRISE_CONFIG._detectedPwsh === 'undefined'){
-      try {
-        const test = spawn('pwsh.exe',['-NoLogo','-NoProfile','-Command','"$PSVersionTable.PSEdition"'], { windowsHide:true });
-        let out='';
-        test.stdout.on('data',d=> out+=d.toString());
-        test.on('close',code=>{ ENTERPRISE_CONFIG._detectedPwsh = (code===0 && /core/i.test(out)); });
-      } catch { ENTERPRISE_CONFIG._detectedPwsh = false; }
-      ENTERPRISE_CONFIG._detectedPwsh = ENTERPRISE_CONFIG._detectedPwsh ?? false;
-    }
-    shellExe = ENTERPRISE_CONFIG._detectedPwsh ? 'pwsh.exe' : 'powershell.exe';
-  }
+  // Unified synchronous shell detection (race-free, searches well-known paths)
+  const { shellExe } = detectShell();
+
   const lead = ENTERPRISE_CONFIG.limits.internalSelfDestructLeadMs || 300;
   const adaptive = opts?.adaptive && opts.adaptive.enabled ? opts.adaptive : undefined;
   const internalTarget = adaptive ? Math.min(Math.max(100, (adaptive.maxTotalMs||timeout) - lead), (adaptive.maxTotalMs||timeout)) : timeout;
