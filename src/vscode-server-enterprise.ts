@@ -1,328 +1,29 @@
-// (Removed legacy placeholder block - restored full enterprise implementation below)
 /**
- * Enterprise-Scale PowerShell MCP Server
- * Strongly-typed TypeScript implementation with comprehensive functionality
- * 
- * Features:
- * - 5-level security classification system
- * - MCP-standard logging with audit trails
- * - Comprehensive AI agent integration
- * - Enterprise-grade error handling
- * - Full type safety and maintainability
- * - Unified authentication using 'key' parameter (backward compatible with 'authKey')
- * - Optimized timeouts (default 90 seconds, AI agent override support)
+ * DEPRECATED ADAPTER: vscode-server-enterprise.ts
+ * Original monolithic implementation removed. Unified server lives in server.ts.
  */
+import { EnterprisePowerShellMCPServer } from './server.js';
+import { auditLog } from './logging/audit.js';
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { 
-    CallToolRequestSchema, 
-    ListToolsRequestSchema, 
-    McpError, 
-    ErrorCode,
-    Tool,
-    TextContent
-} from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
-import { spawn, ChildProcess, SpawnOptionsWithoutStdio } from 'child_process';
-import * as os from 'os';
-import * as fs from 'fs';
-import * as path from 'path';
-import { metricsRegistry } from './metrics/registry.js';
-import { ENTERPRISE_CONFIG } from './core/config.js';
+export { EnterprisePowerShellMCPServer } from './server.js';
 
-// ==============================================================================
-// TYPE DEFINITIONS - Enterprise-grade type safety
-// ==============================================================================
-
-/** Security risk levels for command classification */
-type SecurityLevel = 'SAFE' | 'RISKY' | 'DANGEROUS' | 'CRITICAL' | 'BLOCKED' | 'UNKNOWN';
-
-/** Risk assessment levels */
-type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME' | 'FORBIDDEN';
-
-/** Security threat categories */
-type ThreatCategory = 
-    | 'REGISTRY_MODIFICATION' 
-    | 'SYSTEM_FILE_MODIFICATION' 
-    | 'ROOT_DRIVE_DELETION'
-    | 'REMOTE_MODIFICATION' 
-    | 'SECURITY_THREAT' 
-    | 'SYSTEM_MODIFICATION'
-    | 'SYSTEM_DESTRUCTION' 
-    | 'PRIVILEGE_ESCALATION' 
-    | 'INFORMATION_GATHERING'
-    | 'FILE_OPERATION'
-    | 'PROCESS_MANAGEMENT'
-    | 'ALIAS_THREAT'
-    | 'UNKNOWN_COMMAND';
-
-/** Comprehensive security assessment result */
-interface SecurityAssessment {
-    level: SecurityLevel;
-    risk: RiskLevel;
-    reason: string;
-    color: 'GREEN' | 'YELLOW' | 'RED' | 'MAGENTA' | 'CYAN';
-    blocked: boolean;
-    requiresPrompt?: boolean;
-    category: ThreatCategory;
-    patterns?: string[];
-    recommendations?: string[];
+async function main(){
+    const authKey = process.env.MCP_AUTH_KEY;
+    const server = new EnterprisePowerShellMCPServer(authKey);
+    await server.start();
 }
 
-/** PowerShell execution result with comprehensive metadata */
-interface PowerShellExecutionResult {
-    success: boolean;
-    stdout: string;
-    stderr: string;
-    exitCode: number | null;
-    duration_ms: number;
-    command?: string;
-    workingDirectory?: string;
-    securityAssessment?: SecurityAssessment;
-    processId?: number;
-    timedOut?: boolean;
-    error?: string;
+const invokedDirect = import.meta.url === `file://${process.argv[1]}` || /vscode-server-enterprise\.js$/i.test(process.argv[1]||'');
+if(invokedDirect){
+    main().catch(err=>{
+        console.error('[deprecated-entry] fatal startup error', err);
+        auditLog('ERROR','SERVER_FATAL_DEPRECATED','startup failed',{ error: err instanceof Error ? err.message : String(err) });
+        process.exit(1);
+    });
 }
 
-/** System information structure */
-interface SystemInfo {
-    nodeVersion: string;
-    platform: string;
-    arch: string;
-    pid: number;
-    cwd: string;
-    hostname: string;
-    user: string;
-    totalMemory: string;
-    freeMemory: string;
-    cpus: string;
-    uptime: string;
-}
-
-/** Audit log entry structure */
-interface AuditLogEntry {
-    timestamp: string;
-    level: string;
-    category: string;
-    message: string;
-    metadata?: Record<string, any>;
-}
-
-/** MCP notification parameters */
-interface MCPNotificationParams {
-    [key: string]: unknown;
-    level: string;
-    logger: string;
-    data: string;
-}
-
-/** Client information for tracking */
-interface ClientInfo {
-    parentPid: number;
-    serverPid: number;
-    connectionId: string;
-}
-
-/** AI agent test suite configuration */
-interface AITestSuite {
-    name: string;
-    tests: AITestCase[];
-}
-
-/** Individual AI test case */
-interface AITestCase {
-    name: string;
-    command: string;
-    expectedSecurity: SecurityLevel;
-    shouldSucceed: boolean;
-}
-
-/** AI agent test results */
-interface AITestResults {
-    testSuite: string;
-    timestamp: string;
-    serverPid: number;
-    skipDangerous: boolean;
-    totalTests: number;
-    passed: number;
-    failed: number;
-    tests: AITestResult[];
-    summary: {
-        successRate: string;
-        securityEnforcement: 'WORKING' | 'NEEDS_REVIEW';
-        safeExecution: 'WORKING' | 'NEEDS_REVIEW';
-    };
-    recommendations: string[];
-}
-
-/** Individual AI test result */
-interface AITestResult {
-    name: string;
-    command: string;
-    expectedSecurity: SecurityLevel;
-    shouldSucceed: boolean;
-    actualSecurity: SecurityLevel;
-    actualResult: string;
-    passed: boolean;
-    error: string | null;
-    executionTime: number;
-}
-
-/** PowerShell alias detection result */
-interface AliasDetectionResult {
-    originalCommand: string;
-    resolvedCommand?: string;
-    isAlias: boolean;
-    aliasType: 'BUILTIN' | 'CUSTOM' | 'FUNCTION' | 'CMDLET' | 'UNKNOWN';
-    securityRisk: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-    reason: string;
-}
-
-/** Unknown threat tracking entry */
-interface UnknownThreatEntry {
-    timestamp: string;
-    command: string;
-    frequency: number;
-    firstSeen: string;
-    lastSeen: string;
-    possibleAliases: string[];
-    riskAssessment: SecurityAssessment;
-    sessionId: string;
-}
-
-/** Threat tracking statistics */
-interface ThreatTrackingStats {
-    totalUnknownCommands: number;
-    uniqueThreats: number;
-    highRiskThreats: number;
-    aliasesDetected: number;
-    sessionsWithThreats: number;
-}
-
-// ==============================================================================
-// SECURITY PATTERNS - Comprehensive threat detection
-// ==============================================================================
-
-/** Registry modification patterns (BLOCKED) */
-const REGISTRY_MODIFICATION_PATTERNS: readonly string[] = [
-    'New-ItemProperty.*HK(LM|CU)',
-    'Set-ItemProperty.*HK(LM|CU)', 
-    'Remove-ItemProperty.*HK(LM|CU)',
-    'Remove-Item.*HK(LM|CU)',
-    'reg\\s+(add|delete|import)',
-    'HKEY_(LOCAL_MACHINE|CURRENT_USER)'
-] as const;
-
-/** System file modification patterns (BLOCKED) */
-const SYSTEM_FILE_PATTERNS: readonly string[] = [
-    'C:\\\\Windows\\\\System32',
-    'C:\\\\Windows\\\\SysWOW64', 
-    'C:\\\\Windows\\\\Boot',
-    'C:\\\\Program Files\\\\WindowsApps'
-] as const;
-
-/** Root drive deletion patterns (BLOCKED) */
-const ROOT_DELETION_PATTERNS: readonly string[] = [
-    'Format-Volume.*-DriveLetter\\s+[A-Z](?!:)',
-    'Remove-Item.*C:\\\\.*-Recurse',
-    'rd\\s+C:\\\\.*\\/[sS]',
-    'rmdir\\s+C:\\\\.*\\/[sS]'
-] as const;
-
-/** Remote modification patterns (BLOCKED) */
-const REMOTE_MODIFICATION_PATTERNS: readonly string[] = [
-    'Invoke-Command.*-ComputerName(?!\\s+localhost)',
-    'Enter-PSSession.*(?<!localhost)',
-    'New-PSSession.*(?<!localhost)',
-    'Set-Service.*-ComputerName',
-    'Get-WmiObject.*-ComputerName(?!\\s+localhost)'
-] as const;
-
-/** Critical security threat patterns (BLOCKED) */
-const CRITICAL_PATTERNS: readonly string[] = [
-    'powershell.*-EncodedCommand',
-    'powershell.*-WindowStyle.*Hidden',
-    'cmd\\.exe.*\\/[cC]',
-    'wscript\\.exe',
-    'cscript\\.exe',
-    'DownloadString',
-    'DownloadFile',
-    'WebClient',
-    'System\\.Net\\.WebClient',
-    'Invoke-WebRequest.*-OutFile',
-    'wget|curl.*>',
-    'bitsadmin.*\\/transfer'
-] as const;
-
-/** Dangerous system operations (BLOCKED) */
-const DANGEROUS_COMMANDS: readonly string[] = [
-    'Stop-Computer',
-    'Restart-Computer', 
-    'Remove-LocalUser',
-    'New-LocalUser',
-    'Add-LocalGroupMember',
-    'Set-ExecutionPolicy',
-    'Clear-EventLog',
-    'wevtutil.*clear-log',
-    'Stop-Service.*Spooler|BITS|Winmgmt',
-    'Set-Service.*Disabled',
-    'Disable-WindowsOptionalFeature',
-    'Enable-WindowsOptionalFeature'
-] as const;
-
-/** Risky operations requiring confirmation */
-const RISKY_PATTERNS: readonly string[] = [
-    'Remove-Item(?!.*-WhatIf)',
-    'Move-Item(?!.*temp)',
-    'Copy-Item.*-Force', 
-    'New-Item.*-ItemType\\s+Directory',
-    'Set-Content',
-    'Add-Content',
-    'Out-File(?!.*temp)',
-    'Stop-Process(?!.*-WhatIf)',
-    'Start-Service',
-    'Restart-Service'
-] as const;
-
-/** Safe operations (always allowed) */
-const SAFE_PATTERNS: readonly string[] = [
-    '^Get-',
-    '^Show-',
-    '^Test-.*(?!-Computer)',
-    '^Out-Host',
-    '^Out-String', 
-    '^Write-Host',
-    '^Write-Output',
-    '^Write-Information',
-    '^Format-',
-    '^Select-',
-    '^Where-Object',
-    '^Sort-Object',
-    '^Group-Object',
-    '^Measure-Object'
-] as const;
-
-// ==============================================================================
-// POWERSHELL ALIAS DETECTION - Security threat analysis
-// ==============================================================================
-
-/** Common PowerShell aliases that could be security threats */
-const POWERSHELL_ALIAS_MAP: Record<string, { cmdlet: string; risk: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'; category: ThreatCategory }> = {
-    // File System Operations
-    'ls': { cmdlet: 'Get-ChildItem', risk: 'LOW', category: 'INFORMATION_GATHERING' },
-    'dir': { cmdlet: 'Get-ChildItem', risk: 'LOW', category: 'INFORMATION_GATHERING' },
-    'gci': { cmdlet: 'Get-ChildItem', risk: 'LOW', category: 'INFORMATION_GATHERING' },
-    'cat': { cmdlet: 'Get-Content', risk: 'LOW', category: 'INFORMATION_GATHERING' },
-    'type': { cmdlet: 'Get-Content', risk: 'LOW', category: 'INFORMATION_GATHERING' },
-    'gc': { cmdlet: 'Get-Content', risk: 'LOW', category: 'INFORMATION_GATHERING' },
-    'rm': { cmdlet: 'Remove-Item', risk: 'HIGH', category: 'FILE_OPERATION' },
-    'del': { cmdlet: 'Remove-Item', risk: 'HIGH', category: 'FILE_OPERATION' },
-    'erase': { cmdlet: 'Remove-Item', risk: 'HIGH', category: 'FILE_OPERATION' },
-    'rd': { cmdlet: 'Remove-Item', risk: 'HIGH', category: 'FILE_OPERATION' },
-    'ri': { cmdlet: 'Remove-Item', risk: 'HIGH', category: 'FILE_OPERATION' },
-    'cp': { cmdlet: 'Copy-Item', risk: 'MEDIUM', category: 'FILE_OPERATION' },
+// End of adapter file. (Legacy implementation fully removed.)
+// Intentionally no additional exports.
     'copy': { cmdlet: 'Copy-Item', risk: 'MEDIUM', category: 'FILE_OPERATION' },
     'cpi': { cmdlet: 'Copy-Item', risk: 'MEDIUM', category: 'FILE_OPERATION' },
     'mv': { cmdlet: 'Move-Item', risk: 'MEDIUM', category: 'FILE_OPERATION' },
@@ -685,46 +386,30 @@ class EnterprisePowerShellMCPServer {
             console.error(`≡ƒÜ¿ WARNING: Any MCP client can execute PowerShell commands!`);
             auditLog('WARNING', 'AUTH_DISABLED', 'Enterprise MCP Server started without authentication - development mode only', {
                 securityLevel: 'none',
-                risk: 'high',
-                mode: 'development'
-            });
-        }
-    }
-    
-    /** Log server configuration details */
-    private logServerConfiguration(): void {
-        console.error(`≡ƒ¢á∩╕Å  Server Name: enterprise-powershell-mcp-server`);
-        console.error(`≡ƒôª Server Version: 2.0.0 (Enterprise)`);
-        console.error(`≡ƒòÆ Started At: ${this.startTime.toISOString()}`);
-        console.error("=".repeat(60));
-        
-        // Enhanced monitoring instructions
-        console.error(`≡ƒôè ENTERPRISE AUDIT LOGGING ENABLED:`);
-        console.error(`≡ƒôü Log Location: ./logs/powershell-mcp-audit-${new Date().toISOString().split('T')[0]}.log`);
-        console.error(`≡ƒöì Real-time monitoring options:`);
-        console.error(`   ΓÇó PowerShell: .\\Simple-LogMonitor.ps1 -Follow`);
-        console.error(`   ΓÇó Separate Window: .\\Start-SimpleLogMonitor.ps1`);
-        console.error(`   ΓÇó Manual: Get-Content ./logs/powershell-mcp-audit-*.log -Wait -Tail 10`);
-        console.error(`🛡️  Enterprise Security: 5-level classification (SAFE/RISKY/DANGEROUS/CRITICAL/BLOCKED)`);
-        console.error(`ΓÜá∩╕Å  Threat Protection: Advanced pattern detection with comprehensive blocking`);
-        console.error(`≡ƒñû AI Agent Integration: Comprehensive help and testing framework`);
-        console.error("ΓöÇ".repeat(60));
-    }
-    
-    /** Validate authentication key */
-    private validateAuthKey(providedKey?: string): boolean {
-        // If no auth key is set, allow access (development mode)
-        if (!this.authKey) {
-            return true;
-        }
-        
-        // If auth key is set, require matching key
-        if (!providedKey || providedKey !== this.authKey) {
-            auditLog('WARNING', 'AUTH_FAILED', 'Authentication failed - invalid or missing key', {
-                hasProvidedKey: !!providedKey,
-                providedKeyLength: providedKey?.length || 0,
-                expectedKeyLength: this.authKey.length,
-                serverMode: 'enterprise'
+                /**
+                 * DEPRECATED ADAPTER: vscode-server-enterprise.ts
+                 * Unified implementation is in server.ts. This file will be removed later.
+                 */
+                import { EnterprisePowerShellMCPServer } from './server.js';
+                import { auditLog } from './logging/audit.js';
+
+                export { EnterprisePowerShellMCPServer } from './server.js';
+
+                async function main(){
+                    const authKey = process.env.MCP_AUTH_KEY;
+                    const server = new EnterprisePowerShellMCPServer(authKey);
+                    await server.start();
+                }
+
+                if (import.meta.url === `file://${process.argv[1]}` || /vscode-server-enterprise\.js$/i.test(process.argv[1]||'')) {
+                    main().catch(err => {
+                        console.error('[deprecated-entry] fatal startup error', err);
+                        auditLog('ERROR','SERVER_FATAL_DEPRECATED','startup failed',{ error: err instanceof Error ? err.message : String(err) });
+                        process.exit(1);
+                    });
+                }
+
+                // End of adapter file.
             });
             return false;
         }

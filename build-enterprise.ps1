@@ -15,9 +15,9 @@ if ($LASTEXITCODE -eq 0) {
     Get-ChildItem dist/vscode-server-enterprise.* | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize
     
     Write-Host "🚀 Enterprise Server is ready for deployment!" -ForegroundColor Green
-    Write-Host "   - Main server: dist/vscode-server-enterprise.js" -ForegroundColor Gray
+    Write-Host "   - Main server (deprecated path previously dist/vscode-server-enterprise.js): dist/server.js" -ForegroundColor Gray
     Write-Host "   - Type definitions: dist/vscode-server-enterprise.d.ts" -ForegroundColor Gray
-    Write-Host "   - Source map: dist/vscode-server-enterprise.js.map" -ForegroundColor Gray
+    Write-Host "   - Source map: dist/server.js.map" -ForegroundColor Gray
 } else {
     Write-Host "❌ Build failed!" -ForegroundColor Red
     exit 1

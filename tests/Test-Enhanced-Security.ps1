@@ -13,7 +13,7 @@ Write-Host "🔍 Testing Enhanced Security Features..." -ForegroundColor Cyan
 # Start server manually for debugging
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = "node"
-$psi.Arguments = "dist/vscode-server-enterprise.js"
+$psi.Arguments = "dist/server.js"
 $psi.UseShellExecute = $false
 $psi.RedirectStandardInput = $true
 $psi.RedirectStandardOutput = $true

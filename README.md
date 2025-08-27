@@ -1,7 +1,138 @@
-# PowerShell MCP Server (Enterprise Hardening / Minimal Core Aug 2025)
+﻿# PowerShell MCP Server (Enterprise Hardening / Minimal Core Aug 2025)
 
 ## Quick Start
+<!-- Removed duplicated section after merge conflict -->
 
+External timeout enforced (default 90s). Internal self-destruct (exit 124) can be disabled by setting `MCP_DISABLE_SELF_DESTRUCT=1` (useful for integration harnesses whose parent host crashes on injected timers). When enabled, a lightweight PowerShell `[System.Threading.Timer]` exits early (lead ~300ms) to minimize orphan processes. Post-kill verification escalates to process tree kill on Windows if needed. Metrics: duration, p95, TIMEOUTS counter.
+
+### CLI Flags
+
+| Flag | Effect | Env Equivalent |
+|------|--------|----------------|
+| `--disable-self-destruct` | Disables injected PowerShell self-destruct timer | `MCP_DISABLE_SELF_DESTRUCT=1` |
+| `--enable-self-destruct` | Re-enables timer if previously disabled | (unset `MCP_DISABLE_SELF_DESTRUCT`) |
+| `--quiet` | Suppresses verbose startup banners | `MCP_QUIET=1` |
+| `--minimal-stdio` | Launch experimental minimal JSON-RPC framer (diagnostic) | Forces `MCP_FRAMER_DEBUG=1` |
+| `--framer-debug` | Enable verbose framing logs in normal mode | `MCP_FRAMER_DEBUG=1` |
+| `--framer-stdio` | Enterprise server over custom framer (bypasses SDK transport) | Optional `MCP_FRAMER_DEBUG=1` |
+
+Minimal stdio mode:
+
+Use when diagnosing client initialize hangs or suspected framing bugs. Provides:
+
+1. Raw RX/TX framing logs (header/body lengths, hex preview of first bytes)
+2. Reduced surface (only initialize, tools/list, run-powershell)
+3. Forced confirmation bypass (always runs with confirmed=true) for quicker iteration
+
+Not production hardened: no size caps, auth, or metrics integration. Exit this mode before performance or security testing.
+
+Framer stdio mode:
+
+- Full enterprise tool surface, custom framing (diagnostics / isolation of SDK transport issues)
+- Uses same security & tool dispatcher, omits SDK StdioServerTransport
+- Prefer this over minimal for reproducing initialize issues with complete feature set
+
+Alpha Cleanup Notes:
+
+- Legacy MCP_INIT_DEBUG initialize sniffer removed; rely on --minimal-stdio / --framer-stdio plus --framer-debug for byte-level framing logs.
+- Duplicate framing instrumentation consolidated under MCP_FRAMER_DEBUG.
+- Future: unify tool schema list to eliminate maintenance duplication between framer and SDK paths.
+
+## Monitoring
+
+`./Simple-LogMonitor.ps1 -Follow` for rolling logs (when structured logging enabled). Metrics dashboard hosted by embedded HTTP server (URL logged on startup).
+
+### Metrics Dashboard (Expanded)
+
+Top counters now include (when feature flag `limits.capturePsProcessMetrics` or env `MCP_CAPTURE_PS_METRICS=1` is active and at least one PowerShell invocation has completed):
+
+- PS CPU AVG(s): Mean cumulative CPU seconds consumed per invocation (from in-process PowerShell host).
+- PS CPU P95(s): 95th percentile CPU seconds across invocations since last reset.
+- PS WS AVG(MB): Mean Working Set (resident) size in megabytes captured at invocation end.
+- PS WS P95(MB): 95th percentile Working Set MB.
+- PS Samples: Number of invocations contributing to the aggregates.
+
+These cards remain hidden until at least one sample arrives to avoid clutter when the feature is disabled.
+
+JSON snapshot (`/api/metrics`) fields:
+
+```jsonc
+{
+  "psSamples": 17,
+  "psCpuSecAvg": 0.42,
+  "psCpuSecP95": 0.88,
+  "psWSMBAvg": 92.1,
+  "psWSMBP95": 110.5
+}
+```
+
+Reset behavior: invoking any future explicit reset endpoint (planned) or process restart clears aggregates. Presently they persist for lifetime of server.
+
+Per-invocation row columns already list raw `PS CPU(s)` and `WS(MB)` for each run-powershell execution when metrics are enabled.
+
+## Unknown Command Learning
+
+UNKNOWN â†’ normalize â†’ queue â†’ review â†’ approve â†’ SAFE cache (`learned-safe.json`). Approved patterns immediately influence classification.
+
+## Tests (Jest)
+
+Run: `npm run test:jest`
+
+Coverage highlights: parity (tool surface), run-powershell behaviors (timeout, truncation), server-stats shape, working directory policy, syntax check, help topics, learning queue, classification expansions (git/gh, OS, alias), self-destruct timeout.
+
+### PowerShell Process Metrics Aggregation (Feature Flag)
+
+Enable via env `MCP_CAPTURE_PS_METRICS=1` (or config `limits.capturePsProcessMetrics: true`). Aggregated fields: `psSamples`, `psCpuSecAvg`, `psCpuSecP95`, `psWSMBAvg`, `psWSMBP95`.
+
+Test `ps-metrics-aggregation.test.js/ts` ensures these appear (dynamic metrics port detection). If failing, confirm the metrics server port (logs show `HTTP server listening on http://127.0.0.1:<port>`).
+
+Run it (ensure a fresh build so `dist/` contains latest instrumentation):
+
+```powershell
+npm run build
+$env:MCP_CAPTURE_PS_METRICS = '1'
+$env:METRICS_DEBUG = '1'
+npm run test:jest -- -t "aggregates ps metrics"
+```
+
+If it fails locally but succeeds in CI (or vice versa), suspect a stale `dist/` directory or an alternate server entrypoint excluding the instrumentation. Rebuild and re-run.
+
+## Roadmap (Excerpt)
+
+- Phase 2 (done): dynamic overrides, metrics, rate limiting.
+- Phase 3: cancellation, pluggable policies, signing, dynamic learned pattern integration.
+- Phase 4: log rotation, redaction, self-test tool, per-category metrics (VCS_*, OS_*), dashboard timeout charts.
+
+## Periodic Operational Checks
+
+Daily baseline, weekly metrics trend review, post-hardening test bursts, monthly metrics archive pruning.
+
+## Git Hooks
+
+Enable pre-commit:
+ 
+```powershell
+git config core.hooksPath .githooks
+```
+
+Disable:
+ 
+```powershell
+git config --unset core.hooksPath
+```
+
+## Contributing
+
+```powershell
+npm run compliance:check
+npm run build
+```
+
+## License
+
+Proprietary (internal hardening branch).
+
+<!-- duplicate Quick Start removed during merge resolution -->
 ```powershell
 npm install
 npm run build
