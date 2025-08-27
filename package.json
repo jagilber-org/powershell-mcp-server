@@ -9,7 +9,9 @@
   "build": "npm run build:only && jest --runInBand",
     
     "dev": "npm run build && node dist/index.js",
+    "prestart": "npm run build:only",
     "start": "node dist/index.js",
+    "prestart:enterprise": "npm run build:only",
     "start:enterprise": "node dist/server.js",
     "start:legacy": "node dist/vscode-server.js",
     "inspector": "npx @modelcontextprotocol/inspector node dist/index.js",
