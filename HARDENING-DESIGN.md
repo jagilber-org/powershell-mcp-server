@@ -1,173 +1,152 @@
-# PowerShell MCP Server Hardening & Enterprise Readiness Plan
+# PowerShell MCP Server Hardening & Enterprise Readiness Plan (Aug 2025 Update)
 
-## 1. Current State Summary
+## 1. Current State Summary (Post Timeout & Adaptive Enhancements)
 
-The project implements an enterprise-oriented PowerShell MCP server with:
+Now includes:
+- Deterministic termination classification (`terminationReason: timeout|overflow|killed|completed`)
+- Adaptive timeout extension loop with activity-based window & hard max
+- Strict hang semantics test (infinite ReadKey loop) preventing false positives
+- Health tool robust fallback parsing (structuredContent or content[0].text)
+- Overflow strategy retention (`overflowStrategy: return|truncate|terminate`)
+- Compliance + architecture docs aligned with new fields
 
-- 5-level security classification (SAFE/RISKY/DANGEROUS/CRITICAL/BLOCKED + UNKNOWN)
-- Pattern-based risk assessment (registry, system dirs, remote ops, dangerous commands)
-- Alias detection, unknown threat tracking
-- Audit logging with structured JSON-like entries (stderr + file)
-- Working directory support for command/script/file execution
-- AI agent help system & internal test harness
-- Compliance checker (MCP spec heuristic validation)
-- Universal log monitor script with multi-workspace discovery
+Legacy baseline (retained):
+- Multi-level security classification & confirmation workflow
+- Path enforcement, output truncation, audit logging (NDJSON + human)
+- Unknown threat tracking & learning queue
+- Metrics dashboard + SSE streaming
 
-Gaps / observations:
+## 2. New Capabilities (Delta Focus)
 
-- No dedicated README for onboarding
-- Security patterns static; no runtime configuration or allowlist/denylist override
-- Authentication optional; dev mode warning present but no rotation/logging of key usage
-- No rate limiting or concurrency control (possible resource abuse risk)
-- Timeout handling exists; no progressive backoff or cancellation token bridging
-- Tool responses not cryptographically signed (integrity not guaranteed if intercepted locally)
-- Limited validation on workingDirectory path (no explicit canonicalization / path traversal guard beyond spawn cwd)
-- No explicit memory / output size safeguards (large stdout could bloat logs)
-- Lack of structured JSON log writer (mix of console formatting + AUDIT lines)
-- Tests: integration tests cover workingDirectory; need broader coverage (security classification, auth on/off, timeout behavior)
-- No metrics / health endpoint (just console stats)
-- No plugin / extension boundary for adding patterns without code change
+| Capability | Purpose | Key Fields / Args | Tests |
+|------------|---------|-------------------|-------|
+| terminationReason | Canonical termination state | terminationReason | timeout/adaptive/fast-exit |
+| Adaptive Timeout | Extend runtime on active output | adaptiveTimeout / progressAdaptive, adaptiveExtendWindowMs, adaptiveExtendStepMs, adaptiveMaxTotalSec | adaptive timeout test |
+| Hang Guard | Prevent early success misclassification | Forced loop command, duration ≥ 80% threshold | timeout hardening hang test |
+| Fast Exit Control | Ensure quick commands not flagged as hang | Simple echo command baseline | fast-exit control test |
 
-## 2. Design Principles
+## 3. Problem Statements Addressed
 
-1. Security must not block legitimate admin & read operations (Get-*, discovery commands)
-2. Least privilege path usage (isolate writes to explicit working dirs / temp)
-3. Configurability: patterns, thresholds, auth, logging verbosity
-4. Observability: structured logs + metrics + testable invariants
-5. Fail-safe: classification errors default to UNKNOWN needing confirmation, not silent allow
-6. Performance: minimal overhead for SAFE commands
+| Previous Issue | Impact | Resolution |
+|----------------|--------|-----------|
+| Ambiguous termination cause | Complex downstream analytics | Added explicit terminationReason enum |
+| False hang detection risk | Unreliable timeout regression tests | Introduced infinite ReadKey loop + duration gate |
+| Adaptive extension absent | Either premature kill or unsafe large timeout | Activity-based extension within hard cap |
+| Health test flakiness | Intermittent CI failure | Fallback to structuredContent + safe JSON parse |
 
-## 3. Threat Model (Concise)
+## 4. Termination Classification Rules
 
-| Vector | Risk | Current Mitigation | Gap | Action |
-|--------|------|--------------------|-----|--------|
-| Destructive FS ops (Remove-Item) | High | Pattern classification (RISKY) | No granular scope control | Add path policy layer |
-| System directory tampering | Critical | Pattern block (System32 etc.) | Reliant on regex; lacks canonical path check | Normalize & verify real path |
-| Remote code execution (Invoke-Command) | High | Pattern block | Partial pattern coverage | Expand + dynamic config |
-| Data exfiltration via web cmdlets | High | Patterns (DownloadString etc.) | Missing for Invoke-RestMethod upload patterns | Extend pattern set |
-| Resource exhaustion (loops / large output) | Medium | Timeout only | No output cap / line limit | Add max stdout/lines limit |
-| Auth bypass (dev mode) | Medium | Warning only | No runtime toggle enforcement or audit of key absence | Config requireAuth flag + explicit refusal |
-| Privilege escalation via aliases | Medium | Alias detection | No quarantine suggestions | Add remediation guidance |
-| Path traversal workingDirectory | Medium | Direct pass-through | No explicit validation | Resolve + ensure inside allowed base |
+| Condition | terminationReason |
+|-----------|-------------------|
+| `timedOut` true OR exitCode 124 | timeout |
+| `overflow` true | overflow |
+| Non-zero exit (no timeout/overflow) | killed |
+| Exit 0 and no flags | completed |
+| Watchdog triggered, none set | killed |
 
-## 4. Proposed Enhancements (Phased)
+Mutual exclusivity enforced at finish; integrity tests validate.
 
-### Phase 1 (Foundation)
+## 5. Adaptive Timeout Algorithm
 
-- Add README with quick start, security modes, test commands
-- Implement configuration file (e.g., `mcp-config.json`) expansion: security.enforceAuth, security.allowedWriteRoots, limits.maxOutputKB, limits.maxLines
-- Add path normalization & allowed root enforcement before spawn
-- Add stdout/stderr size guard (truncate with notice & audit flag)
-- Add structured JSON audit writer (machine-readable) alongside human console output
-- Extend tests: SAFE command, RISKY requiring confirmation, BLOCKED command, output truncation
+1. Initialize base `configuredTimeoutMs`.
+2. Periodically compute remaining time.
+3. If remaining ≤ `extendWindowMs` AND recent activity within same window → extend by `extendStepMs`.
+4. Never exceed `adaptiveMaxTotalSec` (hard ceiling); internal self-destruct timer aligned to maximum potential runtime.
+5. Record `adaptiveExtensions` count; set `adaptiveExtended=true` if any extension applied.
 
-### Phase 2 (Dynamic Security & Observability)
+Edge Cases:
+- No output: no extension path triggers.
+- High-frequency output: multiple extensions until cap.
+- Near-cap remaining < extendStepMs: extension skipped.
 
-- Support dynamic pattern overrides via config (additionalSafe, additionalBlocked, suppressedPatterns)
-- Introduce rate limiting (simple in-memory token bucket per clientPid)
-- Add metrics object (command counts per level, avg duration) with a tool `server-stats`
-- Add tool `security-report` returning current patterns & counts of detections
-- Add environment variable overrides for CI/easy toggles
+## 6. Hang Detection Strategy
 
-### Phase 3 (Advanced Hardening)
+Command: `while($true) { try { [System.Console]::ReadKey($true) | Out-Null } catch { Start-Sleep -Milliseconds 100 } }`
 
-- Optional command signing / HMAC verification (agent-signed payload field)
-- Add persistent unknown threat cache with aging + summary on startup
-- Implement cancellation (expose a cancel tool referencing request id -> kills process)
-- Pluggable policy hooks: allow dropping a JS module in `policies/` that exports enrich/assess functions
-- Structured log shipping option (emit NDJSON file)
+Strengths:
+- Blocks on console read (no natural exit)
+- Minimal CPU with small sleep in catch path
+- Resistant to normal termination signals until enforced kill
 
-### Phase 4 (Reliability & Governance)
+Test Assertions:
+- `timedOut || exitCode===124`
+- `success === false`
+- Elapsed ≥ 0.8 * configuredTimeoutMs
+- `terminationReason === 'timeout'`
 
-- Add self-test tool that runs classification sanity checks
-- Add config schema validation with zod & on-load diagnostics
-- Provide redaction layer for sensitive env vars appearing in output
-- Add disk space guard for logs (rotate oldest when exceeding size cap)
+## 7. Test Inventory (Aug 2025)
 
-## 5. Implementation Outline (Phase 1 Detail)
+| Test File | Coverage |
+|-----------|----------|
+| run-powershell-timeout-hardening.test.js | Cap, deprecation warnings, forced hang semantics |
+| run-powershell-adaptive-timeout.test.js | Adaptive extension & terminationReason consistency |
+| run-powershell-fast-exit-control.test.js | Baseline fast completion (no hang misclassification) |
+| health.test.js | Health payload fallback parsing |
+| (Existing) truncation / overflow tests | Output capping integrity |
 
-1. Config Enhancements
+## 8. Observability Enhancements
 
-- Extend existing `mcp-config.json` or create if absent:
+Added terminationReason to audit & metrics publish event payload enabling future distribution slices. (Metrics counters for each reason deferred to later phase.)
 
-  ```jsonc
-  {
-    "security": {
-     "enforceAuth": true,
-     "allowedWriteRoots": ["${TEMP}", "./sandbox"],
-     "requireConfirmationForUnknown": true
-    },
-    "limits": {
-     "maxOutputKB": 256,
-     "maxLines": 2000,
-     "defaultTimeoutMs": 90000
-    },
-    "logging": {
-     "structuredAudit": true,
-     "truncateIndicator": "<TRUNCATED>"
-    }
-  }
-  ```
+## 9. Backward Compatibility
 
-1. Path Enforcement Utility
+- All new fields are additive; existing clients parsing stdout/stderr unaffected.
+- Blocked command inline response retained for legacy test harness patterns.
+- Deprecated timeout params still accepted with warnings.
 
-- Resolve workingDirectory with `fs.realpathSync`
-- Reject if outside allowed roots (config-driven) with securityAssessment=BLOCKED
+## 10. Risks / Mitigations
 
-1. Output Limiter
+| Risk | Mitigation |
+|------|------------|
+| Adaptive loop mis-extending on idle | Requires recent activity window | 
+| Race setting terminationReason | Single assignment inside guarded finish | 
+| Hang test flakiness | Deterministic command; duration threshold tolerant (80%) | 
+| Output change breaks health test | Structured fallback + safeJson parse | 
 
-- Stream listeners accumulate bytes/lines; if exceed, stop reading further, mark truncated
+## 11. Future Roadmap (Post-Update)
 
-1. Structured Audit
+Short-term:
+- Termination reason distribution metrics
+- Optional cancellation token bridging (client abort → kill)
+- terminationReasonDetail subcode (internalSelfDestruct vs watchdog vs escalate)
 
-- Introduce `writeAudit(entry: AuditLogEntry)` that writes JSON lines to file `./logs/audit-YYYY-MM-DD.ndjson`
-- Ensure safe fallback if write fails (console.warn)
+Mid-term:
+- Policy plugins for custom classification
+- Rich anomaly detection (spike in killed vs completed)
+- Structured redaction rules for stdout (PII / secrets scan)
 
-1. Tests
+Long-term:
+- Cryptographic signing of structuredContent
+- External policy evaluation service (OPA/Rego or WASM plugin)
+- Multi-tenant isolation profiles
 
-- Add `tests/test-security-classification.mjs`
-- Add `tests/test-output-truncation.mjs`
-- PowerShell script test: blocked path attempt
+## 12. Acceptance Criteria for This Update
 
-## 6. Data Structures
+| Criterion | Status |
+|----------|--------|
+| terminationReason emitted for every execution | ✅ |
+| Hang test enforces duration & non-success | ✅ |
+| Adaptive test shows effectiveTimeout > configured | ✅ |
+| Fast-exit test confirms terminationReason=completed | ✅ |
+| Docs updated (README, ARCHITECTURE, HARDENING) | ✅ |
+| Compliance summary includes new fields | ✅ |
 
-```ts
-interface Config {
-  security: { enforceAuth: boolean; allowedWriteRoots: string[]; requireConfirmationForUnknown: boolean };
-  limits: { maxOutputKB: number; maxLines: number; defaultTimeoutMs: number };
-  logging: { structuredAudit: boolean; truncateIndicator: string };
-}
-interface TruncationMeta { truncated: boolean; originalBytes: number; keptBytes: number; }
-```
+## 13. Rollback Plan
 
-## 7. Edge Cases & Handling
+- Revert `runPowerShell.ts` to prior commit hash (pre-terminationReason) if regression observed.
+- Disable adaptive by omitting `adaptiveTimeout` argument.
+- Retain hang test to detect regression early.
 
-- Missing config file: load defaults, emit warning
-- Invalid path in allowedWriteRoots: skip & warn
-- workingDirectory symlink: realpath before comparison
-- Output exactly on boundary: do not mark truncated
-- Truncation occurs: add `truncated: true` field in audit entry
-- Command blocked: exitCode null + reason in response
+## 14. Open Items
 
-## 8. Success Criteria (Phase 1)
+| Item | Priority |
+|------|----------|
+| Add metrics counters per terminationReason | High |
+| Add cancellation RPC & test | High |
+| Add terminationReasonDetail | Medium |
+| Add watchdog vs self-destruct histogram | Medium |
+| Structured secret redaction in stdout | Medium |
 
-- All existing tests pass + new tests added
-- Legitimate SAFE commands unaffected (<5% overhead) (qualitative for now)
-- RISKY without confirmation -> blocked with clear message
-- BLOCKED patterns fully prevented
-- Output > limits truncated with audit flag
-- Unauthorized workingDirectory outside allowed roots blocked
+## 15. Summary
 
-## 9. Rollback Strategy
-
-- Feature flags in config allow disabling new enforcement if regression found
-- Keep legacy behavior if `security.allowedWriteRoots` absent
-
-## 10. Future Considerations
-
-- External policy service integration
-- Multi-tenant auth token mapping / scopes
-- Telemetry export (OpenTelemetry traces)
-
----
-Generated plan ready for iterative implementation on branch `feature/hardening`.
+This hardening increment delivers deterministic termination semantics, reliable hang detection, and controlled adaptive execution windows without sacrificing clarity or backward compatibility. It lays groundwork for richer analytics and cancellation features while reinforcing test coverage against regression.
