@@ -29,6 +29,15 @@
   - `npm run compliance:report` - Detailed compliance report generation
   - `npm run precommit` - Automated compliance + build verification
 
+### 5. **Timeout Hardening & Health Tool Refinements (NEW)**
+- Added strict timeout cap enforcement with deprecation & long-timeout warnings
+- Introduced forced hang test requiring actual timeout (no early success path). Test asserts:
+  - `timedOut` flag or exitCode 124
+  - `success === false`
+  - Elapsed runtime >= 80% of configured timeout
+- Health tool test updated to accept either `structuredContent` or legacy `content[0].text` JSON payload
+- Added safer JSON parsing guard to avoid false negatives if format shifts
+
 ## Compliance Validation Points
 
 The system validates:
@@ -49,6 +58,8 @@ The system validates:
 - **Repository**: Clean, all hardcoded paths resolved
 - **Monitoring**: Universal log monitor working across workspaces
 - **Compliance**: Automated checking integrated into development workflow
+- **Timeout Hardening**: Tests cover cap, deprecation warnings, forced hang semantics
+- **Health Tool**: Resilient test ensures robust reporting across content formats
 
 ## Usage
 
@@ -71,5 +82,10 @@ The system is now fully compliant with MCP standards and includes:
 - ✅ Dynamic path resolution for portability
 - ✅ Enterprise-grade audit logging
 - ✅ Comprehensive MCP standard validation
+- ✅ Hardened timeout handling & health diagnostics
+
+Planned Enhancements:
+- Adaptive timeout extension behavior test coverage
+- Additional metrics assertions (watchdog vs self-destruct)
 
 **CRITICAL INSTRUCTION FULFILLED**: This project now adheres to and actively monitors compliance with MCP standards documented at https://modelcontextprotocol.io/
