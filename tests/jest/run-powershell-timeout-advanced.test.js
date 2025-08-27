@@ -31,7 +31,8 @@ describe('run-powershell advanced timeout + watchdog + adaptive', ()=>{
     const hangCmd = 'Write-Output "pre"; Wait-Event -SourceIdentifier never -Timeout 20; Write-Output "post"';
     rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command: hangCmd, confirmed:true, timeout:2 }},'advHang');
     const msg = await waitFor(res,'advHang',30000); srv.kill(); expect(msg).toBeTruthy();
-    const sc = msg.result?.structuredContent || {}; // structured content expected
+  const sc = msg.result?.structuredContent || {};
+  console.log('ADAPTIVE_SC:', JSON.stringify(sc,null,2)); // structured content expected
     expect(sc.configuredTimeoutMs).toBeGreaterThanOrEqual(2000);
     expect(sc.effectiveTimeoutMs).toBeGreaterThanOrEqual(sc.configuredTimeoutMs);
     expect(sc.timedOut || sc.exitCode === 124).toBe(true);
@@ -46,9 +47,9 @@ describe('run-powershell advanced timeout + watchdog + adaptive', ()=>{
     rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command: adaptiveCmd, confirmed:true, timeout:2, progressAdaptive:true, adaptiveExtendWindowMs:1500, adaptiveExtendStepMs:1500, adaptiveMaxTotalSec:8 }},'advAdaptive');
     const msg = await waitFor(res,'advAdaptive',20000); srv.kill(); expect(msg).toBeTruthy();
     const sc = msg.result?.structuredContent || {};
-    if(!(sc.success && sc.effectiveTimeoutMs > sc.configuredTimeoutMs && sc.adaptiveExtensions >=1)){
-      dumpAdaptive(sc);
-    }
+  console.log('ADAPTIVE_ADAPTIVE_SC:', JSON.stringify(sc,null,2));
+  if(sc.adaptiveLog) console.log('ADAPTIVE_LOG:', JSON.stringify(sc.adaptiveLog,null,2));
+  if(!(sc.success && sc.effectiveTimeoutMs > sc.configuredTimeoutMs && sc.adaptiveExtensions >=1)) dumpAdaptive(sc);
     expect(sc.success).toBe(true); // should complete successfully
     expect(sc.effectiveTimeoutMs).toBeGreaterThan(sc.configuredTimeoutMs); // extension occurred
     expect(sc.adaptiveExtensions).toBeGreaterThanOrEqual(1);

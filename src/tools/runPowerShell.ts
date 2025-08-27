@@ -58,9 +58,8 @@ export async function executePowerShell(command: string, timeout: number, workin
   const maxTotalBytes = (ENTERPRISE_CONFIG.limits.maxOutputKB || 512)*1024;
   let totalBytes=0; let overflow=false;
   let timedOut=false; let killEscalated=false; let killTreeAttempted=false; let killTreeResult: any = null; let watchdogTriggered=false; let resolved=false;
-  const graceAfterSignal = 1500;
-  const watchdogBase = adaptive ? adaptive.maxTotalMs : timeout;
-  const hardKillTotal = watchdogBase + graceAfterSignal + 2000;
+    const graceAfterSignal = 1500; // ms to wait after first TERM
+    const hardKillTotal = (adaptive ? adaptive.maxTotalMs : timeout) + graceAfterSignal + 2000; // absolute deadline for watchdog (ms)
 
   let lastActivity = Date.now();
   const adaptiveLog: any[] = [];
@@ -148,10 +147,12 @@ export async function executePowerShell(command: string, timeout: number, workin
   let adaptiveCheckTimer: NodeJS.Timeout | null = null;
   if(adaptive){
     const check = ()=>{
+      // instrumentation log point
+      const now0=Date.now();
       if(resolved || timedOut) return;
-      const now = Date.now();
-      const remaining = (start + currentExternalTimeout) - now;
-      const elapsed = now - start;
+  const now = Date.now();
+  const remaining = (start + currentExternalTimeout) - now;
+  const elapsed = now - start;
       if(remaining <= adaptive.extendWindowMs){
         const recentActivity = (now - lastActivity) <= adaptive.extendWindowMs;
         const canExtend = (recentActivity || firstAdaptiveDecision) && (elapsed + adaptive.extendStepMs) <= adaptive.maxTotalMs;
@@ -170,6 +171,7 @@ export async function executePowerShell(command: string, timeout: number, workin
         adaptiveCheckTimer = setTimeout(check, Math.min( adaptive.extendWindowMs/2, 1000));
       }
     };
+    check();
     adaptiveCheckTimer = setTimeout(check, Math.min(adaptive.extendWindowMs/2, 1000));
   }
 
