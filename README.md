@@ -15,6 +15,45 @@ $env:MCP_AUTH_KEY = "your-strong-key"
 npm run start:enterprise
 ```
 
+## PowerShell Host Selection (Deterministic)
+
+The server now uses a single synchronous resolver (`detectShell`) shared by all tools.
+
+Precedence order:
+1. Config override: `enterprise-config.json` -> `shellOverride` (absolute path)
+2. Environment override: `PWSH_EXE`
+3. Well-known installs (OS-specific):
+   - Windows: `Program Files/PowerShell/7/pwsh.exe`, `Program Files (x86)/PowerShell/7/pwsh.exe`, legacy `WindowsPowerShell` path
+   - *nix: `/usr/bin/pwsh`, `/usr/local/bin/pwsh`, `/snap/bin/pwsh`, `/opt/microsoft/powershell/7/pwsh`
+4. First `pwsh` found on PATH
+5. First legacy `powershell` found on PATH
+6. Fallback:
+   - Windows: `powershell.exe`
+   - *nix: `pwsh` (then relies on PATH resolution at spawn time)
+
+Inspection: Startup log emits:
+```
+🔑 PowerShell Host: <exe> (<source>)
+```
+`source` values: `configOverride | env:PWSH_EXE | wellKnown | path | path-legacy | fallback`.
+
+Health tool now includes shell info:
+```jsonc
+{"shell":{"exe":"C:/Program Files/PowerShell/7/pwsh.exe","source":"wellKnown"}}
+```
+
+Override examples:
+```powershell
+# Config override (enterprise-config.json)
+{
+  "shellOverride": "C:/Portable/pwsh/pwsh.exe"
+}
+
+# Environment override
+$env:PWSH_EXE = "C:/Portable/pwsh/pwsh.exe"
+```
+Environment wins only if config override absent or invalid.
+
 ## Available Tools (Core + Extended)
 
 | Tool | Purpose | Key Arguments |
@@ -65,7 +104,7 @@ Alias & OS classification:
 | VCS_MUTATION | `git commit`, `gh pr create` |
 | VCS_DESTRUCTIVE | `git push --force`, `git clean -xfd` |
 
-PowerShell Core preference: auto-detects `pwsh.exe` and falls back to `powershell.exe`. Override with `ENTERPRISE_CONFIG.powershell.executable`.
+PowerShell Core preference: auto-detects `pwsh.exe` and falls back to `powershell.exe`. Override with `shellOverride` or `$env:PWSH_EXE`.
 
 ### Tool Hardening (New)
 
@@ -329,6 +368,7 @@ Coverage highlights now include:
 - Truncation & overflow strategies
 - Working directory policy
 - Health tool resilience
+- Deterministic shell detection precedence & overrides
 
 ## Roadmap (Excerpt)
 
