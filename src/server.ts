@@ -1,4 +1,4 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 /**
  * Enterprise-Scale PowerShell MCP Server
  * Strongly-typed TypeScript implementation with comprehensive functionality
@@ -258,16 +258,16 @@ function logSystemInfo(): void {
     };
     
     console.error("=".repeat(60));
-    console.error("🚀 Enterprise PowerShell MCP Server Starting");
+    console.error("ðŸš€ Enterprise PowerShell MCP Server Starting");
     console.error("=".repeat(60));
-    console.error(`📍 Process ID: ${systemInfo.pid}`);
-    console.error(`🖥️  Platform: ${systemInfo.platform} (${systemInfo.arch})`);
-    console.error(`⚡ Node.js: ${systemInfo.nodeVersion}`);
-    console.error(`👤 User: ${systemInfo.user}@${systemInfo.hostname}`);
-    console.error(`📁 Working Directory: ${systemInfo.cwd}`);
-    console.error(`💾 Memory: ${systemInfo.freeMemory} free / ${systemInfo.totalMemory} total`);
-    console.error(`🔧 CPU: ${systemInfo.cpus}`);
-    console.error(`⏱️  System Uptime: ${systemInfo.uptime}`);
+    console.error(`ðŸ“ Process ID: ${systemInfo.pid}`);
+    console.error(`ðŸ–¥ï¸  Platform: ${systemInfo.platform} (${systemInfo.arch})`);
+    console.error(`âš¡ Node.js: ${systemInfo.nodeVersion}`);
+    console.error(`ðŸ‘¤ User: ${systemInfo.user}@${systemInfo.hostname}`);
+    console.error(`ðŸ“ Working Directory: ${systemInfo.cwd}`);
+    console.error(`ðŸ’¾ Memory: ${systemInfo.freeMemory} free / ${systemInfo.totalMemory} total`);
+    console.error(`ðŸ”§ CPU: ${systemInfo.cpus}`);
+    console.error(`â±ï¸  System Uptime: ${systemInfo.uptime}`);
     console.error("=".repeat(60));
     
     auditLog('INFO', 'SYSTEM_INFO', 'Enterprise MCP Server system information logged', systemInfo);
@@ -445,14 +445,14 @@ export class EnterprisePowerShellMCPServer {
                         if(code===0 && out){
                             try {
                                 const info = JSON.parse(out.trim());
-                                console.error(`🔑 PowerShell Host Detected: ${host} Edition=${info.Edition||'?'} Version=${info.Version||'?'}${info.CLR? ' CLR='+info.CLR:''}`);
+                                console.error(`ðŸ”‘ PowerShell Host Detected: ${host} Edition=${info.Edition||'?'} Version=${info.Version||'?'}${info.CLR? ' CLR='+info.CLR:''}`);
                                 auditLog('INFO','POWERSHELL_HOST','PowerShell host detected',{ host, edition: info.Edition, version: info.Version, clr: info.CLR });
                             } catch {
-                                console.error(`🔑 PowerShell Host Detected: ${host} (parse-failed raw=${out.trim().slice(0,80)})`);
+                                console.error(`ðŸ”‘ PowerShell Host Detected: ${host} (parse-failed raw=${out.trim().slice(0,80)})`);
                                 auditLog('INFO','POWERSHELL_HOST','PowerShell host detected (unparsed)',{ host, raw: out.trim().slice(0,200) });
                             }
                         } else if(code===0){
-                            console.error(`🔑 PowerShell Host Detected: ${host} (no output)`);
+                            console.error(`ðŸ”‘ PowerShell Host Detected: ${host} (no output)`);
                             auditLog('INFO','POWERSHELL_HOST','PowerShell host detected (no output)',{ host });
                         }
                     });
@@ -490,7 +490,7 @@ export class EnterprisePowerShellMCPServer {
                     if (metricsHttpServer.isStarted()) {
                         const dashPort = metricsHttpServer.getPort();
                         const url = `http://127.0.0.1:${dashPort}/dashboard`;
-                        console.error(`📊 Metrics Dashboard: ${url} (events, metrics, performance)`);
+                        console.error(`ðŸ“Š Metrics Dashboard: ${url} (events, metrics, performance)`);
                         auditLog('INFO', 'DASHBOARD_READY', 'Metrics dashboard available', { url, port: dashPort });
                         return; // stop without scheduling another
                     }
@@ -513,9 +513,9 @@ export class EnterprisePowerShellMCPServer {
     /** Log authentication configuration */
     private logAuthenticationStatus(): void {
         if (this.authKey) {
-            console.error(`🔒 AUTHENTICATION: Enabled (Enterprise Mode)`);
-            console.error(`🔑 Key Length: ${this.authKey.length} characters`);
-            console.error(`🔑 Key Preview: ${this.authKey.substring(0, 3)}${'*'.repeat(Math.max(0, this.authKey.length - 3))}`);
+            console.error(`ðŸ”’ AUTHENTICATION: Enabled (Enterprise Mode)`);
+            console.error(`ðŸ”‘ Key Length: ${this.authKey.length} characters`);
+            console.error(`ðŸ”‘ Key Preview: ${this.authKey.substring(0, 3)}${'*'.repeat(Math.max(0, this.authKey.length - 3))}`);
             auditLog('INFO', 'AUTH_ENABLED', 'Enterprise MCP Server started with key authentication', {
                 keyLength: this.authKey.length,
                 keyPreview: this.authKey.substring(0, 3) + '***',
@@ -523,8 +523,8 @@ export class EnterprisePowerShellMCPServer {
                 mode: 'enterprise'
             });
         } else {
-            console.error(`⚠️  AUTHENTICATION: Disabled (Development Mode)`);
-            console.error(`🚨 WARNING: Any MCP client can execute PowerShell commands!`);
+            console.error(`âš ï¸  AUTHENTICATION: Disabled (Development Mode)`);
+            console.error(`ðŸš¨ WARNING: Any MCP client can execute PowerShell commands!`);
             auditLog('WARNING', 'AUTH_DISABLED', 'Enterprise MCP Server started without authentication - development mode only', {
                 securityLevel: 'none',
                 risk: 'high',
@@ -535,22 +535,22 @@ export class EnterprisePowerShellMCPServer {
     
     /** Log server configuration details */
     private logServerConfiguration(): void {
-        console.error(`🛠️  Server Name: enterprise-powershell-mcp-server`);
-        console.error(`📦 Server Version: 2.0.0 (Enterprise)`);
-        console.error(`🕒 Started At: ${this.startTime.toISOString()}`);
+        console.error(`ðŸ› ï¸  Server Name: enterprise-powershell-mcp-server`);
+        console.error(`ðŸ“¦ Server Version: 2.0.0 (Enterprise)`);
+        console.error(`ðŸ•’ Started At: ${this.startTime.toISOString()}`);
         console.error("=".repeat(60));
         
         // Enhanced monitoring instructions
-        console.error(`📊 ENTERPRISE AUDIT LOGGING ENABLED:`);
-        console.error(`📁 Log Location: ./logs/powershell-mcp-audit-${new Date().toISOString().split('T')[0]}.log`);
-        console.error(`🔍 Real-time monitoring options:`);
-        console.error(`   • PowerShell: .\\Simple-LogMonitor.ps1 -Follow`);
-        console.error(`   • Separate Window: .\\Start-SimpleLogMonitor.ps1`);
-        console.error(`   • Manual: Get-Content ./logs/powershell-mcp-audit-*.log -Wait -Tail 10`);
-        console.error(`🛡️  Enterprise Security: 5-level classification (SAFE/RISKY/DANGEROUS/CRITICAL/BLOCKED)`);
-        console.error(`⚠️  Threat Protection: Advanced pattern detection with comprehensive blocking`);
-        console.error(`🤖 AI Agent Integration: Comprehensive help and testing framework`);
-        console.error("─".repeat(60));
+        console.error(`ðŸ“Š ENTERPRISE AUDIT LOGGING ENABLED:`);
+        console.error(`ðŸ“ Log Location: ./logs/powershell-mcp-audit-${new Date().toISOString().split('T')[0]}.log`);
+        console.error(`ðŸ” Real-time monitoring options:`);
+        console.error(`   â€¢ PowerShell: .\\Simple-LogMonitor.ps1 -Follow`);
+        console.error(`   â€¢ Separate Window: .\\Start-SimpleLogMonitor.ps1`);
+        console.error(`   â€¢ Manual: Get-Content ./logs/powershell-mcp-audit-*.log -Wait -Tail 10`);
+        console.error(`ðŸ›¡ï¸  Enterprise Security: 5-level classification (SAFE/RISKY/DANGEROUS/CRITICAL/BLOCKED)`);
+        console.error(`âš ï¸  Threat Protection: Advanced pattern detection with comprehensive blocking`);
+        console.error(`ðŸ¤– AI Agent Integration: Comprehensive help and testing framework`);
+        console.error("â”€".repeat(60));
     }
     
     /** Validate authentication key */
@@ -636,7 +636,7 @@ export class EnterprisePowerShellMCPServer {
                         id: `susp-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
                         level: 'CRITICAL',
                         durationMs: 0,
-                        blocked: false, // not yet blocked by policy – classification continues
+                        blocked: false, // not yet blocked by policy â€“ classification continues
                         truncated: false,
                         timestamp: new Date().toISOString(),
                         preview: command.substring(0,120) + ' [SUSPICIOUS]',
@@ -786,7 +786,7 @@ export class EnterprisePowerShellMCPServer {
         }
         
         // Continue with existing security patterns
-        // 🚫 BLOCKED PATTERNS - These commands are completely blocked
+        // ðŸš« BLOCKED PATTERNS - These commands are completely blocked
         
         // Phase 2 dynamic pattern merging (lazy init)
         if (!this.mergedPatterns) {
@@ -883,7 +883,7 @@ export class EnterprisePowerShellMCPServer {
             }
         }
         
-        // 🔵 UNKNOWN - Default for unclassified commands with threat tracking
+        // ðŸ”µ UNKNOWN - Default for unclassified commands with threat tracking
         const unknownAssessment: SecurityAssessment = {
             level: 'UNKNOWN',
             risk: 'MEDIUM',
@@ -951,12 +951,12 @@ ${content}
     generateHelpForAIAgents(topic?: string): string {
     const helpSections = {
             overview: `
-# 🤖 Enterprise PowerShell MCP Server - AI Agent Guide
+# ðŸ¤– Enterprise PowerShell MCP Server - AI Agent Guide
 
-## 🎯 Purpose
+## ðŸŽ¯ Purpose
 This MCP server provides secure, enterprise-grade PowerShell command execution with advanced security classification, comprehensive audit logging, and AI agent optimization.
 
-## 🔧 Available Tools
+## ðŸ”§ Available Tools
 - **powershell-command**: Execute single PowerShell commands
 - **powershell-script**: Execute multi-line PowerShell scripts  
 - **powershell-file**: Execute PowerShell script files
@@ -967,20 +967,20 @@ This MCP server provides secure, enterprise-grade PowerShell command execution w
 - **help**: Get comprehensive help and guidance
 - **ai-agent-test**: Run validation tests for server functionality
 
-## 🛡️ Security Levels
-- **SAFE** (🟢): Read-only operations, execute freely
-- **RISKY** (🟡): Requires confirmation (add confirmed: true)
-- **DANGEROUS** (🟣): Blocked - system modifications
-- **CRITICAL** (🔴): Blocked - security threats
-- **BLOCKED** (🚫): Completely prohibited operations`,
+## ðŸ›¡ï¸ Security Levels
+- **SAFE** (ðŸŸ¢): Read-only operations, execute freely
+- **RISKY** (ðŸŸ¡): Requires confirmation (add confirmed: true)
+- **DANGEROUS** (ðŸŸ£): Blocked - system modifications
+- **CRITICAL** (ðŸ”´): Blocked - security threats
+- **BLOCKED** (ðŸš«): Completely prohibited operations`,
 
             security: `
-# 🛡️ Enterprise Security Framework
+# ðŸ›¡ï¸ Enterprise Security Framework
 
 ## Security Classification System
 This server implements a 5-level security classification system:
 
-### 🟢 SAFE Commands (Execute Freely)
+### ðŸŸ¢ SAFE Commands (Execute Freely)
 - Get-* commands (Get-Date, Get-Process, Get-Location)
 - Show-* commands  
 - Test-* commands (read-only)
@@ -988,37 +988,37 @@ This server implements a 5-level security classification system:
 - Write-* commands (Write-Host, Write-Output)
 - Format-*, Select-*, Where-Object, Sort-Object
 
-### 🟡 RISKY Commands (Require Confirmation)
+### ðŸŸ¡ RISKY Commands (Require Confirmation)
 - File operations: Remove-Item, Move-Item, Copy-Item
 - Service operations: Start-Service, Restart-Service
 - Process management: Stop-Process
 - Add 'confirmed: true' to parameter to proceed
 
-### 🟣 DANGEROUS Commands (Blocked)
+### ðŸŸ£ DANGEROUS Commands (Blocked)
 - System modifications: Stop-Computer, Restart-Computer
 - User management: New-LocalUser, Remove-LocalUser
 - Service disabling: Set-Service Disabled
 - Event log clearing: Clear-EventLog
 
-### 🔴 CRITICAL Threats (Blocked)  
+### ðŸ”´ CRITICAL Threats (Blocked)  
 - Hidden execution: powershell -WindowStyle Hidden
 - Encoded commands: powershell -EncodedCommand
 - Downloads: DownloadString, WebClient
 - Binary execution: cmd.exe, wscript.exe
 
-### 🚫 BLOCKED Operations
+### ðŸš« BLOCKED Operations
 - Registry modifications (HKLM, HKCU)
 - System file operations (C:\\Windows\\System32)
 - Root drive operations (Format-Volume C:)
 - Remote machine modifications`,
 
             monitoring: `
-# 📊 Enterprise Monitoring & Audit System
+# ðŸ“Š Enterprise Monitoring & Audit System
 
 ## Comprehensive Logging
 - **MCP Standard Logging**: notifications/message for real-time monitoring
 - **File-based Audit Trail**: ./logs/powershell-mcp-audit-YYYY-MM-DD.log
-- **Process Tracking**: Client PID → Server PID lineage
+- **Process Tracking**: Client PID â†’ Server PID lineage
 - **Security Classification**: Every command classified and logged
 
 ## Real-time Monitoring Options
@@ -1045,7 +1045,7 @@ This server implements a 5-level security classification system:
 - Real-time threat detection alerts`,
 
             authentication: `
-# 🔐 Enterprise Authentication System
+# ðŸ” Enterprise Authentication System
 
 ## Dual-Mode Operation
 - **Development Mode**: No authentication (authKey not set)
@@ -1077,7 +1077,7 @@ Include authKey in all tool requests when server requires it:
 - Implement additional authorization layers for sensitive operations`,
 
             examples: `
-# 📚 AI Agent Usage Examples
+# ðŸ“š AI Agent Usage Examples
 
 ## Basic Safe Commands
 \`\`\`json
@@ -1135,7 +1135,7 @@ Include authKey in all tool requests when server requires it:
 \`\`\``,
 
             capabilities: `
-# 🚀 Enterprise Capabilities & Features
+# ðŸš€ Enterprise Capabilities & Features
 
 ## Core Functionality
 - **Secure Command Execution**: Enterprise-grade PowerShell command processing
@@ -1162,7 +1162,7 @@ Include authKey in all tool requests when server requires it:
 - **Configuration Management**: Environment-specific settings`,
 
             'ai-agents': `
-# 🤖 AI Agent Integration Guide
+# ðŸ¤– AI Agent Integration Guide
 
 ## Optimal Usage Patterns
 1. **Always check help first**: Use help tool to understand capabilities
@@ -1240,7 +1240,7 @@ Use the ai-agent-test tool to validate functionality:
 \`\`\``,
 
             'working-directory': `
-# 📁 Working Directory Management
+# ðŸ“ Working Directory Management
 
 ## Overview
 Control working directory enforcement policy to restrict where PowerShell commands can execute.
@@ -1284,7 +1284,7 @@ When **disabled** (default): Commands can use any workingDirectory without restr
 - Use dedicated sandbox directories for untrusted operations
 - Always specify workingDirectory for file operations`,
             prompts: `
-# 🧩 Prompt Library & Reproduction Guide
+# ðŸ§© Prompt Library & Reproduction Guide
 
 ## Purpose
 Provides deterministic, phase-based prompts to recreate this project from an empty workspace. Useful for audit, portability, disaster recovery, or spinning up a fresh environment.
@@ -1651,7 +1651,8 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
         } catch(error){
             auditLog('ERROR','TOOL_CALL_FAIL','Tool invocation failed',{ name, error: error instanceof Error ? error.message : String(error), requestId });
             publish(false,'exception');
-            return { content:[{ type:'text', text: JSON.stringify({ error: error instanceof Error ? error.message : String(error) }) }] };
+            if(error && error.name==='McpError'){ throw error; }
+            return { error: { code: (error.code ?? -32000), message: (error instanceof Error ? error.message : String(error)) } };
         }
     }
     
@@ -1694,10 +1695,10 @@ Derived from '##' headings inside docs/AGENT-PROMPTS.md (Phase 0..13 plus compan
         
         await this.server.connect(transport);
         
-        console.error(`✅ ENTERPRISE MCP SERVER CONNECTED SUCCESSFULLY`);
-        console.error(`🔗 Transport: STDIO`);
-        console.error(`📡 Ready for AI agent requests`);
-        console.error(`🛡️  Enterprise security enforcement active`);
+        console.error(`âœ… ENTERPRISE MCP SERVER CONNECTED SUCCESSFULLY`);
+        console.error(`ðŸ”— Transport: STDIO`);
+        console.error(`ðŸ“¡ Ready for AI agent requests`);
+        console.error(`ðŸ›¡ï¸  Enterprise security enforcement active`);
         console.error("=".repeat(60));
         
         auditLog('INFO', 'SERVER_READY', 'Enterprise MCP Server successfully connected and ready', {
@@ -1717,14 +1718,14 @@ async function main() {
         const server = new EnterprisePowerShellMCPServer(authKey);
         
         console.error("=".repeat(60));
-        console.error(`🚀 STARTING ENTERPRISE POWERSHELL MCP SERVER`);
-        console.error(`📅 Start Time: ${new Date().toISOString()}`);
-        console.error(`🔢 Process ID: ${process.pid}`);
-        console.error(`📈 Node.js Version: ${process.version}`);
-        console.error(`🏢 Server Version: 2.0.0 (Enterprise TypeScript)`);
-        console.error(`🔐 Authentication: ${authKey ? 'ENTERPRISE MODE (Key Required)' : 'DEVELOPMENT MODE'}`);
-        console.error(`🛡️  Security: 5-Level Classification System Active`);
-        console.error(`📊 Audit Logging: Comprehensive Enterprise Trail`);
+        console.error(`ðŸš€ STARTING ENTERPRISE POWERSHELL MCP SERVER`);
+        console.error(`ðŸ“… Start Time: ${new Date().toISOString()}`);
+        console.error(`ðŸ”¢ Process ID: ${process.pid}`);
+        console.error(`ðŸ“ˆ Node.js Version: ${process.version}`);
+        console.error(`ðŸ¢ Server Version: 2.0.0 (Enterprise TypeScript)`);
+        console.error(`ðŸ” Authentication: ${authKey ? 'ENTERPRISE MODE (Key Required)' : 'DEVELOPMENT MODE'}`);
+        console.error(`ðŸ›¡ï¸  Security: 5-Level Classification System Active`);
+        console.error(`ðŸ“Š Audit Logging: Comprehensive Enterprise Trail`);
         console.error("=".repeat(60));
         
         // Start the server
@@ -1732,7 +1733,7 @@ async function main() {
         
         // Keep the process alive
         process.on('SIGINT', () => {
-            console.error('\n🛑 Received SIGINT, shutting down gracefully...');
+            console.error('\nðŸ›‘ Received SIGINT, shutting down gracefully...');
             auditLog('INFO', 'SERVER_SHUTDOWN', 'Enterprise MCP Server shutdown initiated by SIGINT', {
                 uptime: Date.now() - server.startTime.getTime() + 'ms',
                 commandsProcessed: server.commandCount
@@ -1741,7 +1742,7 @@ async function main() {
         });
         
         process.on('SIGTERM', () => {
-            console.error('\n🛑 Received SIGTERM, shutting down gracefully...');
+            console.error('\nðŸ›‘ Received SIGTERM, shutting down gracefully...');
             auditLog('INFO', 'SERVER_SHUTDOWN', 'Enterprise MCP Server shutdown initiated by SIGTERM', {
                 uptime: Date.now() - server.startTime.getTime() + 'ms',
                 commandsProcessed: server.commandCount
@@ -1749,10 +1750,10 @@ async function main() {
             process.exit(0);
         });
         
-        console.error(`⏳ Server running... Press Ctrl+C to shutdown`);
+        console.error(`â³ Server running... Press Ctrl+C to shutdown`);
         
     } catch (error) {
-        console.error('💥 FATAL ERROR starting Enterprise MCP Server:');
+        console.error('ðŸ’¥ FATAL ERROR starting Enterprise MCP Server:');
         console.error(error instanceof Error ? error.message : String(error));
         if (error instanceof Error && error.stack) {
             console.error(error.stack);
@@ -1774,7 +1775,7 @@ const isMainModule = import.meta.url === `file://${process.argv[1]}` ||
 
 if (isMainModule) {
     main().catch((error) => {
-        console.error('💥 Unhandled error in main:');
+        console.error('ðŸ’¥ Unhandled error in main:');
         console.error(error instanceof Error ? error.message : String(error));
         process.exit(1);
     });

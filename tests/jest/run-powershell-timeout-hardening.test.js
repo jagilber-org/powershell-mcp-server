@@ -28,6 +28,6 @@ describe('run-powershell timeout hardening', ()=>{
     const msg = res['hard2']; expect(msg).toBeTruthy();
     // Expect error path due to McpError on validation
     const errTxt = (msg.error?.message || '').toLowerCase();
-    expect(errTxt.length > 0 || msg.error || (msg.result?.content?.[0]?.text||"").includes("Timeout") ).toBe(true);
+    expect(errTxt.includes("exceeds max allowed") || (msg.result?.content?.[0]?.text||"").includes("exceeds max allowed")).toBe(true);
   }, 12000);
 });
