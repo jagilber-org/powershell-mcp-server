@@ -40,6 +40,28 @@
         "confirmation"
       ],
       "checksum": "7d079da4fa78894d57a1c43c7802d794100ccf416e8502e6c35a742384fd0535"
+    },
+    {
+      "id": "workflow.mcp_tools_before_terminal",
+      "text": "Always attempt required operations through available MCP tools BEFORE prompting the user to run or executing any raw terminal command.",
+      "rationale": "Ensures structured, auditable, policy-compliant interactions; prevents flow breaks from premature terminal prompts.",
+      "category": "tooling",
+      "priority": 95,
+      "criticality": "blocking",
+      "scope": "session",
+      "target": "agent",
+      "status": "active",
+      "supersedes": [],
+      "examples": [
+        "List repo files via MCP GitHub get_file_contents or search before asking user to open terminal.",
+        "Use mcp_github_get_file_contents to read a file instead of a cat command."
+      ],
+      "tags": [
+        "mcp",
+        "tools-first",
+        "governance"
+      ],
+      "checksum": "PLACEHOLDER"
     }
   ]
 }
