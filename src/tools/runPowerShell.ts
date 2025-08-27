@@ -1,4 +1,4 @@
-// Unified run-powershell tool implementation extracted from server
+﻿// Unified run-powershell tool implementation extracted from server
 import { classifyCommandSafety } from '../security/classification.js';
 import { auditLog } from '../logging/audit.js';
 import { ENTERPRISE_CONFIG } from '../core/config.js';
@@ -210,10 +210,18 @@ export async function runPowerShellTool(args: any){
   if(assessment.requiresPrompt && !args.confirmed) throw new McpError(ErrorCode.InvalidRequest, 'Confirmation required: '+assessment.reason);
   // Timeout is always interpreted as seconds (agent contract) then converted to ms; default config already in ms
   let timeoutSeconds = args.aiAgentTimeoutSec || args.aiAgentTimeout || args.timeout;
-  if(typeof timeoutSeconds !== 'number' || timeoutSeconds <= 0){
-    timeoutSeconds = (ENTERPRISE_CONFIG.limits.defaultTimeoutMs || 90000) / 1000;
-  }
-  const timeout = Math.round(timeoutSeconds * 1000);
+const warnings: string[] = [];
+const MAX_TIMEOUT_SECONDS = ENTERPRISE_CONFIG.limits?.maxTimeoutSeconds ?? 600;
+const usedLegacy = (!!args.aiAgentTimeout && !args.aiAgentTimeoutSec);
+const usedGeneric = (!!args.timeout && !args.aiAgentTimeoutSec && !args.aiAgentTimeout);
+if(usedLegacy){ warnings.push("Parameter 'aiAgentTimeout' is deprecated; use 'aiAgentTimeoutSec' (seconds)."); }
+if(usedGeneric){ warnings.push("Parameter 'timeout' is deprecated; use 'aiAgentTimeoutSec' (seconds)."); }
+if(typeof timeoutSeconds !== 'number' || timeoutSeconds <= 0){
+  timeoutSeconds = (ENTERPRISE_CONFIG.limits.defaultTimeoutMs || 90000) / 1000;
+}
+if(timeoutSeconds > MAX_TIMEOUT_SECONDS){ throw new McpError(ErrorCode.InvalidParams, Timeout s exceeds max allowed s); }
+if(timeoutSeconds >= 60){ warnings.push(Long timeout s may reduce responsiveness.); }
+const timeout = Math.round(timeoutSeconds * 1000);
   // Adaptive timeout configuration
   const adaptiveEnabled = !!args.adaptiveTimeout || !!args.progressAdaptive;
   let adaptiveConfig: AdaptiveConfig | undefined = undefined;
@@ -257,7 +265,7 @@ export async function runPowerShellTool(args: any){
   metricsRegistry.record({ level: assessment.level as any, blocked: assessment.blocked, durationMs: result.duration_ms || 0, truncated: !!result.truncated });
   try { metricsHttpServer.publishExecution({ id:`exec-${Date.now()}`, level: assessment.level, durationMs: result.duration_ms||0, blocked: assessment.blocked, truncated: !!result.truncated, timestamp:new Date().toISOString(), preview: command.substring(0,120), success: result.success, exitCode: result.exitCode, confirmed: args.confirmed||false, timedOut: result.timedOut, toolName: 'run-powershell' }); } catch {}
   auditLog('INFO','POWERSHELL_EXEC','Command executed', { level: assessment.level, reason: assessment.reason, durationMs: result.duration_ms, success: result.success });
-  const responseObject = { ...result, securityAssessment: assessment };
+  const responseObject = { ...result, securityAssessment: assessment, originalTimeoutSeconds: timeoutSeconds, warnings };
   // To reduce duplicate rendering in clients that show both `content` and `structuredContent`,
   // only place human-readable stream data in `content` (stdout/stderr) while full metadata lives in structuredContent.
   const content:any[] = [];
@@ -272,3 +280,4 @@ export async function runPowerShellTool(args: any){
   }
   return { content, structuredContent: responseObject };
 }
+
