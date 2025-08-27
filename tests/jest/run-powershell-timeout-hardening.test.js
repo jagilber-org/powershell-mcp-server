@@ -31,19 +31,13 @@ describe('run-powershell timeout hardening', ()=>{
     const srv = startServer(); await waitForReady(srv); const res = collect(srv);
     // Infinite loop waiting on ReadKey keeps process active unless externally killed.
     const hangCommand = 'while($true) { try { [System.Console]::ReadKey($true) | Out-Null } catch { Start-Sleep -Milliseconds 100 } }';
-    // Use short timeout (2s) to force timeout path; confirmed true to bypass confirmation requirement.
     rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command: hangCommand, confirmed:true, timeout:2 }},'hardHang');
     for(let i=0;i<120;i++){ if(res['hardHang']) break; await new Promise(r=> setTimeout(r,250)); }
     srv.kill();
     const msg = res['hardHang']; expect(msg).toBeTruthy();
     const structured = msg.result?.structuredContent || {};
-    // Expect either timedOut flag or internalSelfDestruct exit code 124
     expect(structured.timedOut || structured.exitCode === 124).toBe(true);
-    // If adaptive not enabled we still expect effectiveTimeoutMs >= configuredTimeoutMs
-    if(structured.configuredTimeoutMs){
-      expect(structured.effectiveTimeoutMs >= structured.configuredTimeoutMs).toBe(true);
-    }
-    // Should not report success
+    if(structured.configuredTimeoutMs){ expect(structured.effectiveTimeoutMs >= structured.configuredTimeoutMs).toBe(true); }
     expect(structured.success).toBe(false);
   }, 35000);
 });
