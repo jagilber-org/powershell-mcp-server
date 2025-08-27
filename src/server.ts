@@ -26,6 +26,7 @@ import { recordUnknownCandidate, aggregateCandidates, resolveLearningConfig, Lea
 import { ENTERPRISE_CONFIG } from './core/config.js';
 import { auditLog, setMCPServer } from './logging/audit.js';
 import { runPowerShellTool } from './tools/runPowerShell.js';
+import { detectShell } from './core/shellDetection.js';
 
 // === Support Types ===
 type SecurityLevel = 'SAFE' | 'RISKY' | 'DANGEROUS' | 'CRITICAL' | 'UNKNOWN' | 'BLOCKED';
@@ -92,14 +93,19 @@ export class EnterprisePowerShellMCPServer {
   private threatStats: ThreatTrackingStats = { totalUnknownCommands:0, uniqueThreats:0, highRiskThreats:0, aliasesDetected:0, sessionsWithThreats:0 };
   private mergedPatterns?: { safe:RegExp[]; risky:RegExp[]; blocked:RegExp[] };
   private rateBuckets: Map<number,{ tokens:number; lastRefill:number }> = new Map();
+  private shellInfo = detectShell();
 
   constructor(authKey?: string){
-    this.authKey = authKey; this.startTime = new Date(); logSystemInfo(); this.detectHost();
+    this.authKey = authKey; this.startTime = new Date(); logSystemInfo(); this.logShell();
     this.server = new Server({ name:'enterprise-powershell-mcp-server', version:'2.0.0' },{ capabilities:{ tools:{ listChanged:true } } });
     setMCPServer(this.server); metricsHttpServer.start(); this.deferDashboardLog(); this.logAuth(); this.logConfig(); this.setupHandlers();
   }
 
-  private detectHost(){ (async()=>{ const hosts=['pwsh.exe','powershell.exe']; for(const h of hosts){ try { const p=spawn(h,['-NoLogo','-NoProfile','-Command','"$PSVersionTable.PSEdition"'],{windowsHide:true}); let out=''; p.stdout.on('data',d=> out+=d.toString()); p.on('close',c=>{ if(c===0){ console.error(`🔑 PowerShell Host: ${h} (${out.trim()||'unknown'})`); auditLog('INFO','POWERSHELL_HOST','Detected',{ host:h, raw: out.trim() }); } }); break; } catch{} } })(); }
+  private logShell(){
+    console.error(`🔑 PowerShell Host: ${this.shellInfo.exe} (${this.shellInfo.source})`);
+    auditLog('INFO','POWERSHELL_HOST','Detected', { host:this.shellInfo.exe, source:this.shellInfo.source, tried:this.shellInfo.tried });
+  }
+
   private deferDashboardLog(){ let attempts=0; const tick=()=>{ attempts++; try{ if(metricsHttpServer.isStarted()){ const port=metricsHttpServer.getPort(); console.error(`📊 Metrics Dashboard: http://127.0.0.1:${port}/dashboard`); auditLog('INFO','DASHBOARD_READY','Metrics dashboard',{port}); return; } }catch{} if(attempts<12) setTimeout(tick,250); }; setTimeout(tick,250); }
   private logAuth(){ if(this.authKey){ console.error('🔒 AUTHENTICATION: Enabled'); auditLog('INFO','AUTH_ENABLED','Key auth enabled',{ len:this.authKey.length }); } else { console.error('⚠️  AUTHENTICATION: Disabled (dev)'); auditLog('WARNING','AUTH_DISABLED','Development mode'); } }
   private logConfig(){ console.error('🛡️  Security classification active'); }
@@ -136,7 +142,7 @@ export class EnterprisePowerShellMCPServer {
         case 'threat-analysis': { const threats=Array.from(this.unknownThreats.values()).sort((a,b)=> b.count-a.count); publish(true); return { content:[{ type:'text', text: JSON.stringify({ summary:this.threatStats, threats }, null, 2) }] }; }
         case 'learn': { const action=args.action; if(action==='list'){ const data=aggregateCandidates(args.limit, args.minCount); publish(true,'list'); return { content:[{ type:'text', text: JSON.stringify({ candidates:data }, null, 2) }] }; } else if(action==='recommend'){ const rec=recommendCandidates(args.limit, args.minCount); publish(true,'recommend'); return { content:[{ type:'text', text: JSON.stringify({ recommendations:rec }, null, 2) }] }; } else if(action==='queue'){ const res=queueCandidates(args.normalized||[]); publish(true,'queue'); return { content:[{ type:'text', text: JSON.stringify({ queued:res }, null, 2) }] }; } else if(action==='approve'){ const res=approveQueuedCandidates(args.normalized||[]); publish(true,'approve'); return { content:[{ type:'text', text: JSON.stringify({ approved:res }, null, 2) }] }; } else if(action==='remove'){ const res=removeFromQueue(args.normalized||[]); publish(true,'remove'); return { content:[{ type:'text', text: JSON.stringify({ removed:res }, null, 2) }] }; } publish(false,'unknown-learn-action'); return { content:[{ type:'text', text: JSON.stringify({ error:'Unknown learn action' }) }] }; }
         case 'help': { const topic=(args.topic||'').toLowerCase(); const help:Record<string,string>={ security:'Security classification system: SAFE,RISKY,DANGEROUS,CRITICAL,UNKNOWN,BLOCKED.', monitoring:'Use server-stats for metrics; threat-analysis for unknown commands.', authentication:'Set MCP_AUTH_KEY env var to enable key requirement.', examples:'run-powershell { command:"Get-Process | Select -First 1" }', 'working-directory':'Policy enforced roots: '+(ENTERPRISE_CONFIG.security.allowedWriteRoots||[]).join(', '), timeouts:'Timeout parameters are SECONDS. Use "timeout". Alias "aiAgentTimeoutSec" accepted (legacy: aiAgentTimeout). Default=' + ((ENTERPRISE_CONFIG.limits.defaultTimeoutMs||90000)/1000)+'s.' }; if(topic && help[topic]){ publish(true,'topic'); return { content:[{ type:'text', text: help[topic] }] }; } publish(true,'all'); return { content:[{ type:'text', text: JSON.stringify(help,null,2) }] }; }
-        case 'health': { const mem=process.memoryUsage(); const uptimeSec = Math.round((Date.now()-this.startTime.getTime())/1000); const json={ uptimeSec, memory:{ rss: mem.rss, heapUsed: mem.heapUsed, heapTotal: mem.heapTotal }, config:{ timeoutMs: ENTERPRISE_CONFIG.limits.defaultTimeoutMs || 90000 } }; publish(true); return { content:[{ type:'text', text: JSON.stringify(json) }], structuredContent: json }; }
+        case 'health': { const mem=process.memoryUsage(); const uptimeSec = Math.round((Date.now()-this.startTime.getTime())/1000); const json={ uptimeSec, memory:{ rss: mem.rss, heapUsed: mem.heapUsed, heapTotal: mem.heapTotal }, config:{ timeoutMs: ENTERPRISE_CONFIG.limits.defaultTimeoutMs || 90000 }, shell:{ exe:this.shellInfo.exe, source:this.shellInfo.source } }; publish(true); return { content:[{ type:'text', text: JSON.stringify(json) }], structuredContent: json }; }
         default: publish(false,'unknown-tool'); return { content:[{ type:'text', text: JSON.stringify({ error:'Unknown tool: '+name }) }] }; }
     } catch(error){ auditLog('ERROR','TOOL_CALL_FAIL','Tool invocation failed',{ name, error: error instanceof Error? error.message: String(error), requestId }); publish(false,'exception'); if(error && (error as any).name==='McpError'){ throw error; } return { content:[{ type:'text', text: JSON.stringify({ error: error instanceof Error? error.message:String(error) }) }] }; }
   }
