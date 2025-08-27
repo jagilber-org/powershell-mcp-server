@@ -45,7 +45,7 @@ export async function executePowerShell(command: string, timeout: number, workin
   }
 
   // Unified synchronous shell detection (race-free, searches well-known paths)
-  const { shellExe } = detectShell();
+  const { exe: shellExe, source: shellSource, tried: shellTried } = detectShell();
 
   const lead = ENTERPRISE_CONFIG.limits.internalSelfDestructLeadMs || 300;
   const adaptive = opts?.adaptive && opts.adaptive.enabled ? opts.adaptive : undefined;
@@ -105,7 +105,7 @@ export async function executePowerShell(command: string, timeout: number, workin
       else if(exitCode !== 0) terminationReason = 'killed';
       else terminationReason = 'completed';
     }
-    returnResult({ success: !timedOut && exitCode===0 && !overflow, stdout: stdoutChunks.map(c=>c.text).join('').slice(0,2000), stderr: stderrChunks.map(c=>c.text).join('').slice(0,2000), exitCode, duration_ms: duration, timedOut, internalSelfDestruct: exitCode===124, configuredTimeoutMs: timeout, killEscalated, killTreeAttempted, killTreeResult, watchdogTriggered, shellExe, workingDirectory: resolvedCwd, chunks:{ stdout: stdoutChunks, stderr: stderrChunks }, overflow, totalBytes, terminationReason });
+    returnResult({ success: !timedOut && exitCode===0 && !overflow, stdout: stdoutChunks.map(c=>c.text).join('').slice(0,2000), stderr: stderrChunks.map(c=>c.text).join('').slice(0,2000), exitCode, duration_ms: duration, timedOut, internalSelfDestruct: exitCode===124, configuredTimeoutMs: timeout, killEscalated, killTreeAttempted, killTreeResult, watchdogTriggered, shellExe, shellSource, shellTried, workingDirectory: resolvedCwd, chunks:{ stdout: stdoutChunks, stderr: stderrChunks }, overflow, totalBytes, terminationReason });
   };
 
   let returnResult: (r:any)=>void; const resultPromise = new Promise<any>(res=> returnResult = res);
@@ -133,7 +133,7 @@ export async function executePowerShell(command: string, timeout: number, workin
           if(process.platform==='win32' && child.pid){
             const tl = spawn('tasklist',['/FI',`PID eq ${child.pid}`]);
             let out=''; tl.stdout.on('data',d=> out+=d.toString());
-            tl.on('close', async ()=>{ if(/${child.pid}/.test(out)) setTimeout(verify,200); });
+            tl.on('close', async ()=>{ if(new RegExp(`${child.pid}`).test(out)) setTimeout(verify,200); });
           } else {
             setTimeout(verify,200);
           }
@@ -257,7 +257,7 @@ export async function runPowerShellTool(args: any){
   if(result.timedOut){ try{ metricsRegistry.incrementTimeout(); }catch{} }
   metricsRegistry.record({ level: assessment.level as any, blocked: assessment.blocked, durationMs: result.duration_ms || 0, truncated: !!result.truncated });
   try { metricsHttpServer.publishExecution({ id:`exec-${Date.now()}`, level: assessment.level, durationMs: result.duration_ms||0, blocked: assessment.blocked, truncated: !!result.truncated, timestamp:new Date().toISOString(), preview: command.substring(0,120), success: result.success, exitCode: result.exitCode, confirmed: args.confirmed||false, timedOut: result.timedOut, toolName: 'run-powershell' }); } catch {}
-  auditLog('INFO','POWERSHELL_EXEC','Command executed', { level: assessment.level, reason: assessment.reason, durationMs: result.duration_ms, success: result.success, terminationReason: result.terminationReason });
+  auditLog('INFO','POWERSHELL_EXEC','Command executed', { level: assessment.level, reason: assessment.reason, durationMs: result.duration_ms, success: result.success, terminationReason: result.terminationReason, shellExe: result.shellExe, shellSource: result.shellSource });
   const responseObject = { ...result, securityAssessment: assessment, originalTimeoutSeconds: timeoutSeconds, warnings };
   const content:any[] = [];
   if(responseObject.stdout){ content.push({ type:'text', text: responseObject.stdout }); }
