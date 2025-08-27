@@ -4,7 +4,7 @@ async function waitFor(res,id,ms=12000){ const end=Date.now()+ms; while(Date.now
 describe('run-powershell timeout edge cases', ()=>{
   test('zero timeout falls back to default and command completes quickly', async ()=>{
     const srv=startServer(); await waitForReady(srv); const res=collect(srv);
-    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "zero-ok"', confirmed:true, timeout:0 }},'zero');
+    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "zero-ok"', confirmed:true, timeoutSeconds:0 }},'zero');
     const msg = await waitFor(res,'zero',6000); srv.kill(); expect(msg).toBeTruthy();
     const text = msg.result?.content?.[0]?.text || ''; expect(text).toMatch(/zero-ok/);
   }, 10000);
@@ -25,3 +25,5 @@ describe('run-powershell timeout edge cases', ()=>{
     expect(/pwsh\.exe|powershell\.exe/i.test(sc.shellExe)).toBe(true);
   }, 10000);
 });
+
+

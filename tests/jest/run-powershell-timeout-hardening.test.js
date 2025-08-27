@@ -15,8 +15,9 @@ const { startServer, waitForReady, collect, rpc } = require('./util');
  */
 describe('run-powershell timeout hardening', ()=>{
   test('emits deprecation warnings and long-timeout warning', async ()=>{
-    const srv = startServer(); await waitForReady(srv); const res = collect(srv);
-    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "ok"', aiAgentTimeout:61, confirmed:true }},'hard1');
+  const srv = startServer(); await waitForReady(srv); const res = collect(srv);
+  // Use deprecated param to ensure warning path is tested
+  rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "ok"', aiAgentTimeout:61, confirmed:true }},'hard1');
     for(let i=0;i<80;i++){ if(res['hard1']) break; await new Promise(r=> setTimeout(r,100)); }
     srv.kill();
     const msg = res['hard1']; expect(msg).toBeTruthy();

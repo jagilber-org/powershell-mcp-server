@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, rpc } = require('./util');
+﻿const { startServer, waitForReady, collect, rpc } = require('./util');
 
 describe('health tool', ()=>{
   test('returns snapshot with uptime and memory', async ()=>{

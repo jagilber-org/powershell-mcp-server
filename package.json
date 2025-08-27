@@ -5,9 +5,8 @@
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
-  "build:only": "tsc",
-  "build": "npm run build:only && jest --runInBand",
-    
+    "build:only": "tsc",
+    "build": "npm run build:only && jest --runInBand",
     "dev": "npm run build && node dist/index.js",
     "prestart": "npm run build:only",
     "start": "node dist/index.js",
@@ -19,14 +18,13 @@
     "compliance:check": "powershell -ExecutionPolicy Bypass -File Simple-MCPCheck.ps1",
     "compliance:report": "powershell -ExecutionPolicy Bypass -File Check-MCPCompliance.ps1 -SaveReport",
     "precommit": "npm run compliance:check && npm run build",
-    
+    "health": "powershell -ExecutionPolicy Bypass -File scripts/health-check.ps1",
     "stats:codebase": "powershell -ExecutionPolicy Bypass -File tools/codebase-stats.ps1",
-  "baseline:daily": "npm run stats:codebase",
-    
-  "enumerate:external": "powershell -ExecutionPolicy Bypass -File tools/enumerate-external-tests.ps1 -OutputJson",
-  "check:stubs": "node scripts/check-stub-tests.mjs --strict",
-  "test:jest": "npm run build:only && jest --runInBand",
-  "pretest:jest": "node scripts/cleanup-legacy-psmetrics-tests.mjs"
+    "baseline:daily": "npm run stats:codebase",
+    "enumerate:external": "powershell -ExecutionPolicy Bypass -File tools/enumerate-external-tests.ps1 -OutputJson",
+    "check:stubs": "node scripts/check-stub-tests.mjs --strict",
+    "test:jest": "npm run build:only && jest --runInBand",
+    "pretest:jest": "node scripts/cleanup-legacy-psmetrics-tests.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.6.0",

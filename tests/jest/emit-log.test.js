@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, request } = require('./util');
+﻿const { startServer, waitForReady, collect, request } = require('./util');
 
 function bigString(len){ return 'X'.repeat(len); }
 
@@ -17,3 +17,4 @@ describe('emit-log hardening', () => {
     srv.kill();
   },8000);
 });
+

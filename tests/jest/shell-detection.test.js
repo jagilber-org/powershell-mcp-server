@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, request } = require('./util');
+﻿const { startServer, waitForReady, collect, request } = require('./util');
 
 // This test assumes pwsh.exe is installed on the host running CI / developer machine.
 // If not present it will be skipped.
@@ -30,3 +30,4 @@ describe('shell detection', () => {
     srv.kill();
   },10000);
 });
+

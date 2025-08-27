@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, rpc } = require('./util');
+﻿const { startServer, waitForReady, collect, rpc } = require('./util');
 
 function sc(msg){ try { return msg.result?.structuredContent || JSON.parse(msg.result?.content?.[0]?.text||'{}'); } catch { return {}; } }
 
@@ -30,3 +30,4 @@ describe('OS and alias classification', ()=>{
     expect(txt.toLowerCase()).toMatch(/risky pattern|confirmation required/);
   },8000);
 });
+

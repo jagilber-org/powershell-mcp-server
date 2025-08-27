@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, rpc } = require('./util');
+﻿const { startServer, waitForReady, collect, rpc } = require('./util');
 
 function extractStructured(msg){
   try { return msg.result?.structuredContent || JSON.parse(msg.result?.content?.[0]?.text||'{}'); } catch { return {}; }
@@ -33,3 +33,4 @@ describe('git/gh classification', ()=>{
     expect(txt.toLowerCase()).toMatch(/blocked/);
   },8000);
 });
+

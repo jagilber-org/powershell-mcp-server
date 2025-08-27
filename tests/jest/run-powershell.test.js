@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, rpc } = require('./util');
+﻿const { startServer, waitForReady, collect, rpc } = require('./util');
 
 describe('run-powershell tool', ()=>{
   test('executes safe command with confirmation for unknown classification', async ()=>{
@@ -23,7 +23,7 @@ describe('run-powershell tool', ()=>{
   
   test('timeout value interpreted as seconds', async ()=>{
     const srv=startServer(); await waitForReady(srv); const res=collect(srv);
-    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Start-Sleep -Seconds 1; Write-Output "sleep-done"', confirmed:true, timeout:2 }},'sleep');
+    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Start-Sleep -Seconds 1; Write-Output "sleep-done"', confirmed:true, timeoutSeconds:2 }},'sleep');
     for(let i=0;i<40;i++){ if(res['sleep']) break; await new Promise(r=> setTimeout(r,100)); }
     srv.kill();
     const msg = res['sleep'];
@@ -36,7 +36,7 @@ describe('run-powershell tool', ()=>{
     // Use a PowerShell command that waits on an event that never occurs; implement via Wait-Event with timeout longer than our tool timeout
     const srv=startServer(); await waitForReady(srv); const res=collect(srv);
     // Command: waits 15s; tool timeout 2s => should trigger timeout + watchdog (watchdog may take a couple extra seconds)
-    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "pre"; Wait-Event -SourceIdentifier never-happens -Timeout 15; Write-Output "post"', confirmed:true, timeout:2 }},'hang');
+    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "pre"; Wait-Event -SourceIdentifier never-happens -Timeout 15; Write-Output "post"', confirmed:true, timeoutSeconds:2 }},'hang');
     for(let i=0;i<120;i++){ if(res['hang']) break; await new Promise(r=> setTimeout(r,250)); }
     srv.kill();
     const msg = res['hang'];
@@ -64,7 +64,7 @@ describe('run-powershell tool', ()=>{
     const srv=startServer(); await waitForReady(srv); const res=collect(srv);
     // Generate >512KB output (default maxOutputKB) quickly: 9000 lines * 120 chars ~ >1MB
     const cmd = "1..9000 | % { 'ABCDEFGHIJ1234567890ABCDEFGHIJ1234567890ABCDEFGHIJ1234567890ABCDEFGHIJ1234567890' }";
-    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:cmd, confirmed:true, timeout:15 }},'overflowBig');
+    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:cmd, confirmed:true, timeoutSeconds:15 }},'overflowBig');
     for(let i=0;i<160;i++){ if(res['overflowBig']) break; await new Promise(r=> setTimeout(r,120)); }
     srv.kill();
     const msg = res['overflowBig']; expect(msg).toBeTruthy();
@@ -86,4 +86,6 @@ describe('run-powershell tool', ()=>{
     expect(txt).toMatch(/exceeds limit/i);
   },15000);
 });
+
+
 

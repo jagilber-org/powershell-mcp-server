@@ -8,10 +8,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { ENTERPRISE_CONFIG } from '../core/config.js';
 
-interface ShellDetectionResult { exe: string; source: string; edition?: string; tried: string[]; }
+export interface ShellDetectionResult { exe: string; source: string; edition?: string; tried: string[]; }
 
 function exists(p: string){ try { return fs.existsSync(p); } catch { return false; } }
 

@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+﻿const { spawn } = require('child_process');
 
 function frame(obj){ const json = JSON.stringify(obj); return `Content-Length: ${Buffer.byteLength(json,'utf8')}\r\n\r\n${json}`; }
 
@@ -35,3 +35,4 @@ test('minimal framer initialize -> list -> call', done => {
   send(ps,{ jsonrpc:'2.0', id:1, method:'initialize', params:{ clientInfo:{ name:'jest', version:'1' } } });
   setTimeout(()=>{ if(step<3){ try{ps.kill();}catch{}; done.fail('Did not reach final step'); } }, 8000);
 });
+

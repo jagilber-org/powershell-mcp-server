@@ -29,7 +29,7 @@ describe('run-powershell advanced timeout + watchdog + adaptive', ()=>{
   test('hang command returns JSON-RPC with timeout metadata and no post output', async ()=>{
     const srv = startServer(); await waitForReady(srv); const res = collect(srv);
     const hangCmd = 'Write-Output "pre"; Wait-Event -SourceIdentifier never -Timeout 20; Write-Output "post"';
-    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command: hangCmd, confirmed:true, timeout:2 }},'advHang');
+    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command: hangCmd, confirmed:true, timeoutSeconds:2 }},'advHang');
     const msg = await waitFor(res,'advHang',30000); srv.kill(); expect(msg).toBeTruthy();
   const sc = msg.result?.structuredContent || {};
   console.log('ADAPTIVE_SC:', JSON.stringify(sc,null,2)); // structured content expected
@@ -44,7 +44,7 @@ describe('run-powershell advanced timeout + watchdog + adaptive', ()=>{
   test('adaptive extends effective timeout beyond configured', async ()=>{
     const srv = startServer(); await waitForReady(srv); const res=collect(srv);
     const adaptiveCmd = '1..7 | % { Write-Output "tick$_"; Start-Sleep -Milliseconds 800 }; Write-Output "done"';
-    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command: adaptiveCmd, confirmed:true, timeout:2, progressAdaptive:true, adaptiveExtendWindowMs:1500, adaptiveExtendStepMs:1500, adaptiveMaxTotalSec:8 }},'advAdaptive');
+    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command: adaptiveCmd, confirmed:true, timeoutSeconds:2, progressAdaptive:true, adaptiveExtendWindowMs:1500, adaptiveExtendStepMs:1500, adaptiveMaxTotalSec:8 }},'advAdaptive');
     const msg = await waitFor(res,'advAdaptive',20000); srv.kill(); expect(msg).toBeTruthy();
     const sc = msg.result?.structuredContent || {};
   console.log('ADAPTIVE_ADAPTIVE_SC:', JSON.stringify(sc,null,2));
@@ -59,7 +59,7 @@ describe('run-powershell advanced timeout + watchdog + adaptive', ()=>{
 
   test('long deprecated timeout parameter surfaces warnings array', async ()=>{
     const srv = startServer(); await waitForReady(srv); const res=collect(srv);
-    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "warn-test"', aiAgentTimeout:65, confirmed:true }},'advWarn');
+    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "warn-test"', aiAgentTimeoutSeconds:65, confirmed:true }},'advWarn');
     const msg = await waitFor(res,'advWarn',12000); srv.kill(); expect(msg).toBeTruthy();
     const sc = msg.result?.structuredContent || {};
     expect(sc.originalTimeoutSeconds).toBe(65);

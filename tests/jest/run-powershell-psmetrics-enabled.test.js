@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, rpc } = require('./util');
+﻿const { startServer, waitForReady, collect, rpc } = require('./util');
 
 describe('run-powershell ps metrics feature flag', ()=>{
   test('captures psProcessMetrics when enabled', async ()=>{
@@ -15,3 +15,4 @@ describe('run-powershell ps metrics feature flag', ()=>{
     expect(typeof structured.psProcessMetrics.WS).toBe('number');
   }, 20000);
 });
+

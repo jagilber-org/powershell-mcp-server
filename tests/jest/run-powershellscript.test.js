@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, rpc } = require('./util');
+﻿const { startServer, waitForReady, collect, rpc } = require('./util');
 
 describe('run-powershellscript alias tool', ()=>{
   test('executes inline script (script param only) and returns output', async ()=>{
@@ -21,3 +21,4 @@ describe('run-powershellscript alias tool', ()=>{
     expect(txt.toLowerCase()).toMatch(/blocked/);
   },8000);
 });
+

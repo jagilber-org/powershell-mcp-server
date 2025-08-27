@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, request } = require('./util');
+﻿const { startServer, waitForReady, collect, request } = require('./util');
 
 describe('server-stats tool', () => {
   test('returns metrics snapshot JSON', async () => {
@@ -14,3 +14,4 @@ describe('server-stats tool', () => {
     srv.kill();
   }, 6000);
 });
+

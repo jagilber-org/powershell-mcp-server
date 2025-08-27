@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, request } = require('./util');
+﻿const { startServer, waitForReady, collect, request } = require('./util');
 
 describe('powershell-syntax-check tool', () => {
   test('validates simple script', async () => {
@@ -12,3 +12,4 @@ describe('powershell-syntax-check tool', () => {
     srv.kill();
   },5000);
 });
+

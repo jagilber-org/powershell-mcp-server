@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+﻿const { spawn } = require('child_process');
 const os = require('os');
 
 function runServer(env, commands){
@@ -33,3 +33,4 @@ describe('perf baseline ps metrics flag', ()=>{
     expect(slowdown).toBeLessThan(0.25);
   }, 90000);
 });
+
