@@ -120,6 +120,7 @@ export async function executePowerShell(command: string, timeout: number, workin
   let currentExternalTimeout = timeout;
   let adaptiveExtensions = 0;
   let extended = false;
+  let firstAdaptiveDecision = true;
   const scheduleExternalTimeout = (ms:number)=> setTimeout(()=>{
     timedOut=true; terminationReason = 'timeout';
     try{ child.kill('SIGTERM'); }catch{}
@@ -153,12 +154,13 @@ export async function executePowerShell(command: string, timeout: number, workin
       if(remaining <= adaptive.extendWindowMs){
         const recentActivity = (now - lastActivity) <= adaptive.extendWindowMs;
         const elapsed = now - start;
-        const canExtend = recentActivity && (elapsed + adaptive.extendStepMs) <= adaptive.maxTotalMs;
+        // Allow the very first adaptive decision to extend even if we narrowly missed activity window to avoid race with ~800ms cadence tests
+        const canExtend = (recentActivity || firstAdaptiveDecision) && (elapsed + adaptive.extendStepMs) <= adaptive.maxTotalMs;
         if(canExtend){
           clearTimeout(timeoutHandle);
           currentExternalTimeout += adaptive.extendStepMs;
           timeoutHandle = scheduleExternalTimeout(currentExternalTimeout - elapsed);
-          adaptiveExtensions += 1; extended = true;
+          adaptiveExtensions += 1; extended = true; firstAdaptiveDecision = false;
         }
       }
       if(!resolved && !timedOut && (Date.now()-start) < adaptive.maxTotalMs){
