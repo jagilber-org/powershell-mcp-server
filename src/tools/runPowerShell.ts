@@ -219,8 +219,8 @@ if(usedGeneric){ warnings.push("Parameter 'timeout' is deprecated; use 'aiAgentT
 if(typeof timeoutSeconds !== 'number' || timeoutSeconds <= 0){
   timeoutSeconds = (ENTERPRISE_CONFIG.limits.defaultTimeoutMs || 90000) / 1000;
 }
-if(timeoutSeconds > MAX_TIMEOUT_SECONDS){ throw new McpError(ErrorCode.InvalidParams, Timeout s exceeds max allowed s); }
-if(timeoutSeconds >= 60){ warnings.push(Long timeout s may reduce responsiveness.); }
+if(timeoutSeconds > MAX_TIMEOUT_SECONDS){ throw new McpError(ErrorCode.InvalidParams, 'Timeout '+timeoutSeconds+'s exceeds max allowed '+MAX_TIMEOUT_SECONDS+'s'); }
+if(timeoutSeconds >= 60){ warnings.push('Long timeout '+timeoutSeconds+'s may reduce responsiveness.'); }
 const timeout = Math.round(timeoutSeconds * 1000);
   // Adaptive timeout configuration
   const adaptiveEnabled = !!args.adaptiveTimeout || !!args.progressAdaptive;
