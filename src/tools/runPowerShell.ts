@@ -49,8 +49,8 @@ export async function executePowerShell(command: string, timeout: number, workin
 
   const lead = ENTERPRISE_CONFIG.limits.internalSelfDestructLeadMs || 300;
   const adaptive = opts?.adaptive && opts.adaptive.enabled ? opts.adaptive : undefined;
-  const internalTarget = adaptive ? Math.min(Math.max(100, (adaptive.maxTotalMs||timeout) - lead), (adaptive.maxTotalMs||timeout)) : timeout;
-  const internalMs = opts?.internalTimerMs ? Math.max(100, opts.internalTimerMs - lead) : Math.max(100, internalTarget - lead);
+  // Internal self-destruct must honor potential adaptive extensions up to maxTotalMs to avoid premature kill
+  const internalMs = opts?.internalTimerMs ? Math.max(100, opts.internalTimerMs - lead) : Math.max(100, ((adaptive ? adaptive.maxTotalMs : timeout) - lead));
   const injected = `[System.Threading.Timer]::new({[Environment]::Exit(124)}, $null, ${internalMs}, 0)|Out-Null; $ProgressPreference='SilentlyContinue'; Set-StrictMode -Version Latest; ${command}`;
   const child = spawn(shellExe, ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command', injected], { windowsHide:true, cwd: resolvedCwd });
   let stdout=''; let stderr='';
@@ -61,7 +61,9 @@ export async function executePowerShell(command: string, timeout: number, workin
   let totalBytes=0; let overflow=false;
   let timedOut=false; let killEscalated=false; let killTreeAttempted=false; let killTreeResult: any = null; let watchdogTriggered=false; let resolved=false;
   const graceAfterSignal = 1500;
-  const hardKillTotal = timeout + graceAfterSignal + 2000;
+  // Watchdog base also must reflect adaptive max potential runtime
+  const watchdogBase = adaptive ? adaptive.maxTotalMs : timeout;
+  const hardKillTotal = watchdogBase + graceAfterSignal + 2000;
 
   let lastActivity = Date.now();
   const handleData = (buf:Buffer, isErr:boolean)=>{
@@ -141,7 +143,7 @@ export async function executePowerShell(command: string, timeout: number, workin
         };
         setTimeout(async ()=>{ if(!child.killed) verify(); }, 200);
       }
-    }, graceAfterSignal);
+    }, 1500);
   }, ms);
   let timeoutHandle = scheduleExternalTimeout(timeout);
 
@@ -154,11 +156,10 @@ export async function executePowerShell(command: string, timeout: number, workin
       if(remaining <= adaptive.extendWindowMs){
         const recentActivity = (now - lastActivity) <= adaptive.extendWindowMs;
         const elapsed = now - start;
-        // Allow the very first adaptive decision to extend even if we narrowly missed activity window to avoid race with ~800ms cadence tests
         const canExtend = (recentActivity || firstAdaptiveDecision) && (elapsed + adaptive.extendStepMs) <= adaptive.maxTotalMs;
         if(canExtend){
           clearTimeout(timeoutHandle);
-          currentExternalTimeout += adaptive.extendStepMs;
+            currentExternalTimeout += adaptive.extendStepMs;
           timeoutHandle = scheduleExternalTimeout(currentExternalTimeout - elapsed);
           adaptiveExtensions += 1; extended = true; firstAdaptiveDecision = false;
         }
