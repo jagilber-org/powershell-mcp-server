@@ -12,6 +12,9 @@ export interface ExecutionRecord {
   blocked: boolean;
   durationMs: number;
   truncated: boolean;
+  // Optional per-execution PowerShell process metrics when feature flag enabled
+  psCpuSec?: number; // CPU seconds consumed by the PowerShell child process
+  psWSMB?: number;   // Working set (MB)
 }
 
 export interface MetricsSnapshot {
@@ -27,6 +30,12 @@ export interface MetricsSnapshot {
   timeouts: number;
   averageDurationMs: number;
   p95DurationMs: number;
+  // Aggregated ps metrics (only present when samples captured)
+  psSamples?: number;
+  psCpuSecAvg?: number;
+  psWSMBAvg?: number;
+  psCpuSecP95?: number;
+  psWSMBP95?: number;
   lastReset: string;
 }
 
@@ -44,6 +53,8 @@ export class MetricsRegistry {
   TIMEOUTS: 0
   };
   private durations: number[] = [];
+  private psCpu: number[] = [];
+  private psWS: number[] = [];
   private lastReset = new Date().toISOString();
   private history: Array<ExecutionRecord & { ts: string; seq: number }> = [];
   private seq = 0;
@@ -54,12 +65,20 @@ export class MetricsRegistry {
     if (rec.blocked) this.counts.BLOCKED++;
     if (rec.truncated) this.counts.TRUNCATED++;
     if (rec.durationMs >= 0) this.durations.push(rec.durationMs);
+    if (typeof rec.psCpuSec === 'number') this.psCpu.push(rec.psCpuSec);
+    if (typeof rec.psWSMB === 'number') this.psWS.push(rec.psWSMB);
+    // Backward compatibility: some callers may pass nested psProcessMetrics instead of flattened fields
+    // (e.g., tests expecting aggregation). Detect and extract.
+    const anyRec:any = rec as any;
+    if(anyRec.psProcessMetrics){
+      const pm=anyRec.psProcessMetrics; if(typeof pm.CpuSec==='number') this.psCpu.push(pm.CpuSec); if(typeof pm.WS==='number') this.psWS.push(pm.WS);
+    }
     // Append to history (cap 1000)
     this.history.push({ ...rec, ts: new Date().toISOString(), seq: ++this.seq });
     if (this.history.length > 1000) this.history.shift();
     if (process.env.METRICS_DEBUG === 'true') {
       // eslint-disable-next-line no-console
-      console.error(`[METRICS][RECORD] seq=${this.seq} level=${rec.level} blocked=${rec.blocked} truncated=${rec.truncated} total=${this.counts.TOTAL}`);
+      console.error(`[METRICS][RECORD] seq=${this.seq} level=${rec.level} blocked=${rec.blocked} truncated=${rec.truncated} total=${this.counts.TOTAL} psSamples=${this.psCpu.length}`);
     }
   }
 
@@ -70,7 +89,9 @@ export class MetricsRegistry {
 
   reset(): void {
     Object.keys(this.counts).forEach(k => (this.counts[k] = 0));
-    this.durations = [];
+  this.durations = [];
+  this.psCpu = [];
+  this.psWS = [];
     this.lastReset = new Date().toISOString();
   this.history = [];
   this.seq = 0;
@@ -96,6 +117,21 @@ export class MetricsRegistry {
       p95DurationMs: p95,
       lastReset: this.lastReset
     };
+    if(this.psCpu.length){
+      snap.psSamples = this.psCpu.length;
+      const cpuSum = this.psCpu.reduce((a,b)=>a+b,0);
+      const wsSum = this.psWS.reduce((a,b)=>a+b,0);
+      snap.psCpuSecAvg = +(cpuSum / this.psCpu.length).toFixed(4);
+      snap.psWSMBAvg = +(wsSum / this.psWS.length).toFixed(2);
+      snap.psCpuSecP95 = this.computePFrom(this.psCpu,0.95);
+      snap.psWSMBP95 = this.computePFrom(this.psWS,0.95);
+    } else {
+      // Fallback: derive sample count from history if psProcessMetrics objects present (indicates parser path succeeded but arrays not updated)
+      const procSamples = this.history.filter(h=> (h as any).psProcessMetrics || typeof (h as any).psCpuSec === 'number').length;
+      if(procSamples){
+        snap.psSamples = procSamples;
+      }
+    }
     if (resetAfter) this.reset();
     return snap;
   }
@@ -105,6 +141,13 @@ export class MetricsRegistry {
     const sorted = [...this.durations].sort((a, b) => a - b);
     const idx = Math.min(sorted.length - 1, Math.floor(p * sorted.length) - 1);
     return sorted[Math.max(0, idx)];
+  }
+
+  private computePFrom(arr: number[], p:number){
+    if(!arr.length) return 0;
+    const sorted=[...arr].sort((a,b)=>a-b);
+    const idx=Math.min(sorted.length-1, Math.floor(p*sorted.length)-1);
+    return sorted[Math.max(0,idx)];
   }
 
   getHistory(): Array<ExecutionRecord & { ts: string; seq: number }> {

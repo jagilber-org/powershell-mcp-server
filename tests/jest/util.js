@@ -1,7 +1,8 @@
 const { spawn } = require('child_process');
 
-function startServer() {
-  const proc = spawn(process.execPath, ['--expose-gc','dist/server.js'], { stdio:['pipe','pipe','pipe'] });
+function startServer(envOverrides) {
+  const env = { ...process.env, ...envOverrides };
+  const proc = spawn(process.execPath, ['--expose-gc','dist/server.js'], { stdio:['pipe','pipe','pipe'], env });
   return proc;
 }
 

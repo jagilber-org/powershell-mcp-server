@@ -15,16 +15,26 @@ const { startServer, waitForReady, collect, rpc } = require('./util');
  */
 describe('run-powershell timeout hardening', ()=>{
   test('emits deprecation warnings and long-timeout warning', async ()=>{
+<<<<<<< HEAD
   const srv = startServer(); await waitForReady(srv); const res = collect(srv);
   // Use deprecated param to ensure warning path is tested
+=======
+    const srv = startServer(); await waitForReady(srv); const res = collect(srv);
+  // Use ONLY deprecated param to trigger deprecation warning + long timeout (>=60s) without canonical param.
+>>>>>>> ade15a4 (chore: cleanup instrumentation, add port reclaim flag, enforce rate limiting, bump 1.2.1)
   rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "ok"', aiAgentTimeout:61, confirmed:true }},'hard1');
     for(let i=0;i<80;i++){ if(res['hard1']) break; await new Promise(r=> setTimeout(r,100)); }
     srv.kill();
     const msg = res['hard1']; expect(msg).toBeTruthy();
     const structured = msg.result?.structuredContent || {};
-    expect(structured.originalTimeoutSeconds).toBe(61);
+  expect(structured.originalTimeoutSeconds).toBe(61);
     const warnings = structured.warnings || [];
+<<<<<<< HEAD
     expect(warnings.some(w=> /deprecated/i.test(w))).toBe(true);
+=======
+    // Should include both deprecation and long-timeout warning substrings
+  expect(warnings.some(w=> /deprecated/i.test(w))).toBe(true);
+>>>>>>> ade15a4 (chore: cleanup instrumentation, add port reclaim flag, enforce rate limiting, bump 1.2.1)
     expect(warnings.some(w=> /long timeout/i.test(w))).toBe(true);
   }, 15000);
 

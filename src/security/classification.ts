@@ -38,6 +38,8 @@ export function classifyCommandSafety(command: string): SecurityAssessment {
   if(/\brd\b/.test(pre) && /\/(s|q)/.test(pre) && /(\/s.*\/q|\/q.*\/s)/.test(pre)){
     return { level:'CRITICAL', risk:'CRITICAL', category:'OS_DESTRUCTIVE', reason:'Blocked OS pattern: rd recursive quiet', blocked:true, requiresPrompt:false };
   }
+    // Fast-path SAFE common listing aliases before deeper processing
+    if(/^\s*(dir|ls)\b/i.test(command)){ return { level:'SAFE', risk:'LOW', category:'OS_READONLY', reason:'Safe OS pattern: dir', blocked:false, requiresPrompt:false }; }
   // Basic tokenization (first word) and alias expansion for PowerShell & common shells
   try {
     const trimmed = command.trim();

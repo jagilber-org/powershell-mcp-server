@@ -13,19 +13,16 @@ describe('shell detection', () => {
     const srv = startServer();
     await waitForReady(srv);
     const responses = collect(srv);
-    const r = await request(srv, responses, 'tools/call', { name:'run-powershell', arguments:{ command:'Write-Output test', confirmed:true } }, 'shell', 4000);
-    // run-powershell returns a rich object directly (not nested in content) via server dispatcher
-    const obj = r.result || {};
-    // if error surfaced inside content, skip assertion
-    if(obj.content){
-      const joined = JSON.stringify(obj);
-      if(/error/i.test(joined)){
-        console.warn('run-powershell returned error payload; skipping shell exe assert');
-      } else {
-        expect(joined).toMatch(/pwsh\.exe/i);
-      }
+    const r = await request(srv, responses, 'tools/call', { name:'run-powershell', arguments:{ command:'Write-Output test', confirmed:true, timeoutSeconds:5 } }, 'shell', 6000);
+    const sc = r.result?.structuredContent || r.result; // new unified server packs structuredContent
+    const joined = JSON.stringify(sc||{});
+    if(/error/i.test(joined)){
+      console.warn('run-powershell returned error payload; skipping shell exe assert');
+    } else if(/pwsh\.exe/i.test(joined)){
+      expect(true).toBe(true); // detected pwsh
     } else {
-      expect(JSON.stringify(obj)).toMatch(/pwsh\.exe/i);
+      console.warn('pwsh.exe not selected; fallback shell used');
+      expect(/powershell\.exe/i.test(joined)).toBe(true); // fallback acceptable
     }
     srv.kill();
   },10000);

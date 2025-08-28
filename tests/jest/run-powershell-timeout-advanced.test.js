@@ -59,7 +59,7 @@ describe('run-powershell advanced timeout + watchdog + adaptive', ()=>{
 
   test('long deprecated timeout parameter surfaces warnings array', async ()=>{
     const srv = startServer(); await waitForReady(srv); const res=collect(srv);
-    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "warn-test"', aiAgentTimeoutSeconds:65, confirmed:true }},'advWarn');
+  rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "warn-test"', aiAgentTimeout:65, confirmed:true }},'advWarn');
     const msg = await waitFor(res,'advWarn',12000); srv.kill(); expect(msg).toBeTruthy();
     const sc = msg.result?.structuredContent || {};
     expect(sc.originalTimeoutSeconds).toBe(65);

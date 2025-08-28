@@ -70,6 +70,11 @@ Reset behavior: invoking any future explicit reset endpoint (planned) or process
 
 Per-invocation row columns already list raw `PS CPU(s)` and `WS(MB)` for each run-powershell execution when metrics are enabled.
 
+Port binding resilience:
+
+- The metrics HTTP server attempts the configured port, then incremental offsets. Set `METRICS_STRICT=1` to disable auto-increment (tests).
+- Optional Windows-only reclaim (`METRICS_PORT_RECLAIM=1`): on final bind failure of original port the server will attempt to terminate a stale `server.js` process holding that port (safety: only matches command line containing `server.js`). Disabled by default.
+
 ## Unknown Command Learning
 
 UNKNOWN â†’ normalize â†’ queue â†’ review â†’ approve â†’ SAFE cache (`learned-safe.json`). Approved patterns immediately influence classification.
