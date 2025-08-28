@@ -1,72 +1,38 @@
-// Synchronous PowerShell host detection with deterministic precedence
-// Order of selection:
-// 1. ENTERPRISE_CONFIG.shellOverride or env PWSH_EXE if provided
-// 2. Explicit well-known installation paths (Windows + *nix)
-// 3. First match of 'pwsh' on PATH
-// 4. Fallback to 'powershell.exe' (Windows) or 'pwsh' then 'powershell' on *nix
-// Exports detectShell(): { exe: string; source: string; edition?: string }
-
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ENTERPRISE_CONFIG } from '../core/config.js';
+import { ENTERPRISE_CONFIG } from './config.js';
 
-export interface ShellDetectionResult { exe: string; source: string; edition?: string; tried: string[]; }
+export interface ShellDetectionResult { shellExe: string; isPwsh: boolean; edition?: string; source: string; shellTried: string[]; }
+let cached: ShellDetectionResult | null = null;
 
-function exists(p: string){ try { return fs.existsSync(p); } catch { return false; } }
-
-function whichAll(cmd: string): string[] {
-  const sep = process.platform === 'win32' ? ';' : ':';
-  const exts = process.platform === 'win32' ? (process.env.PATHEXT||'').split(';').filter(Boolean) : [''];
-  const dirs = (process.env.PATH||'').split(sep).filter(Boolean);
-  const results: string[] = [];
-  for(const d of dirs){
-    for(const ext of exts){
-      const candidate = path.join(d, cmd + ext);
-      if(exists(candidate)) results.push(candidate);
+function probe(exe:string, source: string, tried:string[]): ShellDetectionResult | null {
+  try {
+    const r = spawnSync(exe, ['-NoLogo','-NoProfile','-Command','$PSVersionTable.PSEdition'], { encoding:'utf8', windowsHide:true });
+    if(r.status === 0){
+      const edition = (r.stdout||'').trim();
+      const isPwsh = /core/i.test(edition) || /pwsh/i.test(path.basename(exe));
+      return { shellExe: exe, isPwsh, edition, source, shellTried:[...tried] };
     }
-  }
-  return Array.from(new Set(results));
-}
-
-function getWellKnownCandidates(): string[] {
-  const candidates: string[] = [];
-  if(process.platform === 'win32'){
-    const programFiles = process.env['ProgramFiles'] || 'C:/Program Files';
-    const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:/Program Files (x86)';
-    candidates.push(
-      path.join(programFiles, 'PowerShell/7/pwsh.exe'),
-      path.join(programFilesX86, 'PowerShell/7/pwsh.exe'),
-      'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
-    );
-  } else {
-    candidates.push('/usr/bin/pwsh','/usr/local/bin/pwsh','/snap/bin/pwsh','/opt/microsoft/powershell/7/pwsh');
-  }
-  return candidates.filter(exists);
+  } catch {}
+  return null;
 }
 
 export function detectShell(): ShellDetectionResult {
+  if(cached) return cached;
   const tried: string[] = [];
-  // 1. Config override
-  const cfgOverride = (ENTERPRISE_CONFIG as any).shellOverride;
-  if(cfgOverride && typeof cfgOverride === 'string'){
-    tried.push(cfgOverride + ' (configOverride)');
-    if(exists(cfgOverride)) return { exe: cfgOverride, source: 'configOverride', tried };
+  const record=(p:string,tag:string)=>{ const label=p+'('+tag+')'; if(!tried.includes(label)) tried.push(label); };
+  const finish=(r:ShellDetectionResult)=> (cached={ ...r, shellTried: tried });
+  const cfg=(ENTERPRISE_CONFIG as any)?.powershell?.executable || (ENTERPRISE_CONFIG as any).shellOverride;
+  if(cfg && fs.existsSync(cfg)){ record(cfg,'config'); const r=probe(cfg,'config',tried); if(r) return finish(r); }
+  const envPwsh=process.env.PWSH_EXE; if(envPwsh && fs.existsSync(envPwsh)){ record(envPwsh,'env'); const r=probe(envPwsh,'env',tried); if(r) return finish(r); }
+  if(process.platform==='win32'){
+    const roots=[process.env.ProgramFiles, process.env['ProgramFiles(x86)']].filter(Boolean) as string[];
+    for(const root of roots){ const ps=path.join(root,'PowerShell'); if(fs.existsSync(ps)){ try { const versions=fs.readdirSync(ps).filter(v=>/^\d/.test(v)).sort((a,b)=> b.localeCompare(a,undefined,{numeric:true})); for(const v of versions){ const exe=path.join(ps,v,'pwsh.exe'); record(exe,'wellKnown'); if(fs.existsSync(exe)){ const r=probe(exe,'wellKnown',tried); if(r) return finish(r); } } } catch{} } }
   }
-  // env override
-  const envOverride = process.env.PWSH_EXE;
-  if(envOverride){
-    tried.push(envOverride + ' (env:PWSH_EXE)');
-    if(exists(envOverride)) return { exe: envOverride, source: 'env:PWSH_EXE', tried };
-  }
-  // 2. Well-known locations
-  const wellKnown = getWellKnownCandidates();
-  for(const wk of wellKnown){ tried.push(wk + ' (wellKnown)'); if(exists(wk)) return { exe: wk, source: 'wellKnown', tried }; }
-  // 3. PATH search for pwsh then powershell
-  const pwshPaths = whichAll(process.platform === 'win32' ? 'pwsh.exe':'pwsh');
-  for(const p of pwshPaths){ tried.push(p + ' (path)'); if(exists(p)) return { exe: p, source: 'path', tried }; }
-  const legacy = whichAll(process.platform === 'win32' ? 'powershell.exe':'powershell');
-  for(const p of legacy){ tried.push(p + ' (path)'); if(exists(p)) return { exe: p, source: 'path-legacy', tried }; }
-  // 4. Fallback
-  if(process.platform === 'win32'){ tried.push('powershell.exe (fallback)'); return { exe: 'powershell.exe', source: 'fallback', tried }; }
-  tried.push('pwsh (fallback)'); return { exe: 'pwsh', source: 'fallback', tried };
+  const pathDirs=(process.env.PATH||'').split(path.delimiter).filter(Boolean);
+  for(const d of pathDirs){ for(const n of ['pwsh.exe','pwsh','powershell.exe','powershell']){ const cand=path.join(d,n); if(fs.existsSync(cand)){ record(cand,'path'); const r=probe(cand,'path',tried); if(r) return finish(r); } } }
+  const fallback = process.platform==='win32' ? 'powershell.exe':'pwsh';
+  record(fallback,'fallback');
+  return finish({ shellExe:fallback, isPwsh:/pwsh/i.test(fallback), source:'fallback', shellTried: tried });
 }

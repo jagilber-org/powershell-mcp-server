@@ -1,6 +1,6 @@
 # PowerShell MCP Server Architecture & Logical Diagrams
 
-> Comprehensive technical overview of the enterprise PowerShell MCP Server: component architecture, request lifecycle, security classification logic, enforcement pathways, observability flows, adaptive timeout behavior, and auxiliary tooling. (Updated: Aug 2025)
+> Comprehensive technical overview of the enterprise PowerShell MCP Server: component architecture, request lifecycle, security classification logic, enforcement pathways, observability flows, and auxiliary tooling.
 
 ---
 
@@ -24,10 +24,10 @@ flowchart LR
         C --> EXEC[PowerShell Executor]
         C --> LOG[Audit Logger]
         C --> THREAT[Threat / Alias Tracker]
-        C --> METRICS[Metrics Registry]
+    C --> METRICS[Metrics Registry]
         C --> PROMPTS[Prompt Retrieval]
         C --> CONFIG[Enterprise Config Loader]
-        C --> GITTOOLS[Git Tool Surface]
+    C --> GITTOOLS[Git Tool Surface]
     end
 
     EXEC --> PS[PowerShell Host]
@@ -37,44 +37,48 @@ flowchart LR
     HTTP --> DASH[Browser Dashboard]
     LOG --> FILES[(Log Files + NDJSON)]
     THREAT --> METRICS
+    RL --> METRICS
+    EXEC --> METRICS
+    EXEC --> LOG
+    SEC --> LOG
+    THREAT --> LOG
+    PROMPTS --> FILEPROMPTS[(docs/AGENT-PROMPTS.md)]
+```
+
+---
+
+## 2. Request Lifecycle (Sequence)
+
+```mermaid
+%%{init: {'theme':'dark','themeVariables': { 'primaryColor': '#1e2730','primaryTextColor':'#e6f1ff','primaryBorderColor':'#4fa3ff','lineColor':'#6ea8ff','secondaryColor':'#2a3542','tertiaryColor':'#16202a','actorBkg':'#2a3542','actorBorder':'#4fa3ff','fontFamily':'Segoe UI,Inter,Arial'}}}%%
+sequenceDiagram
+    participant Client as MCP Client
+    participant Server as MCP Server Core
+    participant Auth as Auth Validator
+    participant Rate as Rate Limiter
+    participant Sec as Security Classifier
+    participant Exec as PowerShell Executor
+    participant Log as Audit Logger
+    participant Metrics as Metrics Registry
+
+    Client->>Server: CallTool (e.g. powershell-command)
+    Server->>Auth: Validate key (optional)
+    Auth-->>Server: ok / fail
+    alt Auth Fail
+        Server->>Client: McpError (InvalidRequest)
+        Log-->>(Files): AUTH_FAILED
+    else Auth OK
+        Server->>Rate: consumeToken(parentPid)
+        Rate-->>Server: allowed? remaining/reset
+        alt Rate Exceeded
+            Server->>Client: McpError (Rate Limit)
+            Log-->>(Files): RATE_LIMIT_EXCEEDED
+            Metrics-->>Dashboard: execution(blocked)
         else Within Limit
-    End of Updated Architecture Document
-    ## 10. Execution Output Struct (Simplified)
             Server->>Sec: classify(command)
-    ```mermaid
-    %%{init: {"theme":"dark","themeVariables": { 
-        "primaryColor": "#1e2730",
-        "primaryTextColor":"#e6f1ff",
-        "primaryBorderColor":"#4fa3ff",
-        "lineColor":"#6ea8ff",
-        "secondaryColor":"#2a3542",
-        "tertiaryColor":"#16202a",
-        "noteBkgColor":"#2d3640",
-        "noteTextColor":"#e6f1ff",
-        "classTextColor":"#e6f1ff",
-        "classTitleColor":"#ffffff",
-        "classBackground":"#1e2730",
-        "classBorderColor":"#4fa3ff",
-        "fontFamily":"Segoe UI,Inter,Arial"
-    }}%%
-    classDiagram
-        class PowerShellExecutionResult {
-            +bool success
-            +string stdout
-            +string stderr
-            +int? exitCode
-            +int duration_ms
-            +string command
-            +string? workingDirectory
-            +SecurityAssessment securityAssessment
-            +int? processId
-            +bool? timedOut
-            +string? error
-        }
-    ```
             Sec-->>Server: SecurityAssessment
             alt Blocked Assessment
-                Server->>Client: Blocked inline result
+                Server->>Client: McpError (Blocked)
                 Log-->>(Files): COMMAND_BLOCKED
                 Metrics-->>Dashboard: execution(blocked)
             else Requires Confirmation (RISKY/UNKNOWN)
@@ -82,8 +86,8 @@ flowchart LR
                     Server->>Client: McpError (Needs confirmed:true)
                     Log-->>(Files): CONFIRMATION_REQUIRED
                 else confirmed present
-                    Server->>Exec: spawn PowerShell (+ self-destruct timer)
-                    Exec-->>Server: ExecutionResult (terminationReason)
+                    Server->>Exec: spawn PowerShell
+                    Exec-->>Server: ExecutionResult
                     Server->>Client: structured output
                     Log-->>(Files): COMMAND_EXECUTED
                     Metrics-->>Dashboard: execution(success/fail)
@@ -99,14 +103,14 @@ flowchart LR
             Sec-->>Metrics: increment counters
         end
     end
-```text
+```
 
 ---
 
 ## 3. Security Classification Logic (Decision Flow)
 
 ```mermaid
-%%{init: {"theme":"dark","themeVariables": { "primaryColor": "#1e2730","primaryTextColor":"#e6f1ff","primaryBorderColor":"#ff7b72","lineColor":"#ffb347","secondaryColor":"#2a3542","tertiaryColor":"#16202a","fontFamily":"Segoe UI,Inter,Arial"}}}%%
+%%{init: {"theme":"dark","themeVariables": {"primaryColor": "#1e2730","primaryTextColor":"#e6f1ff","primaryBorderColor":"#ff7b72","lineColor":"#ffb347","secondaryColor":"#2a3542","tertiaryColor":"#16202a","fontFamily":"Segoe UI,Inter,Arial"}}}%%
 flowchart TD
     A[Input Command] --> B[Alias / Suspicious Checks]
     B --> C{High-Risk Alias\nor Suspicious?}
@@ -123,112 +127,200 @@ flowchart TD
     H -->|No| UNK[[UNKNOWN\nNeeds Confirm]]
 ```
 
-(Section unchanged in logic; see previous revision for outcome table.)
+### Classification Outcomes
+
+| Level       | Risk | blocked | requiresPrompt | Typical Color | Examples / Triggers |
+|-------------|------|---------|----------------|---------------|----------------------|
+| SAFE        | LOW  | false   | false          | GREEN         | Get-Process, Select-Object |
+| RISKY       | MED  | false   | true           | YELLOW        | Remove-Item, Move-Item, Stop-Process |
+| DANGEROUS   | HIGH | true    | n/a            | MAGENTA       | Format-Volume fallback, destructive ops |
+| CRITICAL    | EXTREME | true | n/a            | RED           | EncodedCommand, Download + exec, hidden window |
+| BLOCKED     | FORBIDDEN | true | n/a         | RED           | Registry writes, system file edits |
+| UNKNOWN     | MED  | false   | true           | CYAN          | Anything unmatched |
+
+### Blocking vs Confirmation
+
+- **Blocked (DANGEROUS / CRITICAL / BLOCKED)**: Immediate denial; server returns McpError.
+- **Confirmation Required (RISKY / UNKNOWN)**: Must include `confirmed: true` param; otherwise McpError instructs to add it.
+- **Auto-Allow (SAFE)**: Executes without extra flags.
 
 ---
 
-## 4. Adaptive Timeout Lifecycle
+## 4. Rate Limiter (Token Bucket) Lifecycle
 
 ```mermaid
-%%{init:{'theme':'dark','themeVariables':{'primaryColor':'#1e2730','primaryTextColor':'#e6f1ff','primaryBorderColor':'#4fa3ff','lineColor':'#4fa3ff','secondaryColor':'#2a3542'}}}%%
+%%{init: {"theme":"dark","themeVariables": {"primaryColor": "#1e2730","primaryTextColor":"#e6f1ff","primaryBorderColor":"#c9d1d9","lineColor":"#6ea8ff","secondaryColor":"#2a3542","tertiaryColor":"#16202a"}}}%%
 flowchart LR
-    START[Start Execution] --> BASE[Base Timeout (configuredTimeoutMs)]
-    BASE --> CHECK{Remaining <= extendWindow?}
-    CHECK -->|No| ACTIVITY_WAIT[Wait / Collect Output]
-    ACTIVITY_WAIT --> CHECK
-    CHECK -->|Yes| RECENT{Recent Activity?}
-    RECENT -->|No| ACTIVITY_WAIT
-    RECENT -->|Yes| CAP{Would Extension <= maxTotal?}
-    CAP -->|No| LOCK[Reach Hard Cap]
-    CAP -->|Yes| EXTEND[Extend Timeout (extendStepMs)]
-    EXTEND --> CHECK
-    LOCK --> EXPIRY[Timeout Fires]
-    EXTEND --> EXPIRY
-    EXPIRY --> TERMREASON[terminationReason=timeout]
+    subgraph TOKEN_BUCKET
+        START[Init Tokens] --> USE[Request]
+        USE --> CHECK{tokens > 0?}
+        CHECK -->|No| DENY[[RATE LIMIT]]
+        CHECK -->|Yes| CONSUME[Take One]
+        CONSUME --> ALLOW[Proceed]
+        DENY --> WAIT[Client Backoff]
+        subgraph REFILL
+            TICK[Interval] --> REFILLSTEP[Add maxRequests]
+        end
+    end
 ```
 
-**Key Fields Added:**
-- `effectiveTimeoutMs` – final external timeout after extensions
-- `adaptiveExtensions` – count of successful extensions
-- `terminationReason` – canonical end-state classification
+**Metrics Emitted:** blocked events, remaining tokens, resetMs. Logged under category `RATE_LIMIT_EXCEEDED` when denial occurs.
 
 ---
 
-## 5. Termination Reason State Machine
+## 5. Working Directory Enforcement
 
 ```mermaid
-%%{init:{'theme':'dark','themeVariables':{'primaryColor':'#1e2730','primaryTextColor':'#e6f1ff','primaryBorderColor':'#d29922','lineColor':'#d29922','secondaryColor':'#2a3542'}}}%%
-stateDiagram-v2
-    [*] --> Running
-    Running --> Completed: exitCode==0 & !overflow & !timeout
-    Running --> Timeout: timedOut=true OR exitCode==124
-    Running --> Overflow: overflow==true
-    Running --> Killed: exitCode!=0 & !overflow & !timedOut
-    Timeout --> [*]
-    Overflow --> [*]
-    Completed --> [*]
-    Killed --> [*]
+%%{init: {"theme":"dark","themeVariables": {"primaryColor": "#1e2730","primaryTextColor":"#e6f1ff","primaryBorderColor":"#c9d1d9","lineColor":"#f0883e","secondaryColor":"#2a3542","tertiaryColor":"#16202a"}}}%%
+flowchart TD
+    A{workingDirectory provided?} -->|No| SKIP[Skip Enforcement]
+    A -->|Yes| RESOLVE[Resolve Real Path]
+    RESOLVE --> VALID{Path Starts With\nAllowed Root?}
+    VALID -->|No| BLOCK[[VIOLATION]]
+    VALID -->|Yes| CONT[Execute]
 ```
 
-Assignments:
-- Timeout path sets `terminationReason='timeout'`
-- Overflow detection sets `terminationReason='overflow'`
-- Non-zero exit without flags → `killed`
-- Clean success → `completed`
+Enforcement toggled via tools:
 
-Integrity tests ensure mutual exclusivity.
+- `enforce-working-directory` (enable/disable)
+- `get-working-directory-policy` (status + allowed roots)
 
 ---
 
-## 6. (Sections 5–19 retained, plus appended notes)
+## 6. Metrics & Observability Flow
 
-The remaining sections (Rate Limiter, Working Directory Enforcement, Metrics & Observability, Threat Tracking, Prompt Retrieval, Tool Surface, Execution Output Struct, Enforcement Summary, Scenarios, Overrides, Audit Surfaces, Failure Modes, Mental Model, Extensibility, Glossary, Summary) remain structurally identical to prior version except for these additive notes:
+```mermaid
+%%{init: {"theme":"dark","themeVariables": { "primaryColor": "#1e2730","primaryTextColor":"#e6f1ff","primaryBorderColor":"#58a6ff","lineColor":"#58a6ff","secondaryColor":"#2a3542","tertiaryColor":"#16202a"}}}%%
+flowchart LR
+    EXEC_EVENT[Execution Result] --> METR[metricsRegistry]
+    CLASSIFY[Security Classification] --> METR
+    THREAT[Unknown / Alias Tracking] --> METR
+    METR --> SNAPSHOT[GET /api/metrics]
+    METR --> SSE[STREAM /events]
+    SSE --> DASH[Browser Dashboard]
+    LOGS[(Audit Logs)] --> ANALYSIS[External Analysis]
+```
 
-### Additive Notes
-- `run-powershell` now returns `terminationReason` for deterministic downstream analytics.
-- Hang test command preserved in `tests/jest/run-powershell-timeout-hardening.test.js` & `docs/CRITICAL-TIMEOUT-COMMANDS.md`.
-- Adaptive timeout never extends beyond `adaptiveMaxTotalSec`; internal self-destruct timer is aligned to that ceiling.
-- Watchdog escalation (hardKillTotal) sets `terminationReason='killed'` if no prior classification.
-- Obsolete `METRICS_TRACE` flag removed; optional port reclaim guarded by `METRICS_PORT_RECLAIM=1` to avoid unintended steals.
+Dashboard Visuals:
 
----
+- Counters (by security level, blocked, truncated)
+- Live event table (highlight confirmed=true)
+- CPU & Event Loop Lag graph
+- Memory (RSS / Heap) graph
+- PowerShell per-invocation metrics columns (CPU seconds, Working Set MB) when feature flag enabled
 
-## 20. Field Matrix (Execution Result – Delta Focus)
+### 6.1 PowerShell Process Metrics Aggregation (Feature-Flagged)
 
-| Field | Type | Source | When Present | Example |
-|-------|------|--------|--------------|---------|
-| configuredTimeoutMs | number | Input derived | Always | 1000 |
-| effectiveTimeoutMs | number | Adaptive loop | Adaptive / always | 2500 |
-| adaptiveExtensions | number | Adaptive loop | Adaptive only | 3 |
-| adaptiveExtended | boolean | Adaptive loop | Adaptive only | true |
-| terminationReason | enum | Executor | Always | timeout |
-| internalSelfDestruct | boolean | PS timer | If exit 124 | true |
-| watchdogTriggered | boolean | Watchdog | Rare (stuck close) | true |
-| killEscalated | boolean | Kill escalation | If second-stage kill | true |
+When `limits.capturePsProcessMetrics` (or env `MCP_CAPTURE_PS_METRICS=1`) is active, each PowerShell invocation appends a sentinel JSON object containing lightweight process stats (cumulative CPU time seconds and working set). The executor strips this sentinel from stdout, parses it, and forwards the numeric values to:
 
----
+1. `metricsHttpServer.publishExecution` (per-row `psMetrics` for live table columns `PS CPU(s)` & `WS(MB)`).
+2. `metricsRegistry.record()` as `psCpuSec` / `psWSMB` which aggregate into arrays.
 
-## 21. Testing Additions
+The registry snapshot then surfaces aggregated fields:
 
-| Test | Purpose |
-|------|---------|
-| timeout hardening | Validates warnings, cap, forced hang duration threshold |
-| adaptive timeout | Verifies extensions & terminationReason=completed |
-| fast-exit control | Ensures quick command not misclassified as hang |
-| termination integrity (implicit) | Validates `timeout` path sets proper reason |
+| Field | Meaning |
+|-------|---------|
+| `psSamples` | Number of invocations with metrics captured |
+| `psCpuSecAvg` | Mean CPU seconds per invocation |
+| `psCpuSecP95` | 95th percentile CPU seconds |
+| `psWSMBAvg` | Mean Working Set MB |
+| `psWSMBP95` | 95th percentile Working Set MB |
 
----
+Dashboard cards for these stay hidden until `psSamples > 0` to avoid empty noise when disabled.
 
-## 22. Future Architecture Hooks
-
-Planned (not yet merged):
-- Cancellation tokens bridging client abort → process kill
-- Structured `terminationReasonDetail` (e.g. `internalSelfDestruct`, `watchdog`) layering under main enum
-- Metrics dimension for termination reason distribution
+Reset Strategy: Currently only a process restart or future planned reset endpoint clears arrays (no implicit decay). Consumers should snapshot externally if needing long‑term trends.
 
 ---
 
-End of Updated Architecture Document
+## 7. Threat & Alias Tracking Data Model
+
+```mermaid
+%%{init: {"theme":"dark","themeVariables": { 
+    "primaryColor": "#1e2730",
+    "primaryTextColor":"#e6f1ff",
+    "primaryBorderColor":"#4fa3ff",
+    "lineColor":"#6ea8ff",
+    "secondaryColor":"#2a3542",
+    "tertiaryColor":"#16202a",
+    "noteBkgColor":"#2d3640",
+    "noteTextColor":"#e6f1ff",
+    "classTextColor":"#e6f1ff",
+    "classTitleColor":"#ffffff",
+    "classBackground":"#1e2730",
+    "classBorderColor":"#4fa3ff",
+    "fontFamily":"Segoe UI,Inter,Arial"
+}}%%
+classDiagram
+    class UnknownThreatEntry {
+        +string command
+        +number frequency
+        +string firstSeen
+        +string lastSeen
+        +string[] possibleAliases
+        +SecurityAssessment riskAssessment
+        +string sessionId
+    }
+    class ThreatTrackingStats {
+        +number totalUnknownCommands
+        +number uniqueThreats
+        +number highRiskThreats
+        +number aliasesDetected
+        +number sessionsWithThreats
+    }
+```
+
+- Each UNKNOWN command increments frequency and updates lastSeen.
+- Alias detection logs alias resolution & risk.
+- Suspicious patterns escalate to CRITICAL quickly.
+
+---
+
+## 8. Prompt Retrieval Tool (`agent-prompts`)
+
+```mermaid
+%%{init: {'theme':'dark','themeVariables': { 'primaryColor': '#1e2730','primaryTextColor':'#e6f1ff','primaryBorderColor':'#4fa3ff','lineColor':'#6ea8ff','secondaryColor':'#2a3542','tertiaryColor':'#16202a'}}}%%
+sequenceDiagram
+    participant Client
+    participant Server
+    participant File as AGENT-PROMPTS.md
+
+    Client->>Server: CallTool(agent-prompts {category?, format?})
+    Server->>File: Read file contents
+    Server->>Server: Extract headings (## ...)
+    alt Category Filter Provided
+        Server->>Server: Slice from matched heading to next
+    end
+    Server-->>Client: { format, categories, content, category? }
+```
+
+Supported formats:
+
+- `markdown`: Returns raw section(s)
+- `json`: Returns JSON serialized payload (useful for agents to parse categories & targeted content)
+
+---
+
+## 9. Tool Surface Overview
+
+| Tool | Purpose | Security Interaction | Typical Use |
+|------|---------|----------------------|-------------|
+| powershell-command | Single command exec | Classify -> enforce | Quick info retrieval |
+| powershell-script | Multi-line script | Classify each invocation | Aggregated logic |
+| powershell-file | Execute .ps1 file | Classify path & content contextually | Existing scripts |
+| powershell-syntax-check | Parser validation | No execution | Pre-flight safety |
+| enforce-working-directory | Toggle WD policy | Administrative | Harden environment |
+| get-working-directory-policy | Inspect policy | Read-only (SAFE) | Agent planning |
+| server-stats | Metrics snapshot | Read-only (SAFE) | Health checks |
+| threat-analysis | Threat stats | Read-only (SAFE) | Security review |
+| ai-agent-test | Validation suite | SAFE + blocked expectations | Regression gating |
+| help | Documentation | Safe | Hints & onboarding |
+| agent-prompts | Reproduction prompts | Safe | Deterministic rebuild |
+
+---
+
+## 10. Execution Output Struct (Simplified)
+
+```mermaid
 %%{init: {"theme":"dark","themeVariables": { 
     "primaryColor": "#1e2730",
     "primaryTextColor":"#e6f1ff",
@@ -423,154 +515,3 @@ Execution timeouts now perform a two‑stage termination: SIGTERM at the configu
 
 ---
 End of Architecture Document
-
----
-
-## 20. Unified Server & Framer Modes (Aug 2025 Update)
-
-Recent refactor consolidated legacy `vscode-server*.ts` entrypoints into a single `server.ts` which conditionally supports three stdio transport modes:
-
-| Mode | Trigger | Use Case | Notes |
-|------|---------|----------|-------|
-| SDK (default) | none | Normal production | Uses MCP SDK `StdioServerTransport`. |
-| Minimal Framer | `--minimal-stdio` | Low-level initialize debugging | Limited tool surface; skips full metrics/auth; verbose byte logs. |
-| Enterprise Framer | `--framer-stdio` | Diagnose transport anomalies with full feature set | Bypasses SDK transport, preserves full tool registry, metrics, security. |
-
-Both framer modes implement a simple `Content-Length: <n>\r\n\r\n` envelope. Enterprise framer shares the same dispatcher, avoiding code duplication. This refactor removed divergence between enterprise & legacy servers and simplified future feature rollout (single patch surface).
-
-### Deprecations
-
-Legacy compiled outputs (`vscode-server-enterprise.js`, `vscode-server.js`) are deprecated. Start scripts should target `dist/server.js`.
-
----
-
-## 21. Adaptive Timeout Mechanism
-
-Previous implementation used competing timers (static + adaptive extension) causing races. The new model introduces a single monitor loop with these parameters (user arguments or defaults):
-
-| Parameter | Meaning | Default |
-|-----------|---------|---------|
-| `adaptiveExtendWindowMs` | Time window where progress (stdout/stderr or chunk activity) allows extensions | 4000 |
-| `adaptiveExtendStepMs` | Increment applied when progress observed | 1000 |
-| `adaptiveMaxTotalSec` | Hard ceiling on total runtime (prevents endless extension) | 120 (cap by global limit) |
-| Grace Period | Fixed short window after final extension before termination | ~1000ms |
-
-Algorithm (simplified):
-
-1. Start deadline = requested timeout.
-2. Every 250ms monitor loop checks for new output/activity within extend window.
-3. If activity and total < maxTotal, extend deadline by `adaptiveExtendStepMs` (record event in `adaptiveLog`).
-4. On reaching deadline without activity: enter grace; if still idle at grace end, terminate.
-5. All timing decisions flow through one code path → no race with a separate static timer.
-
-Response exposes: `adaptiveLog[]`, `effectiveTimeoutMs`, `timedOut`, and any warnings about deprecated fields or long durations.
-
----
-
-## 22. Output Overflow Strategies
-
-Large stdout/stderr can starve memory or bandwidth. Three strategies selectable via env `MCP_OVERFLOW_STRATEGY` (or default):
-
-| Strategy | Behavior | Exit Code | Typical Use |
-|----------|----------|-----------|-------------|
-| return (default) | Respond immediately with partial collected output; kill process in background | 137 (synthetic) | Fast feedback to agent; minimize wasted compute |
-| terminate | Aggressively SIGTERM (+ optional SIGKILL) once cap exceeded | 137/124 | Strict resource ceilings |
-| truncate | Stop reading additional data, allow process to finish naturally | Actual process code | Keep best-effort final exit status |
-
-Caps enforced: bytes (`limits.maxOutputKB`), lines (`limits.maxLines`). Metadata flags: `overflow:true`, `truncated:true`, `overflowStrategy:"..."`, `reason:"output_overflow"`.
-
----
-
-## 23. PowerShell Process Metrics Sentinel
-
-When enabled (`MCP_CAPTURE_PS_METRICS=1` or config flag), the PowerShell script footer emits a sentinel JSON line (never user output) with shape:
-
-```jsonc
-{ "__psMetrics": { "cpuSec": <number>, "wsMB": <number> } }
-```
-
-Executor logic:
-
-1. Buffers stdout lines; searches backward for sentinel marker.
-2. Parses metrics; removes sentinel from user-visible `stdout`.
-3. Injects per-invocation metrics (`psCpuSec`, `psWSMB`) into execution record.
-4. Aggregates arrays in `metricsRegistry` for avg & p95; surfaces at `/api/metrics` and Prometheus `/metrics`.
-
-Design goal: zero dependency on external profilers; minimal overhead (<2–3ms parse) and safely ignorable when disabled.
-
----
-
-## 24. Metrics HTTP Port Binding & Stability
-
-The metrics HTTP server attempts to bind a preferred port (default 9090). On collision it performs controlled incremental retries. Tests depending on a stable port should set an env flag (`METRICS_STRICT=1`, planned) to fail fast rather than auto-increment. (Implementation note: strict mode wiring pending — see Observability Roadmap.)
-
----
-
-## 25. Future Documentation Hooks
-
-Planned sections to be added as features graduate:
-
-- Cancellation & request abort pathway
-- Policy plugin lifecycle
-- Metrics reset endpoint
-- Structured adaptive timeout tuning guide
-
----
-
-## 26. Engineering Iteration & Troubleshooting Protocol (Internal)
-
-This section defines the disciplined loop for making *behavioral* or *observability* changes. It exists to prevent patch stacking and regressions during rapid hardening cycles.
-
-### 26.1 Loop Contract
-
-Each iteration MUST record:
-
-| Field | Description |
-|-------|-------------|
-| Hypothesis | Single root-cause theory being validated. |
-| Change | Minimal code/doc/instrument delta applied to test hypothesis. |
-| Expected Evidence | Concrete new observable (log tag, JSON field, metric count). |
-| Verification Command | Exact test or manual invocation producing evidence. |
-| Outcome | Pass / Fail + observed data snippet. |
-| Action | Proceed (if evidence seen & points to next step) OR Revert (if evidence absent). |
-
-### 26.2 Revert-First Policy
-
-If Expected Evidence is *not* observed on the very next run, the change is **reverted or wrapped behind a feature flag** before attempting a different approach. This prevents “patching patches”.
-
-### 26.3 Instrument vs Behavior
-
-Two categories of diffs:
-
-- Instrumentation (debug only): Guarded by env flag (`METRICS_DEBUG`). Any ephemeral probes must be removed after evidence captured.
-- Behavioral: Alters execution outcome or protocol surface. Requires doc update in same commit (README / ARCHITECTURE / TROUBLESHOOTING) and at least one test assertion.
-
-### 26.4 Metrics Capture Troubleshooting Snapshot
-
-See `docs/TROUBLESHOOTING.md` for end‑to‑end steps diagnosing PowerShell process metrics (`psSamples`). Core principles:
-
-1. Prove emission (sentinel present in raw stream) **before** altering parser.
-2. Prove parser extraction (temporary diagnostic JSON) **before** altering aggregation.
-3. Only when both confirmed, adjust aggregation or snapshot exposure.
-
-### 26.5 Temporary Flags
-
-| Flag | Purpose | Default | Scope |
-|------|---------|---------|-------|
-| `METRICS_DEBUG` | Verbose stderr metrics lifecycle logs | off | Dev / CI diagnosis |
-| `METRICS_STRICT` | Prevent port auto-increment for HTTP metrics | off | Tests needing deterministic port |
-| `MCP_CAPTURE_PS_METRICS` | Enable single end-of-process sentinel emission & parsing | off | Opt‑in feature flag |
-| `METRICS_PORT_RECLAIM` | Windows-only final attempt to reclaim original metrics port by terminating stale server.js holder | off | CI / local recovery |
-
-### 26.6 Patch Ledger (Example Format)
-
-```
-| Seq | Date | Hypothesis | Change | Evidence Tag | Result | Follow-up |
-|  01 | 2025-08-27 | Sentinel dropped | Add stderr + stdout sentinel | [METRICS][CAPTURE] | Absent -> Revert | Add TRACE JSON |
-```
-
-Maintain ledger in PR description or a temporary markdown until resolution, then archive (optional) or remove if noise.
-
----
-
->>>>>>> ade15a4 (chore: cleanup instrumentation, add port reclaim flag, enforce rate limiting, bump 1.2.1)

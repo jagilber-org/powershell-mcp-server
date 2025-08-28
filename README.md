@@ -1,148 +1,14 @@
 ﻿# PowerShell MCP Server (Enterprise Hardening / Minimal Core Aug 2025)
 
 ## Quick Start
-<!-- Removed duplicated section after merge conflict -->
 
-External timeout enforced (default 90s). Internal self-destruct (exit 124) can be disabled by setting `MCP_DISABLE_SELF_DESTRUCT=1` (useful for integration harnesses whose parent host crashes on injected timers). When enabled, a lightweight PowerShell `[System.Threading.Timer]` exits early (lead ~300ms) to minimize orphan processes. Post-kill verification escalates to process tree kill on Windows if needed. Metrics: duration, p95, TIMEOUTS counter.
-
-### CLI Flags
-
-| Flag | Effect | Env Equivalent |
-|------|--------|----------------|
-| `--disable-self-destruct` | Disables injected PowerShell self-destruct timer | `MCP_DISABLE_SELF_DESTRUCT=1` |
-| `--enable-self-destruct` | Re-enables timer if previously disabled | (unset `MCP_DISABLE_SELF_DESTRUCT`) |
-| `--quiet` | Suppresses verbose startup banners | `MCP_QUIET=1` |
-| `--minimal-stdio` | Launch experimental minimal JSON-RPC framer (diagnostic) | Forces `MCP_FRAMER_DEBUG=1` |
-| `--framer-debug` | Enable verbose framing logs in normal mode | `MCP_FRAMER_DEBUG=1` |
-| `--framer-stdio` | Enterprise server over custom framer (bypasses SDK transport) | Optional `MCP_FRAMER_DEBUG=1` |
-
-Minimal stdio mode:
-
-Use when diagnosing client initialize hangs or suspected framing bugs. Provides:
-
-1. Raw RX/TX framing logs (header/body lengths, hex preview of first bytes)
-2. Reduced surface (only initialize, tools/list, run-powershell)
-3. Forced confirmation bypass (always runs with confirmed=true) for quicker iteration
-
-Not production hardened: no size caps, auth, or metrics integration. Exit this mode before performance or security testing.
-
-Framer stdio mode:
-
-- Full enterprise tool surface, custom framing (diagnostics / isolation of SDK transport issues)
-- Uses same security & tool dispatcher, omits SDK StdioServerTransport
-- Prefer this over minimal for reproducing initialize issues with complete feature set
-
-Alpha Cleanup Notes:
-
-- Legacy MCP_INIT_DEBUG initialize sniffer removed; rely on --minimal-stdio / --framer-stdio plus --framer-debug for byte-level framing logs.
-- Duplicate framing instrumentation consolidated under MCP_FRAMER_DEBUG.
-- Future: unify tool schema list to eliminate maintenance duplication between framer and SDK paths.
-
-## Monitoring
-
-`./Simple-LogMonitor.ps1 -Follow` for rolling logs (when structured logging enabled). Metrics dashboard hosted by embedded HTTP server (URL logged on startup).
-
-### Metrics Dashboard (Expanded)
-
-Top counters now include (when feature flag `limits.capturePsProcessMetrics` or env `MCP_CAPTURE_PS_METRICS=1` is active and at least one PowerShell invocation has completed):
-
-- PS CPU AVG(s): Mean cumulative CPU seconds consumed per invocation (from in-process PowerShell host).
-- PS CPU P95(s): 95th percentile CPU seconds across invocations since last reset.
-- PS WS AVG(MB): Mean Working Set (resident) size in megabytes captured at invocation end.
-- PS WS P95(MB): 95th percentile Working Set MB.
-- PS Samples: Number of invocations contributing to the aggregates.
-
-These cards remain hidden until at least one sample arrives to avoid clutter when the feature is disabled.
-
-JSON snapshot (`/api/metrics`) fields:
-
-```jsonc
-{
-  "psSamples": 17,
-  "psCpuSecAvg": 0.42,
-  "psCpuSecP95": 0.88,
-  "psWSMBAvg": 92.1,
-  "psWSMBP95": 110.5
-}
-```
-
-Reset behavior: invoking any future explicit reset endpoint (planned) or process restart clears aggregates. Presently they persist for lifetime of server.
-
-Per-invocation row columns already list raw `PS CPU(s)` and `WS(MB)` for each run-powershell execution when metrics are enabled.
-
-Port binding resilience:
-
-- The metrics HTTP server attempts the configured port, then incremental offsets. Set `METRICS_STRICT=1` to disable auto-increment (tests).
-- Optional Windows-only reclaim (`METRICS_PORT_RECLAIM=1`): on final bind failure of original port the server will attempt to terminate a stale `server.js` process holding that port (safety: only matches command line containing `server.js`). Disabled by default.
-
-## Unknown Command Learning
-
-UNKNOWN â†’ normalize â†’ queue â†’ review â†’ approve â†’ SAFE cache (`learned-safe.json`). Approved patterns immediately influence classification.
-
-## Tests (Jest)
-
-Run: `npm run test:jest`
-
-Coverage highlights: parity (tool surface), run-powershell behaviors (timeout, truncation), server-stats shape, working directory policy, syntax check, help topics, learning queue, classification expansions (git/gh, OS, alias), self-destruct timeout.
-
-### PowerShell Process Metrics Aggregation (Feature Flag)
-
-Enable via env `MCP_CAPTURE_PS_METRICS=1` (or config `limits.capturePsProcessMetrics: true`). Aggregated fields: `psSamples`, `psCpuSecAvg`, `psCpuSecP95`, `psWSMBAvg`, `psWSMBP95`.
-
-Test `ps-metrics-aggregation.test.js/ts` ensures these appear (dynamic metrics port detection). If failing, confirm the metrics server port (logs show `HTTP server listening on http://127.0.0.1:<port>`).
-
-Run it (ensure a fresh build so `dist/` contains latest instrumentation):
-
-```powershell
-npm run build
-$env:MCP_CAPTURE_PS_METRICS = '1'
-$env:METRICS_DEBUG = '1'
-npm run test:jest -- -t "aggregates ps metrics"
-```
-
-If it fails locally but succeeds in CI (or vice versa), suspect a stale `dist/` directory or an alternate server entrypoint excluding the instrumentation. Rebuild and re-run.
-
-## Roadmap (Excerpt)
-
-- Phase 2 (done): dynamic overrides, metrics, rate limiting.
-- Phase 3: cancellation, pluggable policies, signing, dynamic learned pattern integration.
-- Phase 4: log rotation, redaction, self-test tool, per-category metrics (VCS_*, OS_*), dashboard timeout charts.
-
-## Periodic Operational Checks
-
-Daily baseline, weekly metrics trend review, post-hardening test bursts, monthly metrics archive pruning.
-
-## Git Hooks
-
-Enable pre-commit:
- 
-```powershell
-git config core.hooksPath .githooks
-```
-
-Disable:
- 
-```powershell
-git config --unset core.hooksPath
-```
-
-## Contributing
-
-```powershell
-npm run compliance:check
-npm run build
-```
-
-## License
-
-Proprietary (internal hardening branch).
-
-<!-- duplicate Quick Start removed during merge resolution -->
 ```powershell
 npm install
 npm run build
 npm run start:enterprise
 ```
+
+> Deprecation: Legacy entry files `vscode-server-enterprise.ts` / `vscode-server.ts` are deprecated and excluded from the TypeScript build. Migrate any scripts invoking `dist/vscode-server-enterprise.js` to `dist/server.js` (preferred) or `dist/index.js`. The deprecated files will be removed in a future major release.
 
 Optional auth:
 
@@ -151,51 +17,12 @@ $env:MCP_AUTH_KEY = "your-strong-key"
 npm run start:enterprise
 ```
 
-## PowerShell Host Selection (Deterministic)
-
-The server now uses a single synchronous resolver (`detectShell`) shared by all tools.
-
-Precedence order:
-1. Config override: `enterprise-config.json` -> `shellOverride` (absolute path)
-2. Environment override: `PWSH_EXE`
-3. Well-known installs (OS-specific):
-   - Windows: `Program Files/PowerShell/7/pwsh.exe`, `Program Files (x86)/PowerShell/7/pwsh.exe`, legacy `WindowsPowerShell` path
-   - *nix: `/usr/bin/pwsh`, `/usr/local/bin/pwsh`, `/snap/bin/pwsh`, `/opt/microsoft/powershell/7/pwsh`
-4. First `pwsh` found on PATH
-5. First legacy `powershell` found on PATH
-6. Fallback:
-   - Windows: `powershell.exe`
-   - *nix: `pwsh` (then relies on PATH resolution at spawn time)
-
-Inspection: Startup log emits:
-```
-🔑 PowerShell Host: <exe> (<source>)
-```
-`source` values: `configOverride | env:PWSH_EXE | wellKnown | path | path-legacy | fallback`.
-
-Health tool now includes shell info:
-```jsonc
-{"shell":{"exe":"C:/Program Files/PowerShell/7/pwsh.exe","source":"wellKnown"}}
-```
-
-Override examples:
-```powershell
-# Config override (enterprise-config.json)
-{
-  "shellOverride": "C:/Portable/pwsh/pwsh.exe"
-}
-
-# Environment override
-$env:PWSH_EXE = "C:/Portable/pwsh/pwsh.exe"
-```
-Environment wins only if config override absent or invalid.
-
 ## Available Tools (Core + Extended)
 
 | Tool | Purpose | Key Arguments |
 |------|---------|---------------|
 | `emit-log` | Structured audit log entry | `message` |
-| `learn` | Manage unknown → safe learning queue | action, limit, minCount, normalized[] |
+| `learn` | Manage unknown â†’ safe learning queue | action, limit, minCount, normalized[] |
 | `working-directory-policy` | Get/set allowed roots enforcement | action, enabled, allowedWriteRoots[] |
 | `server-stats` | Metrics snapshot & counts | verbose |
 | `memory-stats` | Process memory (MB) | gc |
@@ -203,8 +30,9 @@ Environment wins only if config override absent or invalid.
 | `git-status` | Show repository status (porcelain) | porcelain |
 | `git-commit` | Commit staged changes | message |
 | `git-push` | Push current branch | setUpstream |
-| `threat-analysis` | Unknown / threat tracking stats | — |
-| `run-powershell` | Execute command / inline script (classified) | command/script, workingDirectory, aiAgentTimeoutSec (s), confirmed, adaptive* |
+| `threat-analysis` | Unknown / threat tracking stats | â€” |
+| 
+un-powershell | Execute command / inline script (classified) | command/script, workingDirectory, aiAgentTimeoutSec (s), confirmed, adaptive* |
 | `run-powershellscript` | Alias: inline or from file (inlined) | script or scriptFile, workingDirectory, timeout, confirmed |
 | `powershell-syntax-check` | Fast heuristic script check | script, filePath |
 | `ai-agent-tests` | Internal harness | testSuite, skipDangerous |
@@ -219,7 +47,7 @@ Notes:
 
 ## Security Model
 
-Levels: SAFE → RISKY → DANGEROUS (reserved) → CRITICAL → BLOCKED → UNKNOWN
+Levels: SAFE â†’ RISKY â†’ DANGEROUS (reserved) â†’ CRITICAL â†’ BLOCKED â†’ UNKNOWN
 
 | Level | Requires confirmed? | Executed? | Example | Category Sample |
 |-------|---------------------|-----------|---------|-----------------|
@@ -240,7 +68,7 @@ Alias & OS classification:
 | VCS_MUTATION | `git commit`, `gh pr create` |
 | VCS_DESTRUCTIVE | `git push --force`, `git clean -xfd` |
 
-PowerShell Core preference: auto-detects `pwsh.exe` and falls back to `powershell.exe`. Override with `shellOverride` or `$env:PWSH_EXE`.
+PowerShell Core preference: auto-detects `pwsh.exe` and falls back to `powershell.exe`. Override with `ENTERPRISE_CONFIG.powershell.executable`.
 
 ### Tool Hardening (New)
 
@@ -366,63 +194,7 @@ Mitigation tips for large output: narrow queries, use `Select-Object -First N`, 
 
 ## Timeouts & Resilience
 
-External timeout enforced (default 90s). Internal self-destruct (exit 124) can be disabled by setting `MCP_DISABLE_SELF_DESTRUCT=1`. When enabled, a lightweight PowerShell `[System.Threading.Timer]` exits early (lead ~300ms) to minimize orphan processes. Post-kill verification escalates to process tree kill on Windows if needed. Metrics: duration, p95, TIMEOUTS counter.
-
-### Timeout Hardening (Extended)
-
-Fields: `configuredTimeoutMs`, `effectiveTimeoutMs`, `originalTimeoutSeconds`, `warnings[]`, `timedOut`, `internalSelfDestruct`, `watchdogTriggered`, `killEscalated`, `killTreeAttempted`, `terminationReason` (one of `timeout|overflow|killed|completed`), `adaptiveExtensions`, `adaptiveExtended`.
-
-Deprecated params: `timeout`, `aiAgentTimeout` (use `aiAgentTimeoutSec`). Cap: `limits.maxTimeoutSeconds` (default 600). Long timeouts (>=60s) produce warnings.
-
-### Adaptive Timeout
-
-Enable with `adaptiveTimeout:true` or `progressAdaptive:true`.
-
-Arguments (optional overrides):
-- `adaptiveExtendWindowMs` (default 2000) – if remaining ≤ this and recent activity → extend
-- `adaptiveExtendStepMs` (default 5000) – extension per step
-- `adaptiveMaxTotalSec` (default: min(base*3, 180)) – hard cap
-
-Behavior:
-1. Start with base timeout.
-2. On each check cycle, if output activity occurred recently and time remaining is low, extend by step.
-3. Never exceed `adaptiveMaxTotalSec`.
-
-Sample invocation:
-
-```jsonc
-{
-  "method":"tools/call",
-  "params":{
-    "name":"run-powershell",
-    "arguments":{
-      "command":"[int]$i=0; while($i -lt 5){ Write-Output \"tick:$i\"; Start-Sleep -Milliseconds 800; $i++ }",
-      "aiAgentTimeoutSec":2,
-      "adaptiveTimeout":true,
-      "adaptiveExtendWindowMs":700,
-      "adaptiveExtendStepMs":1500,
-      "adaptiveMaxTotalSec":12,
-      "confirmed":true
-    }
-  }
-}
-```
-
-Expected adaptive fields: `adaptiveExtensions > 0`, `effectiveTimeoutMs > configuredTimeoutMs`, `terminationReason:'completed'` (if finished before cap).
-
-### Hang Detection Test (Critical)
-
-The project includes a non-removable test using:
-
-```powershell
-while($true) { try { [System.Console]::ReadKey($true) | Out-Null } catch { Start-Sleep -Milliseconds 100 } }
-```
-
-This guarantees a genuine hang that must be terminated by timeout (no early success). Assertions ensure:
-- Runtime ≥ 80% of configured timeout
-- `timedOut || exitCode === 124`
-- `success === false`
-- `terminationReason === 'timeout'`
+External timeout enforced (default 90s). Internal self-destruct (exit 124) can be disabled by setting `MCP_DISABLE_SELF_DESTRUCT=1` (useful for integration harnesses whose parent host crashes on injected timers). When enabled, a lightweight PowerShell `[System.Threading.Timer]` exits early (lead ~300ms) to minimize orphan processes. Post-kill verification escalates to process tree kill on Windows if needed. Metrics: duration, p95, TIMEOUTS counter.
 
 ### CLI Flags
 
@@ -438,6 +210,7 @@ This guarantees a genuine hang that must be terminated by timeout (no early succ
 Minimal stdio mode:
 
 Use when diagnosing client initialize hangs or suspected framing bugs. Provides:
+
 1. Raw RX/TX framing logs (header/body lengths, hex preview of first bytes)
 2. Reduced surface (only initialize, tools/list, run-powershell)
 3. Forced confirmation bypass (always runs with confirmed=true) for quicker iteration
@@ -451,6 +224,7 @@ Framer stdio mode:
 - Prefer this over minimal for reproducing initialize issues with complete feature set
 
 Alpha Cleanup Notes:
+
 - Legacy MCP_INIT_DEBUG initialize sniffer removed; rely on --minimal-stdio / --framer-stdio plus --framer-debug for byte-level framing logs.
 - Duplicate framing instrumentation consolidated under MCP_FRAMER_DEBUG.
 - Future: unify tool schema list to eliminate maintenance duplication between framer and SDK paths.
@@ -489,28 +263,36 @@ Per-invocation row columns already list raw `PS CPU(s)` and `WS(MB)` for each ru
 
 ## Unknown Command Learning
 
-UNKNOWN → normalize → queue → review → approve → SAFE cache (`learned-safe.json`). Approved patterns immediately influence classification.
+UNKNOWN â†’ normalize â†’ queue â†’ review â†’ approve â†’ SAFE cache (`learned-safe.json`). Approved patterns immediately influence classification.
 
 ## Tests (Jest)
 
 Run: `npm run test:jest`
 
-Coverage highlights now include:
-- Timeout cap & deprecation warnings
-- Forced hang (strict semantics)
-- Adaptive timeout extensions
-- Termination reason integrity
-- Fast-exit control (ensures no false hang)
-- Truncation & overflow strategies
-- Working directory policy
-- Health tool resilience
-- Deterministic shell detection precedence & overrides
+Coverage highlights: parity (tool surface), run-powershell behaviors (timeout, truncation), server-stats shape, working directory policy, syntax check, help topics, learning queue, classification expansions (git/gh, OS, alias), self-destruct timeout.
+
+### PowerShell Process Metrics Aggregation (Feature Flag)
+
+Enable via env `MCP_CAPTURE_PS_METRICS=1` (or config `limits.capturePsProcessMetrics: true`). Aggregated fields: `psSamples`, `psCpuSecAvg`, `psCpuSecP95`, `psWSMBAvg`, `psWSMBP95`.
+
+Test `ps-metrics-aggregation.test.js/ts` ensures these appear (dynamic metrics port detection). If failing, confirm the metrics server port (logs show `HTTP server listening on http://127.0.0.1:<port>`).
+
+Run it (ensure a fresh build so `dist/` contains latest instrumentation):
+
+```powershell
+npm run build
+$env:MCP_CAPTURE_PS_METRICS = '1'
+$env:METRICS_DEBUG = '1'
+npm run test:jest -- -t "aggregates ps metrics"
+```
+
+If it fails locally but succeeds in CI (or vice versa), suspect a stale `dist/` directory or an alternate server entrypoint excluding the instrumentation. Rebuild and re-run.
 
 ## Roadmap (Excerpt)
 
 - Phase 2 (done): dynamic overrides, metrics, rate limiting.
 - Phase 3: cancellation, pluggable policies, signing, dynamic learned pattern integration.
-- Phase 4: log rotation, redaction, self-test tool, per-category metrics (VCS_*, OS_*), timeout dashboards.
+- Phase 4: log rotation, redaction, self-test tool, per-category metrics (VCS_*, OS_*), dashboard timeout charts.
 
 ## Periodic Operational Checks
 
@@ -540,3 +322,9 @@ npm run build
 ## License
 
 Proprietary (internal hardening branch).
+
+### Timeout Hardening
+
+Fields: configuredTimeoutMs, effectiveTimeoutMs, originalTimeoutSeconds, warnings[], timedOut, internalSelfDestruct, watchdogTriggered, killEscalated, killTreeAttempted.
+Deprecated params: timeout, aiAgentTimeout (use aiAgentTimeoutSec). Cap: limits.maxTimeoutSeconds (default 600). Long timeouts (>=60s) produce warnings. Adaptive: pass progressAdaptive=true and optional adaptiveExtendWindowMs, adaptiveExtendStepMs, adaptiveMaxTotalSec.
+

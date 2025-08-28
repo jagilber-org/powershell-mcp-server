@@ -64,7 +64,7 @@
         "learning",
         "prefer:structured"
       ],
-      "checksum": "pending"
+  "checksum": "pending"
     },
     {
       "id": "tooling.relearn_on_new_tools",
@@ -87,7 +87,7 @@
         "learning",
         "gate:refresh"
       ],
-      "checksum": "pending"
+  "checksum": "pending"
     }
   ]
 }
