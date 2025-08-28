@@ -1,3 +1,9 @@
+/**
+ * DEPRECATION NOTICE
+ * This file is retained for backward compatibility only.
+ * All new development converges on `server.ts` (EnterprisePowerShellMCPServer).
+ * It will be removed in a future release. Use `import { EnterprisePowerShellMCPServer } from './server.js'`.
+ */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode, } from '@modelcontextprotocol/sdk/types.js';

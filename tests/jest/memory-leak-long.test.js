@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, rpc } = require('./util');
+﻿const { startServer, waitForReady, collect, rpc } = require('./util');
 
 function parse(res, id){
   const msg = res[id]; if(!msg) return null; try { return JSON.parse(msg.result?.content?.[0]?.text||'{}'); } catch { return null; }
@@ -48,7 +48,7 @@ describe('long-running memory + watchdog stress', ()=>{
     const runs = 25;
     for(let i=0;i<runs;i++){
       // Command that would wait 20s but tool timeout will be 1s triggering watchdog
-      rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Wait-Event -SourceIdentifier never-happens -Timeout 20', confirmed:true, timeout:1 }}, 'hang'+i);
+      rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Wait-Event -SourceIdentifier never-happens -Timeout 20', confirmed:true, timeoutSeconds:1 }}, 'hang'+i);
     }
     await waitFor(res, Array.from({length:runs},(_,i)=>'hang'+i), 60000);
     rpc(srv,'tools/call',{ name:'memory-stats', arguments:{ gc:true }},'hangFinal');
@@ -63,3 +63,5 @@ describe('long-running memory + watchdog stress', ()=>{
     }
   }, 120000);
 });
+
+

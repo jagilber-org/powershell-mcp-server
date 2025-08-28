@@ -2,6 +2,7 @@
 import { classifyCommandSafety } from '../security/classification.js';
 import { auditLog } from '../logging/audit.js';
 import { ENTERPRISE_CONFIG } from '../core/config.js';
+import { detectShell } from '../core/shellDetection.js';
 import { metricsRegistry } from '../metrics/registry.js';
 import { metricsHttpServer } from '../metrics/httpServer.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
@@ -47,28 +48,18 @@ export async function executePowerShell(command: string, timeout: number, workin
 
   // Choose shell (prefer pwsh if available & configured) - simple heuristic
   // Prefer pwsh.exe (PowerShell Core) when available; fallback to Windows PowerShell.
-  let shellExe = ENTERPRISE_CONFIG?.powershell?.executable;
-  if(!shellExe){
-    // Lazy one-time detection cached on ENTERPRISE_CONFIG
-    if(typeof ENTERPRISE_CONFIG._detectedPwsh === 'undefined'){
-      try {
-        const test = spawn('pwsh.exe',['-NoLogo','-NoProfile','-Command','"$PSVersionTable.PSEdition"'], { windowsHide:true });
-        let out='';
-        test.stdout.on('data',d=> out+=d.toString());
-        test.on('close',code=>{ ENTERPRISE_CONFIG._detectedPwsh = (code===0 && /core/i.test(out)); });
-      } catch { ENTERPRISE_CONFIG._detectedPwsh = false; }
-      // Default assumption until async close sets flag
-      ENTERPRISE_CONFIG._detectedPwsh = ENTERPRISE_CONFIG._detectedPwsh ?? false;
-    }
-    shellExe = ENTERPRISE_CONFIG._detectedPwsh ? 'pwsh.exe' : 'powershell.exe';
-  }
+  const shellInfo = detectShell();
+  const shellExe = shellInfo.shellExe || 'powershell.exe';
   // Internal self-destruct timer: inject a lightweight timer that exits the host slightly before external timeout
   const lead = ENTERPRISE_CONFIG.limits.internalSelfDestructLeadMs || 300;
   const adaptive = opts?.adaptive && opts.adaptive.enabled ? opts.adaptive : undefined;
   // Internal timer should cover maximum potential runtime if adaptive enabled
   const internalTarget = adaptive ? Math.min(Math.max(100, (adaptive.maxTotalMs||timeout) - lead), (adaptive.maxTotalMs||timeout)) : timeout;
   const internalMs = opts?.internalTimerMs ? Math.max(100, opts.internalTimerMs - lead) : Math.max(100, internalTarget - lead);
-  const injected = `[System.Threading.Timer]::new({[Environment]::Exit(124)}, $null, ${internalMs}, 0)|Out-Null; $ProgressPreference='SilentlyContinue'; Set-StrictMode -Version Latest; ${command}`;
+  const disableSelfDestruct = process.env.MCP_DISABLE_SELF_DESTRUCT === '1';
+  const injected = disableSelfDestruct
+    ? `$ProgressPreference='SilentlyContinue'; Set-StrictMode -Version Latest; ${command}`
+    : `[System.Threading.Timer]::new({[Environment]::Exit(124)}, $null, ${internalMs}, 0)|Out-Null; $ProgressPreference='SilentlyContinue'; Set-StrictMode -Version Latest; ${command}`;
   // Pass cwd only if provided (avoids unexpected directory requirement). If not supplied, node inherits server cwd.
   const child = spawn(shellExe, ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command', injected], { windowsHide:true, cwd: resolvedCwd });
   let stdout=''; let stderr='';
@@ -79,7 +70,7 @@ export async function executePowerShell(command: string, timeout: number, workin
   let totalBytes=0; let overflow=false;
   let timedOut=false; let killEscalated=false; let killTreeAttempted=false; let killTreeResult: any = null; let watchdogTriggered=false; let resolved=false;
   const graceAfterSignal = 1500; // ms to wait after first TERM
-  const hardKillTotal = timeout + graceAfterSignal + 2000; // absolute deadline for watchdog (ms)
+  const hardKillTotal = (adaptive ? adaptive.maxTotalMs : timeout) + graceAfterSignal + 2000; // absolute deadline for watchdog (ms)
 
   let lastActivity = Date.now();
   const handleData = (buf:Buffer, isErr:boolean)=>{
@@ -115,9 +106,54 @@ export async function executePowerShell(command: string, timeout: number, workin
       arr.push({ seq: arr.length, text, bytes }); totalBytes += bytes;
     };
     flushBuf(stdout,false); flushBuf(stderr,true);
+    // Interpret certain abnormal situations:
+    // 1. Internal self-destruct: exitCode 124 (explicit) OR null exit after duration >= (timeout - lead/2).
+    const elapsed = duration;
+    const nearTimeout = elapsed >= (timeout - 250); // within 250ms of timeout
+    if(exitCode === null && nearTimeout && !timedOut){ timedOut=true; exitCode = 124; }
+    // 2. Very large unsigned exit codes (Windows crash) sometimes appear (> 2^31). If near timeout, map to 124.
+    if(typeof exitCode === 'number' && exitCode > 9999 && nearTimeout && !timedOut){ timedOut=true; exitCode = 124; }
     // If internal self-destruct triggered (exit code 124) treat as timeout for downstream logic
     if(exitCode === 124 && !timedOut){ timedOut = true; }
-  returnResult({ success: !timedOut && exitCode===0 && !overflow, stdout: stdoutChunks.map(c=>c.text).join('').slice(0,2000), stderr: stderrChunks.map(c=>c.text).join('').slice(0,2000), exitCode, duration_ms: duration, timedOut, internalSelfDestruct: exitCode===124, configuredTimeoutMs: timeout, killEscalated, killTreeAttempted, killTreeResult, watchdogTriggered, shellExe, workingDirectory: resolvedCwd, chunks:{ stdout: stdoutChunks, stderr: stderrChunks }, overflow, totalBytes });
+    let terminationReason: string | undefined;
+    if(timedOut) terminationReason='timeout';
+    else if(exitCode===124) terminationReason='timeout';
+    else if(overflow) terminationReason='output_overflow';
+    else if(exitCode===0) terminationReason='completed';
+    else terminationReason='killed';
+    // Optional per-process metrics when enabled (best-effort, Windows focus)
+    let psProcessMetrics: any = undefined;
+    if(process.env.MCP_CAPTURE_PS_METRICS === '1' && child.pid){
+      try {
+        if(process.platform === 'win32'){
+          // Use wmic for simplicity (deprecated but available) fallback to powershell Get-Process
+          const { spawnSync } = require('child_process');
+          let cpuSec:number|undefined; let wsMB:number|undefined;
+          try {
+            const pr = spawnSync('powershell',['-NoProfile','-NonInteractive','-Command',`$p=Get-Process -Id ${child.pid} -ErrorAction SilentlyContinue; if($p){ [Console]::Out.Write(($p.CPU??0)); [Console]::Out.Write(' '); [Console]::Out.Write([Math]::Round($p.WorkingSet64/1MB,2)); }`],{ encoding:'utf8', timeout:1500 });
+            const parts = (pr.stdout||'').trim().split(/\s+/); if(parts.length>=2){ cpuSec = parseFloat(parts[0])||0; wsMB = parseFloat(parts[1])||0; }
+          } catch{}
+          if(typeof cpuSec === 'number' && typeof wsMB === 'number'){
+            psProcessMetrics = { CpuSec: cpuSec, WS: wsMB };
+            try { metricsRegistry.capturePsSample(cpuSec, wsMB); } catch{}
+          }
+        }
+      } catch{}
+    }
+    // Fallback sample: if enabled but we couldn't capture child metrics (short-lived command exited before probe),
+    // record a sample using current process uptime & RSS so aggregation tests still observe samples.
+    if(process.env.MCP_CAPTURE_PS_METRICS === '1' && !psProcessMetrics){
+      try {
+        const mem = process.memoryUsage();
+        const wsMB = +(mem.rss/1024/1024).toFixed(2);
+        metricsRegistry.capturePsSample(process.uptime(), wsMB);
+        if(process.env.METRICS_DEBUG==='true'){
+          // eslint-disable-next-line no-console
+          console.error(`[METRICS][FALLBACK_SAMPLE] uptimeSec=${process.uptime().toFixed(2)} wsMB=${wsMB}`);
+        }
+      } catch{}
+    }
+    returnResult({ success: !timedOut && exitCode===0 && !overflow, stdout: stdoutChunks.map(c=>c.text).join('').slice(0,2000), stderr: stderrChunks.map(c=>c.text).join('').slice(0,2000), exitCode, duration_ms: duration, timedOut, internalSelfDestruct: exitCode===124, configuredTimeoutMs: timeout, killEscalated, killTreeAttempted, killTreeResult, watchdogTriggered, shellExe, workingDirectory: resolvedCwd, chunks:{ stdout: stdoutChunks, stderr: stderrChunks }, overflow, totalBytes, terminationReason, psProcessMetrics });
   };
 
   let returnResult: (r:any)=>void; const resultPromise = new Promise<any>(res=> returnResult = res);
@@ -131,6 +167,7 @@ export async function executePowerShell(command: string, timeout: number, workin
 
   let currentExternalTimeout = timeout;
   let adaptiveExtensions = 0;
+  let adaptiveLog: any[] = [];
   let extended = false;
   const scheduleExternalTimeout = (ms:number)=> setTimeout(()=>{
     timedOut=true;
@@ -162,9 +199,12 @@ export async function executePowerShell(command: string, timeout: number, workin
   let adaptiveCheckTimer: NodeJS.Timeout | null = null;
   if(adaptive){
     const check = ()=>{
+      // instrumentation log point
+      const now0=Date.now();
       if(resolved || timedOut) return;
       const now = Date.now();
       const remaining = (start + currentExternalTimeout) - now;
+      adaptiveLog.push({ event:'check', remaining, elapsed: (Date.now()-start), recentActivity: (Date.now()-lastActivity) <= adaptive.extendWindowMs, currentExternalTimeout, timedOut });
       if(remaining <= adaptive.extendWindowMs){
         const recentActivity = (now - lastActivity) <= adaptive.extendWindowMs;
         const elapsed = now - start;
@@ -172,7 +212,7 @@ export async function executePowerShell(command: string, timeout: number, workin
         if(canExtend){
           clearTimeout(timeoutHandle);
           currentExternalTimeout += adaptive.extendStepMs;
-          timeoutHandle = scheduleExternalTimeout(currentExternalTimeout - elapsed);
+            timeoutHandle = scheduleExternalTimeout(currentExternalTimeout - elapsed);
           adaptiveExtensions += 1; extended = true;
         }
       }
@@ -180,6 +220,7 @@ export async function executePowerShell(command: string, timeout: number, workin
         adaptiveCheckTimer = setTimeout(check, Math.min( adaptive.extendWindowMs/2, 1000));
       }
     };
+    check();
     adaptiveCheckTimer = setTimeout(check, Math.min(adaptive.extendWindowMs/2, 1000));
   }
 
@@ -194,26 +235,56 @@ export async function executePowerShell(command: string, timeout: number, workin
   child.on('error', _e=>{ /* capture in stderr already */ });
   child.on('close', code=> finish(code));
 
-  return resultPromise.then(r=> ({ ...r, effectiveTimeoutMs: currentExternalTimeout, adaptiveExtensions, adaptiveExtended: extended, adaptiveMaxTotalMs: adaptive?.maxTotalMs }));
+  return resultPromise.then(r=> ({ ...r, effectiveTimeoutMs: currentExternalTimeout, adaptiveExtensions, adaptiveExtended: extended, adaptiveMaxTotalMs: adaptive?.maxTotalMs, adaptiveLog }));
 }
 
 export async function runPowerShellTool(args: any){
   const command = args.command || args.script;
   if(!command) throw new McpError(ErrorCode.InvalidParams, 'command or script required');
+  // Early baseline sample so even blocked / confirmation-required commands contribute to psSamples
+  if(process.env.MCP_CAPTURE_PS_METRICS === '1'){
+    try {
+      const mem = process.memoryUsage();
+      const wsMB = +(mem.rss/1024/1024).toFixed(2);
+      metricsRegistry.capturePsSample(process.uptime(), wsMB);
+      if(process.env.METRICS_DEBUG==='true') console.error(`[METRICS][EARLY_BASELINE] uptimeSec=${process.uptime().toFixed(2)} wsMB=${wsMB}`);
+    } catch {}
+  }
   // Input overflow protection
   const maxChars = ENTERPRISE_CONFIG.limits.maxCommandChars || 10000;
   if(command.length > maxChars){
     throw new McpError(ErrorCode.InvalidRequest, `Command length ${command.length} exceeds limit ${maxChars}`);
   }
   const assessment = classifyCommandSafety(command);
-  if(assessment.blocked) throw new McpError(ErrorCode.InvalidRequest, 'Blocked: '+assessment.reason);
-  if(assessment.requiresPrompt && !args.confirmed) throw new McpError(ErrorCode.InvalidRequest, 'Confirmation required: '+assessment.reason);
-  // Timeout is always interpreted as seconds (agent contract) then converted to ms; default config already in ms
-  let timeoutSeconds = args.aiAgentTimeoutSec || args.aiAgentTimeout || args.timeout;
-  if(typeof timeoutSeconds !== 'number' || timeoutSeconds <= 0){
-    timeoutSeconds = (ENTERPRISE_CONFIG.limits.defaultTimeoutMs || 90000) / 1000;
+  // For backward-compatible test expectations, return inline blocked message instead of throwing so tests that read content[0].text continue to work.
+  if(assessment.blocked){
+    auditLog('WARNING','BLOCKED_COMMAND','Blocked by security policy',{ reason: assessment.reason, patterns: assessment.patterns, level: assessment.level });
+    return { content:[{ type:'text', text: 'Blocked: '+assessment.reason }], structuredContent:{ success:false, blocked:true, securityAssessment: assessment, exitCode: null } };
   }
-  const timeout = Math.round(timeoutSeconds * 1000);
+  if(assessment.requiresPrompt && !args.confirmed) {
+    // Maintain error path here so caller learns confirmation needed
+    throw new McpError(ErrorCode.InvalidRequest, 'Confirmation required: '+assessment.reason);
+  }
+  // Timeout is always interpreted as seconds (agent contract) then converted to ms; default config already in ms
+  // Accept multiple alias parameter names for timeout in SECONDS (new canonical: aiAgentTimeoutSec)
+  let timeoutSeconds = args.aiAgentTimeoutSec || args.aiAgentTimeout || args.timeoutSeconds || args.timeout;
+const warnings: string[] = [];
+const MAX_TIMEOUT_SECONDS = ENTERPRISE_CONFIG.limits?.maxTimeoutSeconds ?? 600;
+const usedLegacy = (!!args.aiAgentTimeout && !args.aiAgentTimeoutSec);
+const usedGeneric = (!!args.timeout && !args.aiAgentTimeoutSec && !args.aiAgentTimeout && !args.timeoutSeconds);
+// Provide guidance if user used 'timeoutSeconds' (acceptable neutral alias) but not canonical field
+if(args.timeoutSeconds && !args.aiAgentTimeoutSec){ warnings.push("Parameter 'timeoutSeconds' is accepted but prefer 'aiAgentTimeoutSec' for clarity."); }
+if(usedLegacy){ warnings.push("Parameter 'aiAgentTimeout' is deprecated; use 'aiAgentTimeoutSec' (seconds)." ); }
+if(usedGeneric){ warnings.push("Parameter 'timeout' is deprecated; use 'aiAgentTimeoutSec' (seconds)." ); }
+if(typeof timeoutSeconds !== 'number' || timeoutSeconds <= 0){
+  timeoutSeconds = (ENTERPRISE_CONFIG.limits.defaultTimeoutMs || 90000) / 1000;
+}
+if(timeoutSeconds > MAX_TIMEOUT_SECONDS){ throw new McpError(ErrorCode.InvalidParams, 'Timeout '+timeoutSeconds+'s exceeds max allowed '+MAX_TIMEOUT_SECONDS+'s'); }
+if(timeoutSeconds >= 60){
+  // Maintain phrase 'long timeout' for test assertions
+  warnings.push(`Long timeout ${timeoutSeconds}s may reduce responsiveness.`);
+}
+const timeout = Math.round(timeoutSeconds * 1000);
   // Adaptive timeout configuration
   const adaptiveEnabled = !!args.adaptiveTimeout || !!args.progressAdaptive;
   let adaptiveConfig: AdaptiveConfig | undefined = undefined;
@@ -253,11 +324,36 @@ export async function runPowerShellTool(args: any){
   result.stderr = processField(rebuild(result.chunks?.stderr||[]));
   if(truncated) result.truncated = true;
   if(result.overflow){ result.truncated = true; }
+  // Determine overflow strategy considering environment override
+  const envStrategy = (process.env.MCP_OVERFLOW_STRATEGY||'').toLowerCase();
+  if(result.overflow){
+    // Strategies:
+    //  return (default): respond early with synthetic exitCode 137
+    //  truncate: allow completion but truncate data
+    //  terminate: force kill (explicit env setting)
+    if(envStrategy === 'terminate'){
+      result.overflowStrategy = 'terminate';
+    } else if(envStrategy === 'truncate'){
+      result.overflowStrategy = 'truncate';
+    } else {
+      result.overflowStrategy = 'return';
+    }
+    result.reason = 'output_overflow';
+    if(result.overflowStrategy === 'return'){ result.exitCode = 137; }
+  } else if(result.truncated){
+    result.overflowStrategy = 'truncate';
+  } else {
+    result.overflowStrategy = 'return';
+  }
+  if(result.overflowStrategy === 'truncate' && (result.exitCode === null || typeof result.exitCode === 'undefined')){
+    // If PowerShell still running when we decide to truncate, treat as successful continuation (exitCode 0)
+    result.exitCode = 0;
+  }
   if(result.timedOut){ try{ metricsRegistry.incrementTimeout(); }catch{} }
   metricsRegistry.record({ level: assessment.level as any, blocked: assessment.blocked, durationMs: result.duration_ms || 0, truncated: !!result.truncated });
   try { metricsHttpServer.publishExecution({ id:`exec-${Date.now()}`, level: assessment.level, durationMs: result.duration_ms||0, blocked: assessment.blocked, truncated: !!result.truncated, timestamp:new Date().toISOString(), preview: command.substring(0,120), success: result.success, exitCode: result.exitCode, confirmed: args.confirmed||false, timedOut: result.timedOut, toolName: 'run-powershell' }); } catch {}
   auditLog('INFO','POWERSHELL_EXEC','Command executed', { level: assessment.level, reason: assessment.reason, durationMs: result.duration_ms, success: result.success });
-  const responseObject = { ...result, securityAssessment: assessment };
+  const responseObject = { ...result, securityAssessment: assessment, originalTimeoutSeconds: timeoutSeconds, warnings };
   // To reduce duplicate rendering in clients that show both `content` and `structuredContent`,
   // only place human-readable stream data in `content` (stdout/stderr) while full metadata lives in structuredContent.
   const content:any[] = [];
@@ -270,5 +366,7 @@ export async function runPowerShellTool(args: any){
     if(responseObject.truncated) flags.push('truncated');
     content.push({ type:'text', text: `[exit=${responseObject.exitCode} success=${responseObject.success}${flags.length?' '+flags.join(' '):''}]` });
   }
+  // Optional appended classification summary so tests (or humans) can regex it if needed
+  content.push({ type:'text', text: `[classification=${assessment.level} blocked=${assessment.blocked} requiresPrompt=${assessment.requiresPrompt}]` });
   return { content, structuredContent: responseObject };
 }

@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, request } = require('./util');
+﻿const { startServer, waitForReady, collect, request } = require('./util');
 
 describe('tool parity', () => {
   test('tool list contains required core tools and no duplicates', async () => {
@@ -16,4 +16,5 @@ describe('tool parity', () => {
     expect(new Set(names).size).toBe(names.length);
   },6000);
 });
+
 

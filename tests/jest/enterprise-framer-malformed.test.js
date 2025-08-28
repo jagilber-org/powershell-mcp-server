@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+﻿const { spawn } = require('child_process');
 
 function makeFrame(raw){ return `Content-Length: ${Buffer.byteLength(raw,'utf8')}`+"\r\n\r\n"+raw; }
 
@@ -23,3 +23,4 @@ test('enterprise framer ignores malformed header (no crash)', done => {
   ps.stdin.write('Content-Length: ABC\r\n\r\n'); // invalid length
   setTimeout(()=>{ try{ ps.kill(); }catch{}; expect(stderr).toMatch(/framer|enterprise/i); done(); }, 800);
 }, 4000);
+

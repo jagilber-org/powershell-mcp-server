@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, integrate/**, feature/** ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch: {}
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: TypeScript build
+        run: npm run build:only
+      - name: Jest tests
+        run: npm run test:jest --if-present
+      - name: Health probe (early exit)
+        run: |
+          npm run build:only
+          node -e "process.env.START_MODE='health';import('./dist/index.js').catch(e=>{console.error(e);process.exit(1)})" > health.json
+          cat health.json
+          node -e "const h=require('./health.json'); if(h.status!=='ok') { console.error('Health status not ok'); process.exit(1);}"
+      - name: Archive health artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-json
+          path: health.json
+
+  windows-health:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      - name: Build
+        run: npm run build:only
+      - name: Health script
+        run: npm run health | Out-File -FilePath health-win.json -Encoding utf8
+      - name: Show health
+        run: Get-Content health-win.json
+      - name: Validate health
+        run: |
+          $data = Get-Content health-win.json | ConvertFrom-Json
+          if($data.status -ne 'ok'){ Write-Error 'Health not ok'; exit 1 }
+      - name: Upload health artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-win-json
+          path: health-win.json
+
+  lint-and-metrics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      - name: Basic metrics snapshot
+        run: |
+          echo '{"timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","approxLines":'$(git ls-files | xargs wc -l | tail -n1 | awk '{print $1}')'}' > code-metrics.json
+      - name: Upload metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-metrics
+          path: code-metrics.json

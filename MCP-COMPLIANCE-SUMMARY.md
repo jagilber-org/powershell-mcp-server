@@ -29,6 +29,21 @@
   - `npm run compliance:report` - Detailed compliance report generation
   - `npm run precommit` - Automated compliance + build verification
 
+### 5. **Timeout Hardening & Health Tool Refinements**
+- Strict timeout cap enforcement with deprecation & long-timeout warnings
+- Forced hang test requiring actual timeout (no early success); asserts:
+  - `timedOut` flag or exitCode 124
+  - `success === false`
+  - Elapsed runtime >= 80% of configured timeout
+- Health tool test accepts either `structuredContent` or legacy `content[0].text` JSON payload
+- Safer JSON parsing guard to avoid false negatives on format shifts
+
+### 6. **Adaptive Timeout & Termination Reason (NEW)**
+- Added adaptive timeout extension support with activity-based extension and hard cap
+- Added `terminationReason` field (one of: `timeout | overflow | killed | completed`)
+- Added adaptive timeout test ensuring effective timeout > configured timeout and extensions > 0
+- Added termination reason integrity tests (hang -> `timeout`, normal adaptive completion -> `completed`)
+
 ## Compliance Validation Points
 
 The system validates:
@@ -49,6 +64,10 @@ The system validates:
 - **Repository**: Clean, all hardcoded paths resolved
 - **Monitoring**: Universal log monitor working across workspaces
 - **Compliance**: Automated checking integrated into development workflow
+- **Timeout Hardening**: Cap, deprecation warnings, forced hang semantics covered
+- **Adaptive Timeout**: Extension logic tested (extensions & effectiveTimeoutMs > configured)
+- **Termination Reason**: Deterministic classification of end state
+- **Health Tool**: Resilient test ensures robust reporting across content formats
 
 ## Usage
 
@@ -65,11 +84,9 @@ npm run precommit
 
 ## Next Steps
 
-The system is now fully compliant with MCP standards and includes:
-- ✅ Periodic compliance checking capability  
-- ✅ Automated integration into build process
-- ✅ Dynamic path resolution for portability
-- ✅ Enterprise-grade audit logging
-- ✅ Comprehensive MCP standard validation
+Enhancement Roadmap:
+- Metrics assertions (watchdog vs self-destruct vs overflow counts)
+- Flake detection / retry harness improvements
+- Structured termination reason enum export for consumer tooling
 
 **CRITICAL INSTRUCTION FULFILLED**: This project now adheres to and actively monitors compliance with MCP standards documented at https://modelcontextprotocol.io/

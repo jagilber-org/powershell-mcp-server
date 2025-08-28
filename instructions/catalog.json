@@ -40,6 +40,54 @@
         "confirmation"
       ],
       "checksum": "7d079da4fa78894d57a1c43c7802d794100ccf416e8502e6c35a742384fd0535"
+    },
+    {
+      "id": "tooling.prefer_new_mcp_tools_first",
+      "text": "Always enumerate and prefer newly available MCP tools before considering any legacy approach or raw terminal usage.",
+      "rationale": "Ensures the agent immediately benefits from expanded structured capabilities, maximizing safety, auditability, and feature coverage whenever new tools are introduced.",
+      "category": "tooling",
+      "priority": 110,
+      "criticality": "blocking",
+      "scope": "global",
+      "target": "agent",
+      "status": "active",
+      "supersedes": [
+        "security.no_raw_terminal_if_tool"
+      ],
+      "examples": [
+        "Run a ListTools / re-index step, then select an added tool instead of crafting a shell script.",
+        "Use a new diagnostic tool immediately after it appears rather than invoking a manual PowerShell command.",
+        "Re-learn tool schemas (list + cache) before executing related tasks after repo/tool updates."
+      ],
+      "tags": [
+        "gate:tooling",
+        "learning",
+        "prefer:structured"
+      ],
+  "checksum": "pending"
+    },
+    {
+      "id": "tooling.relearn_on_new_tools",
+      "text": "When new MCP tools become available, perform an immediate re-learning pass (list tools, cache schemas) before executing further actions.",
+      "rationale": "Guarantees the assistant leverages the expanded capability surface instantly and prevents stale planning based on outdated tool inventories.",
+      "category": "tooling",
+      "priority": 105,
+      "criticality": "blocking",
+      "scope": "session",
+      "target": "agent",
+      "status": "active",
+      "supersedes": [],
+      "examples": [
+        "Detected new tool 'threat-analysis' -> call ListTools, update internal map, then use it instead of crafting manual powershell-command.",
+        "After pulling latest branch exposing 'server-stats', re-run tool enumeration before answering monitoring requests.",
+        "On receiving user notice 'new tools added', trigger tool refresh sequence prior to next operation."
+      ],
+      "tags": [
+        "tools-first",
+        "learning",
+        "gate:refresh"
+      ],
+  "checksum": "pending"
     }
   ]
 }

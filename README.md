@@ -1,4 +1,4 @@
-# PowerShell MCP Server (Enterprise Hardening / Minimal Core Aug 2025)
+﻿# PowerShell MCP Server (Enterprise Hardening / Minimal Core Aug 2025)
 
 ## Quick Start
 
@@ -7,6 +7,8 @@ npm install
 npm run build
 npm run start:enterprise
 ```
+
+> Deprecation: Legacy entry files `vscode-server-enterprise.ts` / `vscode-server.ts` are deprecated and excluded from the TypeScript build. Migrate any scripts invoking `dist/vscode-server-enterprise.js` to `dist/server.js` (preferred) or `dist/index.js`. The deprecated files will be removed in a future major release.
 
 Optional auth:
 
@@ -20,7 +22,7 @@ npm run start:enterprise
 | Tool | Purpose | Key Arguments |
 |------|---------|---------------|
 | `emit-log` | Structured audit log entry | `message` |
-| `learn` | Manage unknown → safe learning queue | action, limit, minCount, normalized[] |
+| `learn` | Manage unknown â†’ safe learning queue | action, limit, minCount, normalized[] |
 | `working-directory-policy` | Get/set allowed roots enforcement | action, enabled, allowedWriteRoots[] |
 | `server-stats` | Metrics snapshot & counts | verbose |
 | `memory-stats` | Process memory (MB) | gc |
@@ -28,8 +30,9 @@ npm run start:enterprise
 | `git-status` | Show repository status (porcelain) | porcelain |
 | `git-commit` | Commit staged changes | message |
 | `git-push` | Push current branch | setUpstream |
-| `threat-analysis` | Unknown / threat tracking stats | — |
-| `run-powershell` | Execute command / inline script (classified) | command/script, workingDirectory, timeout (s), confirmed |
+| `threat-analysis` | Unknown / threat tracking stats | â€” |
+| 
+un-powershell | Execute command / inline script (classified) | command/script, workingDirectory, aiAgentTimeoutSec (s), confirmed, adaptive* |
 | `run-powershellscript` | Alias: inline or from file (inlined) | script or scriptFile, workingDirectory, timeout, confirmed |
 | `powershell-syntax-check` | Fast heuristic script check | script, filePath |
 | `ai-agent-tests` | Internal harness | testSuite, skipDangerous |
@@ -44,7 +47,7 @@ Notes:
 
 ## Security Model
 
-Levels: SAFE → RISKY → DANGEROUS (reserved) → CRITICAL → BLOCKED → UNKNOWN
+Levels: SAFE â†’ RISKY â†’ DANGEROUS (reserved) â†’ CRITICAL â†’ BLOCKED â†’ UNKNOWN
 
 | Level | Requires confirmed? | Executed? | Example | Category Sample |
 |-------|---------------------|-----------|---------|-----------------|
@@ -260,7 +263,7 @@ Per-invocation row columns already list raw `PS CPU(s)` and `WS(MB)` for each ru
 
 ## Unknown Command Learning
 
-UNKNOWN → normalize → queue → review → approve → SAFE cache (`learned-safe.json`). Approved patterns immediately influence classification.
+UNKNOWN â†’ normalize â†’ queue â†’ review â†’ approve â†’ SAFE cache (`learned-safe.json`). Approved patterns immediately influence classification.
 
 ## Tests (Jest)
 
@@ -319,3 +322,9 @@ npm run build
 ## License
 
 Proprietary (internal hardening branch).
+
+### Timeout Hardening
+
+Fields: configuredTimeoutMs, effectiveTimeoutMs, originalTimeoutSeconds, warnings[], timedOut, internalSelfDestruct, watchdogTriggered, killEscalated, killTreeAttempted.
+Deprecated params: timeout, aiAgentTimeout (use aiAgentTimeoutSec). Cap: limits.maxTimeoutSeconds (default 600). Long timeouts (>=60s) produce warnings. Adaptive: pass progressAdaptive=true and optional adaptiveExtendWindowMs, adaptiveExtendStepMs, adaptiveMaxTotalSec.
+

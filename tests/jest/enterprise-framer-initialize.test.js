@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+﻿const { spawn } = require('child_process');
 
 function frame(obj){ const s=JSON.stringify(obj); return `Content-Length: ${Buffer.byteLength(s,'utf8')}`+"\r\n\r\n"+s; }
 
@@ -31,3 +31,4 @@ test('enterprise framer initialize -> list -> call', (done) => {
   send({ jsonrpc:'2.0', id:1, method:'initialize', params:{} });
   setTimeout(()=>{ if(step<2){ try{ps.kill();}catch{}; done(new Error('Did not complete handshake. STDERR:\n'+stderrBuf)); } }, 15000);
 }, 20000);
+

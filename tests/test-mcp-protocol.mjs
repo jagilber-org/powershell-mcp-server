@@ -10,7 +10,7 @@ import * as readline from 'readline';
 
 console.log('🧪 Testing Enterprise MCP Server Protocol Compliance...');
 
-const serverProcess = spawn('node', ['dist/vscode-server-enterprise.js'], {
+const serverProcess = spawn('node', ['dist/server.js'], {
     stdio: ['pipe', 'pipe', 'pipe']  // stdin, stdout, stderr
 });
 

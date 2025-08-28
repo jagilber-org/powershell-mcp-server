@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, rpc } = require('./util');
+﻿const { startServer, waitForReady, collect, rpc } = require('./util');
 const fs = require('fs');
 const path = require('path');
 
@@ -19,3 +19,4 @@ describe('run-powershellscript file execution', ()=>{
     expect(text).toMatch(/file-alias-ok/);
   },8000);
 });
+

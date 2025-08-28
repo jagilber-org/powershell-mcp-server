@@ -1,4 +1,4 @@
-// Regression test for OS_BLOCKED format regex: ensure '-Format' parameter not flagged
+﻿// Regression test for OS_BLOCKED format regex: ensure '-Format' parameter not flagged
 describe('format regex negative lookbehind', ()=>{
   const rx = /(?<!-)\bformat(\.exe)?\b/i;
   test('matches bare format command', ()=>{
@@ -11,3 +11,4 @@ describe('format regex negative lookbehind', ()=>{
     expect('something -format json').not.toMatch(rx);
   });
 });
+

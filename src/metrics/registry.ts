@@ -28,6 +28,10 @@ export interface MetricsSnapshot {
   averageDurationMs: number;
   p95DurationMs: number;
   lastReset: string;
+  // PowerShell process metrics aggregation (when enabled)
+  psSamples?: number;
+  psCpuSecAvg?: number;
+  psWSMBAvg?: number;
 }
 
 export class MetricsRegistry {
@@ -47,6 +51,10 @@ export class MetricsRegistry {
   private lastReset = new Date().toISOString();
   private history: Array<ExecutionRecord & { ts: string; seq: number }> = [];
   private seq = 0;
+  // Aggregated PowerShell process samples
+  private psCpuTotal = 0; // cumulative CPU seconds
+  private psWSMBTotal = 0; // cumulative working set MB
+  private psSamples = 0;
 
   record(rec: ExecutionRecord): void {
     this.counts.TOTAL++;
@@ -74,6 +82,7 @@ export class MetricsRegistry {
     this.lastReset = new Date().toISOString();
   this.history = [];
   this.seq = 0;
+  this.psCpuTotal = 0; this.psWSMBTotal = 0; this.psSamples = 0;
   }
 
   snapshot(resetAfter = false): MetricsSnapshot {
@@ -96,6 +105,11 @@ export class MetricsRegistry {
       p95DurationMs: p95,
       lastReset: this.lastReset
     };
+    if(this.psSamples>0){
+      snap.psSamples = this.psSamples;
+      snap.psCpuSecAvg = +(this.psCpuTotal / this.psSamples).toFixed(3);
+      snap.psWSMBAvg = +(this.psWSMBTotal / this.psSamples).toFixed(2);
+    }
     if (resetAfter) this.reset();
     return snap;
   }
@@ -109,6 +123,13 @@ export class MetricsRegistry {
 
   getHistory(): Array<ExecutionRecord & { ts: string; seq: number }> {
     return [...this.history];
+  }
+
+  /** Capture a PowerShell process metric sample (CPU seconds, Working Set MB) */
+  capturePsSample(cpuSec:number, wsMB:number){
+    this.psCpuTotal += cpuSec;
+    this.psWSMBTotal += wsMB;
+    this.psSamples += 1;
   }
 }
 

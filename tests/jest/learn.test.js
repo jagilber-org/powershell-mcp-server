@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, request } = require('./util');
+﻿const { startServer, waitForReady, collect, request } = require('./util');
 
 describe('learn tool', () => {
   test('list action returns candidates array (may be empty)', async () => {
@@ -12,3 +12,4 @@ describe('learn tool', () => {
     srv.kill();
   },6000);
 });
+

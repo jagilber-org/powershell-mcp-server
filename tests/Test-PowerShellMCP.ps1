@@ -11,7 +11,7 @@
     - MCP initialize/tools/call workflow
     
 .PARAMETER ServerPath
-    Path to the MCP server executable (default: dist/vscode-server-enterprise.js)
+    Path to the MCP server executable (default: dist/server.js)
     
 .PARAMETER TestMode  
     Type of test to run: basic, tools, or interactive
@@ -21,7 +21,7 @@
 #>
 
 param(
-    [string]$ServerPath = "dist/vscode-server-enterprise.js",
+    [string]$ServerPath = "dist/server.js",
     [ValidateSet("basic", "tools", "interactive")]
     [string]$TestMode = "basic"
 )

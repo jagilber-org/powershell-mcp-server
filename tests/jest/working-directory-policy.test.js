@@ -1,4 +1,4 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { startServer, waitForReady, collect, rpc } = require('./util');
@@ -23,3 +23,4 @@ describe('working-directory-policy tool', () => {
     expect(text).toMatch(/Working directory outside allowed roots|InvalidRequest/);
   },7000);
 });
+

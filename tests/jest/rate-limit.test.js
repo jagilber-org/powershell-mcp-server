@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+﻿const { spawn } = require('child_process');
 
 function frame(obj){ const s=JSON.stringify(obj); return `Content-Length: ${Buffer.byteLength(s,'utf8')}`+"\r\n\r\n"+s; }
 function parse(buf){ const out=[]; let s=buf; while(true){ const h=s.indexOf('\r\n\r\n'); if(h===-1) break; const head=s.slice(0,h); const m=/Content-Length: (\d+)/i.exec(head); if(!m) break; const len=parseInt(m[1],10); const start=h+4; if(s.length<start+len) break; const body=s.slice(start,start+len); try{ out.push(JSON.parse(body)); }catch{} s=s.slice(start+len);} return { frames:out, rest:s }; }
@@ -46,3 +46,4 @@ test('rate limiting engages over burst', done => {
   send({ jsonrpc:'2.0', id:1, method:'initialize', params:{ protocolVersion:'2024-11-05', capabilities:{} } });
   setTimeout(()=>{ if(!sent){ try{ps.kill();}catch{}; done(new Error('No initialize response. Raw stdout='+stdoutBuf)); } }, 12000);
 }, 20000);
+

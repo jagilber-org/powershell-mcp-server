@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, rpc } = require('./util');
+﻿const { startServer, waitForReady, collect, rpc } = require('./util');
 
 function parseLine(res, key){
   const msg = res[key];
@@ -39,3 +39,4 @@ describe('memory-stats tool leak heuristic', ()=>{
     }
   }, 45000);
 });
+

@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, request } = require('./util');
+﻿const { startServer, waitForReady, collect, request } = require('./util');
 
 describe('help tool', () => {
   test('returns security help topic', async () => {
@@ -12,3 +12,4 @@ describe('help tool', () => {
     srv.kill();
   },5000);
 });
+

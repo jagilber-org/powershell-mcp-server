@@ -10,7 +10,7 @@ Write-Host "🔍 Quick Security Test..." -ForegroundColor Cyan
 # Test just the threat analysis tool
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = "node"  
-$psi.Arguments = "dist/vscode-server-enterprise.js"
+$psi.Arguments = "dist/server.js"
 $psi.UseShellExecute = $false
 $psi.RedirectStandardInput = $true
 $psi.RedirectStandardOutput = $true

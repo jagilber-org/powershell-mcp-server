@@ -12,7 +12,7 @@
     - Interactive testing capabilities
     
 .PARAMETER ServerPath
-    Path to the MCP server executable (default: dist/vscode-server-enterprise.js)
+    Path to the MCP server executable (default: dist/server.js)
     
 .PARAMETER TestMode
     Type of test to run: basic, interactive, tools, or comprehensive
@@ -28,7 +28,7 @@
 #>
 
 param(
-    [string]$ServerPath = "dist/vscode-server-enterprise.js",
+    [string]$ServerPath = "dist/server.js",
     [ValidateSet("basic", "interactive", "tools", "comprehensive")]
     [string]$TestMode = "basic",
     [int]$Timeout = 30

@@ -8,7 +8,7 @@ import { spawn } from 'child_process';
 
 console.log('🧪 Testing MCP Server with proper stderr/stdout separation...');
 
-const serverProcess = spawn('node', ['dist/vscode-server-enterprise.js'], {
+const serverProcess = spawn('node', ['dist/server.js'], {
     stdio: ['pipe', 'pipe', 'inherit']  // stdin=pipe, stdout=pipe, stderr=inherit (console)
 });
 

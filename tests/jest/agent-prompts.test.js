@@ -1,4 +1,4 @@
-const { startServer, waitForReady, collect, request } = require('./util');
+﻿const { startServer, waitForReady, collect, request } = require('./util');
 const fs = require('fs');
 const path = require('path');
 
@@ -25,3 +25,4 @@ describe('agent-prompts hardening', () => {
     }
   },15000);
 });
+

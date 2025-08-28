@@ -82,7 +82,7 @@ function Test-QuickMCP {
     
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = "node"
-    $psi.Arguments = "dist/vscode-server-enterprise.js"
+    $psi.Arguments = "dist/server.js"
     $psi.UseShellExecute = $false
     $psi.RedirectStandardInput = $true
     $psi.RedirectStandardOutput = $true

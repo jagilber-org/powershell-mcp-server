@@ -1,327 +1,29 @@
 /**
- * Enterprise-Scale PowerShell MCP Server
- * Strongly-typed TypeScript implementation with comprehensive functionality
- * 
- * Features:
- * - 5-level security classification system
- * - MCP-standard logging with audit trails
- * - Comprehensive AI agent integration
- * - Enterprise-grade error handling
- * - Full type safety and maintainability
- * - Unified authentication using 'key' parameter (backward compatible with 'authKey')
- * - Optimized timeouts (default 90 seconds, AI agent override support)
+ * DEPRECATED ADAPTER: vscode-server-enterprise.ts
+ * Original monolithic implementation removed. Unified server lives in server.ts.
  */
+import { EnterprisePowerShellMCPServer } from './server.js';
+import { auditLog } from './logging/audit.js';
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { 
-    CallToolRequestSchema, 
-    ListToolsRequestSchema, 
-    McpError, 
-    ErrorCode,
-    Tool,
-    TextContent
-} from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
-import { spawn, ChildProcess, SpawnOptionsWithoutStdio } from 'child_process';
-import * as os from 'os';
-import * as fs from 'fs';
-import * as path from 'path';
-import { metricsRegistry } from './metrics/registry.js';
-import { ENTERPRISE_CONFIG } from './core/config.js';
+export { EnterprisePowerShellMCPServer } from './server.js';
 
-// ==============================================================================
-// TYPE DEFINITIONS - Enterprise-grade type safety
-// ==============================================================================
-
-/** Security risk levels for command classification */
-type SecurityLevel = 'SAFE' | 'RISKY' | 'DANGEROUS' | 'CRITICAL' | 'BLOCKED' | 'UNKNOWN';
-
-/** Risk assessment levels */
-type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME' | 'FORBIDDEN';
-
-/** Security threat categories */
-type ThreatCategory = 
-    | 'REGISTRY_MODIFICATION' 
-    | 'SYSTEM_FILE_MODIFICATION' 
-    | 'ROOT_DRIVE_DELETION'
-    | 'REMOTE_MODIFICATION' 
-    | 'SECURITY_THREAT' 
-    | 'SYSTEM_MODIFICATION'
-    | 'SYSTEM_DESTRUCTION' 
-    | 'PRIVILEGE_ESCALATION' 
-    | 'INFORMATION_GATHERING'
-    | 'FILE_OPERATION'
-    | 'PROCESS_MANAGEMENT'
-    | 'ALIAS_THREAT'
-    | 'UNKNOWN_COMMAND';
-
-/** Comprehensive security assessment result */
-interface SecurityAssessment {
-    level: SecurityLevel;
-    risk: RiskLevel;
-    reason: string;
-    color: 'GREEN' | 'YELLOW' | 'RED' | 'MAGENTA' | 'CYAN';
-    blocked: boolean;
-    requiresPrompt?: boolean;
-    category: ThreatCategory;
-    patterns?: string[];
-    recommendations?: string[];
+async function main(){
+    const authKey = process.env.MCP_AUTH_KEY;
+    const server = new EnterprisePowerShellMCPServer(authKey);
+    await server.start();
 }
 
-/** PowerShell execution result with comprehensive metadata */
-interface PowerShellExecutionResult {
-    success: boolean;
-    stdout: string;
-    stderr: string;
-    exitCode: number | null;
-    duration_ms: number;
-    command?: string;
-    workingDirectory?: string;
-    securityAssessment?: SecurityAssessment;
-    processId?: number;
-    timedOut?: boolean;
-    error?: string;
+const invokedDirect = import.meta.url === `file://${process.argv[1]}` || /vscode-server-enterprise\.js$/i.test(process.argv[1]||'');
+if(invokedDirect){
+    main().catch(err=>{
+        console.error('[deprecated-entry] fatal startup error', err);
+        auditLog('ERROR','SERVER_FATAL_DEPRECATED','startup failed',{ error: err instanceof Error ? err.message : String(err) });
+        process.exit(1);
+    });
 }
 
-/** System information structure */
-interface SystemInfo {
-    nodeVersion: string;
-    platform: string;
-    arch: string;
-    pid: number;
-    cwd: string;
-    hostname: string;
-    user: string;
-    totalMemory: string;
-    freeMemory: string;
-    cpus: string;
-    uptime: string;
-}
-
-/** Audit log entry structure */
-interface AuditLogEntry {
-    timestamp: string;
-    level: string;
-    category: string;
-    message: string;
-    metadata?: Record<string, any>;
-}
-
-/** MCP notification parameters */
-interface MCPNotificationParams {
-    [key: string]: unknown;
-    level: string;
-    logger: string;
-    data: string;
-}
-
-/** Client information for tracking */
-interface ClientInfo {
-    parentPid: number;
-    serverPid: number;
-    connectionId: string;
-}
-
-/** AI agent test suite configuration */
-interface AITestSuite {
-    name: string;
-    tests: AITestCase[];
-}
-
-/** Individual AI test case */
-interface AITestCase {
-    name: string;
-    command: string;
-    expectedSecurity: SecurityLevel;
-    shouldSucceed: boolean;
-}
-
-/** AI agent test results */
-interface AITestResults {
-    testSuite: string;
-    timestamp: string;
-    serverPid: number;
-    skipDangerous: boolean;
-    totalTests: number;
-    passed: number;
-    failed: number;
-    tests: AITestResult[];
-    summary: {
-        successRate: string;
-        securityEnforcement: 'WORKING' | 'NEEDS_REVIEW';
-        safeExecution: 'WORKING' | 'NEEDS_REVIEW';
-    };
-    recommendations: string[];
-}
-
-/** Individual AI test result */
-interface AITestResult {
-    name: string;
-    command: string;
-    expectedSecurity: SecurityLevel;
-    shouldSucceed: boolean;
-    actualSecurity: SecurityLevel;
-    actualResult: string;
-    passed: boolean;
-    error: string | null;
-    executionTime: number;
-}
-
-/** PowerShell alias detection result */
-interface AliasDetectionResult {
-    originalCommand: string;
-    resolvedCommand?: string;
-    isAlias: boolean;
-    aliasType: 'BUILTIN' | 'CUSTOM' | 'FUNCTION' | 'CMDLET' | 'UNKNOWN';
-    securityRisk: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-    reason: string;
-}
-
-/** Unknown threat tracking entry */
-interface UnknownThreatEntry {
-    timestamp: string;
-    command: string;
-    frequency: number;
-    firstSeen: string;
-    lastSeen: string;
-    possibleAliases: string[];
-    riskAssessment: SecurityAssessment;
-    sessionId: string;
-}
-
-/** Threat tracking statistics */
-interface ThreatTrackingStats {
-    totalUnknownCommands: number;
-    uniqueThreats: number;
-    highRiskThreats: number;
-    aliasesDetected: number;
-    sessionsWithThreats: number;
-}
-
-// ==============================================================================
-// SECURITY PATTERNS - Comprehensive threat detection
-// ==============================================================================
-
-/** Registry modification patterns (BLOCKED) */
-const REGISTRY_MODIFICATION_PATTERNS: readonly string[] = [
-    'New-ItemProperty.*HK(LM|CU)',
-    'Set-ItemProperty.*HK(LM|CU)', 
-    'Remove-ItemProperty.*HK(LM|CU)',
-    'Remove-Item.*HK(LM|CU)',
-    'reg\\s+(add|delete|import)',
-    'HKEY_(LOCAL_MACHINE|CURRENT_USER)'
-] as const;
-
-/** System file modification patterns (BLOCKED) */
-const SYSTEM_FILE_PATTERNS: readonly string[] = [
-    'C:\\\\Windows\\\\System32',
-    'C:\\\\Windows\\\\SysWOW64', 
-    'C:\\\\Windows\\\\Boot',
-    'C:\\\\Program Files\\\\WindowsApps'
-] as const;
-
-/** Root drive deletion patterns (BLOCKED) */
-const ROOT_DELETION_PATTERNS: readonly string[] = [
-    'Format-Volume.*-DriveLetter\\s+[A-Z](?!:)',
-    'Remove-Item.*C:\\\\.*-Recurse',
-    'rd\\s+C:\\\\.*\\/[sS]',
-    'rmdir\\s+C:\\\\.*\\/[sS]'
-] as const;
-
-/** Remote modification patterns (BLOCKED) */
-const REMOTE_MODIFICATION_PATTERNS: readonly string[] = [
-    'Invoke-Command.*-ComputerName(?!\\s+localhost)',
-    'Enter-PSSession.*(?<!localhost)',
-    'New-PSSession.*(?<!localhost)',
-    'Set-Service.*-ComputerName',
-    'Get-WmiObject.*-ComputerName(?!\\s+localhost)'
-] as const;
-
-/** Critical security threat patterns (BLOCKED) */
-const CRITICAL_PATTERNS: readonly string[] = [
-    'powershell.*-EncodedCommand',
-    'powershell.*-WindowStyle.*Hidden',
-    'cmd\\.exe.*\\/[cC]',
-    'wscript\\.exe',
-    'cscript\\.exe',
-    'DownloadString',
-    'DownloadFile',
-    'WebClient',
-    'System\\.Net\\.WebClient',
-    'Invoke-WebRequest.*-OutFile',
-    'wget|curl.*>',
-    'bitsadmin.*\\/transfer'
-] as const;
-
-/** Dangerous system operations (BLOCKED) */
-const DANGEROUS_COMMANDS: readonly string[] = [
-    'Stop-Computer',
-    'Restart-Computer', 
-    'Remove-LocalUser',
-    'New-LocalUser',
-    'Add-LocalGroupMember',
-    'Set-ExecutionPolicy',
-    'Clear-EventLog',
-    'wevtutil.*clear-log',
-    'Stop-Service.*Spooler|BITS|Winmgmt',
-    'Set-Service.*Disabled',
-    'Disable-WindowsOptionalFeature',
-    'Enable-WindowsOptionalFeature'
-] as const;
-
-/** Risky operations requiring confirmation */
-const RISKY_PATTERNS: readonly string[] = [
-    'Remove-Item(?!.*-WhatIf)',
-    'Move-Item(?!.*temp)',
-    'Copy-Item.*-Force', 
-    'New-Item.*-ItemType\\s+Directory',
-    'Set-Content',
-    'Add-Content',
-    'Out-File(?!.*temp)',
-    'Stop-Process(?!.*-WhatIf)',
-    'Start-Service',
-    'Restart-Service'
-] as const;
-
-/** Safe operations (always allowed) */
-const SAFE_PATTERNS: readonly string[] = [
-    '^Get-',
-    '^Show-',
-    '^Test-.*(?!-Computer)',
-    '^Out-Host',
-    '^Out-String', 
-    '^Write-Host',
-    '^Write-Output',
-    '^Write-Information',
-    '^Format-',
-    '^Select-',
-    '^Where-Object',
-    '^Sort-Object',
-    '^Group-Object',
-    '^Measure-Object'
-] as const;
-
-// ==============================================================================
-// POWERSHELL ALIAS DETECTION - Security threat analysis
-// ==============================================================================
-
-/** Common PowerShell aliases that could be security threats */
-const POWERSHELL_ALIAS_MAP: Record<string, { cmdlet: string; risk: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'; category: ThreatCategory }> = {
-    // File System Operations
-    'ls': { cmdlet: 'Get-ChildItem', risk: 'LOW', category: 'INFORMATION_GATHERING' },
-    'dir': { cmdlet: 'Get-ChildItem', risk: 'LOW', category: 'INFORMATION_GATHERING' },
-    'gci': { cmdlet: 'Get-ChildItem', risk: 'LOW', category: 'INFORMATION_GATHERING' },
-    'cat': { cmdlet: 'Get-Content', risk: 'LOW', category: 'INFORMATION_GATHERING' },
-    'type': { cmdlet: 'Get-Content', risk: 'LOW', category: 'INFORMATION_GATHERING' },
-    'gc': { cmdlet: 'Get-Content', risk: 'LOW', category: 'INFORMATION_GATHERING' },
-    'rm': { cmdlet: 'Remove-Item', risk: 'HIGH', category: 'FILE_OPERATION' },
-    'del': { cmdlet: 'Remove-Item', risk: 'HIGH', category: 'FILE_OPERATION' },
-    'erase': { cmdlet: 'Remove-Item', risk: 'HIGH', category: 'FILE_OPERATION' },
-    'rd': { cmdlet: 'Remove-Item', risk: 'HIGH', category: 'FILE_OPERATION' },
-    'ri': { cmdlet: 'Remove-Item', risk: 'HIGH', category: 'FILE_OPERATION' },
-    'cp': { cmdlet: 'Copy-Item', risk: 'MEDIUM', category: 'FILE_OPERATION' },
+// End of adapter file. (Legacy implementation fully removed.)
+// Intentionally no additional exports.
     'copy': { cmdlet: 'Copy-Item', risk: 'MEDIUM', category: 'FILE_OPERATION' },
     'cpi': { cmdlet: 'Copy-Item', risk: 'MEDIUM', category: 'FILE_OPERATION' },
     'mv': { cmdlet: 'Move-Item', risk: 'MEDIUM', category: 'FILE_OPERATION' },
@@ -536,13 +238,13 @@ function logSystemInfo(): void {
     console.error("=".repeat(60));
     console.error("🚀 Enterprise PowerShell MCP Server Starting");
     console.error("=".repeat(60));
-    console.error(`📍 Process ID: ${systemInfo.pid}`);
-    console.error(`🖥️  Platform: ${systemInfo.platform} (${systemInfo.arch})`);
-    console.error(`⚡ Node.js: ${systemInfo.nodeVersion}`);
-    console.error(`👤 User: ${systemInfo.user}@${systemInfo.hostname}`);
-    console.error(`📁 Working Directory: ${systemInfo.cwd}`);
-    console.error(`💾 Memory: ${systemInfo.freeMemory} free / ${systemInfo.totalMemory} total`);
-    console.error(`🔧 CPU: ${systemInfo.cpus}`);
+    console.error(`≡ƒôì Process ID: ${systemInfo.pid}`);
+    console.error(`≡ƒûÑ∩╕Å  Platform: ${systemInfo.platform} (${systemInfo.arch})`);
+    console.error(`ΓÜí Node.js: ${systemInfo.nodeVersion}`);
+    console.error(`≡ƒæñ User: ${systemInfo.user}@${systemInfo.hostname}`);
+    console.error(`≡ƒôü Working Directory: ${systemInfo.cwd}`);
+    console.error(`≡ƒÆ╛ Memory: ${systemInfo.freeMemory} free / ${systemInfo.totalMemory} total`);
+    console.error(`≡ƒöº CPU: ${systemInfo.cpus}`);
     console.error(`⏱️  System Uptime: ${systemInfo.uptime}`);
     console.error("=".repeat(60));
     
@@ -556,8 +258,7 @@ function logSystemInfo(): void {
 /** PowerShell command execution schema */
 const PowerShellCommandSchema = z.object({
     command: z.string().min(1).describe('PowerShell command to execute'),
-    timeout: z.number().optional().default(90000).describe('Timeout in milliseconds (default: 90 seconds)'),
-    aiAgentTimeout: z.number().optional().describe('Optional AI agent-specific timeout override in milliseconds'),
+    timeoutSeconds: z.number().int().positive().max(300).optional().default(90).describe('Timeout in seconds (default: 90, max: 300)'),
     workingDirectory: z.string().optional().describe('Working directory for command execution'),
     key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
     confirmed: z.boolean().optional().describe('Explicit confirmation for medium-risk commands (required for RISKY/UNKNOWN commands)'),
@@ -567,8 +268,7 @@ const PowerShellCommandSchema = z.object({
 /** PowerShell script execution schema */
 const PowerShellScriptSchema = z.object({
     script: z.string().min(1).describe('PowerShell script content to execute'),
-    timeout: z.number().optional().default(90000).describe('Timeout in milliseconds (default: 90 seconds)'),
-    aiAgentTimeout: z.number().optional().describe('Optional AI agent-specific timeout override in milliseconds'),
+    timeoutSeconds: z.number().int().positive().max(300).optional().default(90).describe('Timeout in seconds (default: 90, max: 300)'),
     workingDirectory: z.string().optional().describe('Working directory for script execution'),
     key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
     confirmed: z.boolean().optional().describe('Explicit confirmation for medium-risk scripts'),
@@ -579,8 +279,7 @@ const PowerShellScriptSchema = z.object({
 const PowerShellFileSchema = z.object({
     filePath: z.string().min(1).describe('Path to PowerShell script file to execute'),
     parameters: z.record(z.string()).optional().describe('Parameters to pass to the script'),
-    timeout: z.number().optional().default(90000).describe('Timeout in milliseconds (default: 90 seconds)'),
-    aiAgentTimeout: z.number().optional().describe('Optional AI agent-specific timeout override in milliseconds'),
+    timeoutSeconds: z.number().int().positive().max(300).optional().default(90).describe('Timeout in seconds (default: 90, max: 300)'),
     workingDirectory: z.string().optional().describe('Working directory for script execution'),
     key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
     confirmed: z.boolean().optional().describe('Explicit confirmation for medium-risk file operations'),
@@ -673,9 +372,9 @@ class EnterprisePowerShellMCPServer {
     /** Log authentication configuration */
     private logAuthenticationStatus(): void {
         if (this.authKey) {
-            console.error(`🔒 AUTHENTICATION: Enabled (Enterprise Mode)`);
-            console.error(`🔑 Key Length: ${this.authKey.length} characters`);
-            console.error(`🔑 Key Preview: ${this.authKey.substring(0, 3)}${'*'.repeat(Math.max(0, this.authKey.length - 3))}`);
+            console.error(`≡ƒöÆ AUTHENTICATION: Enabled (Enterprise Mode)`);
+            console.error(`≡ƒöæ Key Length: ${this.authKey.length} characters`);
+            console.error(`≡ƒöæ Key Preview: ${this.authKey.substring(0, 3)}${'*'.repeat(Math.max(0, this.authKey.length - 3))}`);
             auditLog('INFO', 'AUTH_ENABLED', 'Enterprise MCP Server started with key authentication', {
                 keyLength: this.authKey.length,
                 keyPreview: this.authKey.substring(0, 3) + '***',
@@ -683,50 +382,34 @@ class EnterprisePowerShellMCPServer {
                 mode: 'enterprise'
             });
         } else {
-            console.error(`⚠️  AUTHENTICATION: Disabled (Development Mode)`);
-            console.error(`🚨 WARNING: Any MCP client can execute PowerShell commands!`);
+            console.error(`ΓÜá∩╕Å  AUTHENTICATION: Disabled (Development Mode)`);
+            console.error(`≡ƒÜ¿ WARNING: Any MCP client can execute PowerShell commands!`);
             auditLog('WARNING', 'AUTH_DISABLED', 'Enterprise MCP Server started without authentication - development mode only', {
                 securityLevel: 'none',
-                risk: 'high',
-                mode: 'development'
-            });
-        }
-    }
-    
-    /** Log server configuration details */
-    private logServerConfiguration(): void {
-        console.error(`🛠️  Server Name: enterprise-powershell-mcp-server`);
-        console.error(`📦 Server Version: 2.0.0 (Enterprise)`);
-        console.error(`🕒 Started At: ${this.startTime.toISOString()}`);
-        console.error("=".repeat(60));
-        
-        // Enhanced monitoring instructions
-        console.error(`📊 ENTERPRISE AUDIT LOGGING ENABLED:`);
-        console.error(`📁 Log Location: ./logs/powershell-mcp-audit-${new Date().toISOString().split('T')[0]}.log`);
-        console.error(`🔍 Real-time monitoring options:`);
-        console.error(`   • PowerShell: .\\Simple-LogMonitor.ps1 -Follow`);
-        console.error(`   • Separate Window: .\\Start-SimpleLogMonitor.ps1`);
-        console.error(`   • Manual: Get-Content ./logs/powershell-mcp-audit-*.log -Wait -Tail 10`);
-        console.error(`🛡️  Enterprise Security: 5-level classification (SAFE/RISKY/DANGEROUS/CRITICAL/BLOCKED)`);
-        console.error(`⚠️  Threat Protection: Advanced pattern detection with comprehensive blocking`);
-        console.error(`🤖 AI Agent Integration: Comprehensive help and testing framework`);
-        console.error("─".repeat(60));
-    }
-    
-    /** Validate authentication key */
-    private validateAuthKey(providedKey?: string): boolean {
-        // If no auth key is set, allow access (development mode)
-        if (!this.authKey) {
-            return true;
-        }
-        
-        // If auth key is set, require matching key
-        if (!providedKey || providedKey !== this.authKey) {
-            auditLog('WARNING', 'AUTH_FAILED', 'Authentication failed - invalid or missing key', {
-                hasProvidedKey: !!providedKey,
-                providedKeyLength: providedKey?.length || 0,
-                expectedKeyLength: this.authKey.length,
-                serverMode: 'enterprise'
+                /**
+                 * DEPRECATED ADAPTER: vscode-server-enterprise.ts
+                 * Unified implementation is in server.ts. This file will be removed later.
+                 */
+                import { EnterprisePowerShellMCPServer } from './server.js';
+                import { auditLog } from './logging/audit.js';
+
+                export { EnterprisePowerShellMCPServer } from './server.js';
+
+                async function main(){
+                    const authKey = process.env.MCP_AUTH_KEY;
+                    const server = new EnterprisePowerShellMCPServer(authKey);
+                    await server.start();
+                }
+
+                if (import.meta.url === `file://${process.argv[1]}` || /vscode-server-enterprise\.js$/i.test(process.argv[1]||'')) {
+                    main().catch(err => {
+                        console.error('[deprecated-entry] fatal startup error', err);
+                        auditLog('ERROR','SERVER_FATAL_DEPRECATED','startup failed',{ error: err instanceof Error ? err.message : String(err) });
+                        process.exit(1);
+                    });
+                }
+
+                // End of adapter file.
             });
             return false;
         }
@@ -887,7 +570,7 @@ class EnterprisePowerShellMCPServer {
         }
         
         // Continue with existing security patterns
-        // 🚫 BLOCKED PATTERNS - These commands are completely blocked
+        // ≡ƒÜ½ BLOCKED PATTERNS - These commands are completely blocked
         
         // Registry modifications
         for (const pattern of REGISTRY_MODIFICATION_PATTERNS) {
@@ -953,7 +636,7 @@ class EnterprisePowerShellMCPServer {
             }
         }
         
-        // 🔴 CRITICAL THREATS - Security exploits and malware patterns
+        // ≡ƒö┤ CRITICAL THREATS - Security exploits and malware patterns
         for (const pattern of CRITICAL_PATTERNS) {
             if (new RegExp(pattern, 'i').test(command)) {
                 return {
@@ -969,7 +652,7 @@ class EnterprisePowerShellMCPServer {
             }
         }
         
-        // 🟣 DANGEROUS - System-level modifications
+        // ≡ƒƒú DANGEROUS - System-level modifications
         for (const dangerousCmd of DANGEROUS_COMMANDS) {
             if (new RegExp(dangerousCmd, 'i').test(command)) {
                 return {
@@ -1006,7 +689,7 @@ class EnterprisePowerShellMCPServer {
             };
         }
         
-        // 🟡 RISKY - Operations requiring confirmation
+        // ≡ƒƒí RISKY - Operations requiring confirmation
         for (const pattern of RISKY_PATTERNS) {
             if (new RegExp(pattern, 'i').test(command)) {
                 return {
@@ -1023,7 +706,7 @@ class EnterprisePowerShellMCPServer {
             }
         }
         
-        // 🟢 SAFE - Explicitly safe operations
+        // ≡ƒƒó SAFE - Explicitly safe operations
         for (const pattern of SAFE_PATTERNS) {
             if (new RegExp(pattern, 'i').test(command)) {
                 return {
@@ -1039,7 +722,7 @@ class EnterprisePowerShellMCPServer {
             }
         }
         
-        // 🔵 UNKNOWN - Default for unclassified commands with threat tracking
+        // ≡ƒö╡ UNKNOWN - Default for unclassified commands with threat tracking
         const unknownAssessment: SecurityAssessment = {
             level: 'UNKNOWN',
             risk: 'MEDIUM',
@@ -1059,8 +742,8 @@ class EnterprisePowerShellMCPServer {
     
     /** Execute PowerShell command with comprehensive security and error handling */
     async executePowerShellCommand(
-        command: string, 
-        timeout: number = 90000, 
+        command: string,
+        timeoutMs: number = 90000,
         workingDirectory?: string
     ): Promise<PowerShellExecutionResult> {
         const startTime = Date.now();
@@ -1094,13 +777,13 @@ class EnterprisePowerShellMCPServer {
             let stderr = '';
             let timedOut = false;
             
-            // Set up timeout
+            // Set up timeoutMs
             const timeoutHandle = setTimeout(() => {
                 timedOut = true;
                 if (childProcess && !childProcess.killed) {
                     childProcess.kill('SIGTERM');
                 }
-            }, timeout);
+            }, timeoutMs);
             
             // Collect output
             if (childProcess.stdout) {
@@ -1148,7 +831,7 @@ class EnterprisePowerShellMCPServer {
                 workingDirectory,
                 processId: childProcess?.pid,
                 timedOut,
-                ...(timedOut ? { error: `Command timed out after ${timeout}ms` } : {})
+                ...(timedOut ? { error: `Command timed out after ${timeoutMs}ms` } : {})
             };
             
         } catch (error) {
@@ -1216,12 +899,12 @@ ${content}
     generateHelpForAIAgents(topic?: string): string {
         const helpSections = {
             overview: `
-# 🤖 Enterprise PowerShell MCP Server - AI Agent Guide
+# ≡ƒñû Enterprise PowerShell MCP Server - AI Agent Guide
 
-## 🎯 Purpose
+## ≡ƒÄ» Purpose
 This MCP server provides secure, enterprise-grade PowerShell command execution with advanced security classification, comprehensive audit logging, and AI agent optimization.
 
-## 🔧 Available Tools
+## ≡ƒöº Available Tools
 - **powershell-command**: Execute single PowerShell commands
 - **powershell-script**: Execute multi-line PowerShell scripts  
 - **powershell-file**: Execute PowerShell script files
@@ -1230,11 +913,11 @@ This MCP server provides secure, enterprise-grade PowerShell command execution w
 - **ai-agent-test**: Run validation tests for server functionality
 
 ## 🛡️ Security Levels
-- **SAFE** (🟢): Read-only operations, execute freely
-- **RISKY** (🟡): Requires confirmation (add confirmed: true)
-- **DANGEROUS** (🟣): Blocked - system modifications
-- **CRITICAL** (🔴): Blocked - security threats
-- **BLOCKED** (🚫): Completely prohibited operations`,
+- **SAFE** (≡ƒƒó): Read-only operations, execute freely
+- **RISKY** (≡ƒƒí): Requires confirmation (add confirmed: true)
+- **DANGEROUS** (≡ƒƒú): Blocked - system modifications
+- **CRITICAL** (≡ƒö┤): Blocked - security threats
+- **BLOCKED** (≡ƒÜ½): Completely prohibited operations`,
 
             security: `
 # 🛡️ Enterprise Security Framework
@@ -1242,7 +925,7 @@ This MCP server provides secure, enterprise-grade PowerShell command execution w
 ## Security Classification System
 This server implements a 5-level security classification system:
 
-### 🟢 SAFE Commands (Execute Freely)
+### ≡ƒƒó SAFE Commands (Execute Freely)
 - Get-* commands (Get-Date, Get-Process, Get-Location)
 - Show-* commands  
 - Test-* commands (read-only)
@@ -1250,37 +933,37 @@ This server implements a 5-level security classification system:
 - Write-* commands (Write-Host, Write-Output)
 - Format-*, Select-*, Where-Object, Sort-Object
 
-### 🟡 RISKY Commands (Require Confirmation)
+### ≡ƒƒí RISKY Commands (Require Confirmation)
 - File operations: Remove-Item, Move-Item, Copy-Item
 - Service operations: Start-Service, Restart-Service
 - Process management: Stop-Process
 - Add 'confirmed: true' to parameter to proceed
 
-### 🟣 DANGEROUS Commands (Blocked)
+### ≡ƒƒú DANGEROUS Commands (Blocked)
 - System modifications: Stop-Computer, Restart-Computer
 - User management: New-LocalUser, Remove-LocalUser
 - Service disabling: Set-Service Disabled
 - Event log clearing: Clear-EventLog
 
-### 🔴 CRITICAL Threats (Blocked)  
+### ≡ƒö┤ CRITICAL Threats (Blocked)  
 - Hidden execution: powershell -WindowStyle Hidden
 - Encoded commands: powershell -EncodedCommand
 - Downloads: DownloadString, WebClient
 - Binary execution: cmd.exe, wscript.exe
 
-### 🚫 BLOCKED Operations
+### ≡ƒÜ½ BLOCKED Operations
 - Registry modifications (HKLM, HKCU)
 - System file operations (C:\\Windows\\System32)
 - Root drive operations (Format-Volume C:)
 - Remote machine modifications`,
 
             monitoring: `
-# 📊 Enterprise Monitoring & Audit System
+# ≡ƒôè Enterprise Monitoring & Audit System
 
 ## Comprehensive Logging
 - **MCP Standard Logging**: notifications/message for real-time monitoring
 - **File-based Audit Trail**: ./logs/powershell-mcp-audit-YYYY-MM-DD.log
-- **Process Tracking**: Client PID → Server PID lineage
+- **Process Tracking**: Client PID ΓåÆ Server PID lineage
 - **Security Classification**: Every command classified and logged
 
 ## Real-time Monitoring Options
@@ -1307,7 +990,7 @@ This server implements a 5-level security classification system:
 - Real-time threat detection alerts`,
 
             authentication: `
-# 🔐 Enterprise Authentication System
+# ≡ƒöÉ Enterprise Authentication System
 
 ## Dual-Mode Operation
 - **Development Mode**: No authentication (authKey not set)
@@ -1339,7 +1022,7 @@ Include authKey in all tool requests when server requires it:
 - Implement additional authorization layers for sensitive operations`,
 
             examples: `
-# 📚 AI Agent Usage Examples
+# ≡ƒôÜ AI Agent Usage Examples
 
 ## Basic Safe Commands
 \`\`\`json
@@ -1367,7 +1050,7 @@ Include authKey in all tool requests when server requires it:
   "tool": "powershell-script",
   "params": {
     "script": "$processes = Get-Process\\n$memory = Get-WmiObject Win32_OperatingSystem\\nWrite-Output \\"Total Processes: $($processes.Count)\\"\\nWrite-Output \\"Available Memory: $([math]::Round($memory.FreePhysicalMemory/1MB, 2)) GB\\"",
-    "timeout": 30000,
+    "timeoutMs": 30000,
     "authKey": "your-key"
   }
 }
@@ -1424,7 +1107,7 @@ Include authKey in all tool requests when server requires it:
 - **Configuration Management**: Environment-specific settings`,
 
             'ai-agents': `
-# 🤖 AI Agent Integration Guide
+# ≡ƒñû AI Agent Integration Guide
 
 ## Optimal Usage Patterns
 1. **Always check help first**: Use help tool to understand capabilities
@@ -1627,7 +1310,7 @@ Use the ai-agent-test tool to validate functionality:
                 tools: [
                     {
                         name: 'powershell-command',
-                        description: 'Execute a PowerShell command with enterprise-grade security classification and comprehensive audit logging. Supports timeout control, working directory specification, and security confirmation.',
+                        description: 'Execute a PowerShell command with enterprise-grade security classification and comprehensive audit logging. Supports timeoutMs control, working directory specification, and security confirmation.',
                         inputSchema: zodToJsonSchema(PowerShellCommandSchema),
                     },
                     {
@@ -1690,14 +1373,14 @@ Use the ai-agent-test tool to validate functionality:
             };
 
             // Enhanced request logging
-            console.error("─".repeat(50));
-            console.error(`🔄 REQUEST #${this.commandCount} [${requestId}]`);
-            console.error(`🛠️  Tool: ${name}`);
-            console.error(`⏰ Time: ${requestInfo.timestamp}`);
-            console.error(`📊 Server Uptime: ${requestInfo.serverUptime}`);
-            console.error(`🔗 Client PID: ${clientInfo.parentPid} → Server PID: ${clientInfo.serverPid}`);
+            console.error("ΓöÇ".repeat(50));
+            console.error(`≡ƒöä REQUEST #${this.commandCount} [${requestId}]`);
+            console.error(`≡ƒ¢á∩╕Å  Tool: ${name}`);
+            console.error(`ΓÅ░ Time: ${requestInfo.timestamp}`);
+            console.error(`≡ƒôè Server Uptime: ${requestInfo.serverUptime}`);
+            console.error(`≡ƒöù Client PID: ${clientInfo.parentPid} ΓåÆ Server PID: ${clientInfo.serverPid}`);
             if (args) {
-                console.error(`📋 Arguments: ${JSON.stringify(args, null, 2)}`);
+                console.error(`⚠️ Arguments: ${JSON.stringify(args, null, 2)}`);
             }
 
             auditLog('INFO', 'MCP_REQUEST', `Enterprise tool request: ${name}`, requestInfo);
@@ -1713,14 +1396,14 @@ Use the ai-agent-test tool to validate functionality:
                         expectedKeyLength: this.authKey?.length || 0,
                         serverMode: 'enterprise'
                     });
-                    console.error(`❌ AUTHENTICATION FAILED for ${name}`);
+                    console.error(`Γ¥î AUTHENTICATION FAILED for ${name}`);
                     throw new McpError(
                         ErrorCode.InvalidRequest,
                         `Authentication failed. ${this.authKey ? 'Valid authentication key required for enterprise mode.' : 'Server running in development mode.'}`
                     );
                 }
 
-                console.error(`✅ Enterprise authentication passed for ${name}`);
+                console.error(`Γ£à Enterprise authentication passed for ${name}`);
 
                 // Route to appropriate handler
                 switch (name) {
@@ -1730,25 +1413,26 @@ Use the ai-agent-test tool to validate functionality:
                         // Security assessment
                         const securityAssessment = this.classifyCommandSafety(validatedArgs.command);
                         
-                        console.error(`🔨 Executing PowerShell Command: ${validatedArgs.command}`);
-                        const commandTimeout = validatedArgs.aiAgentTimeout || validatedArgs.timeout;
-                        console.error(`⏱️  Timeout: ${commandTimeout}ms${validatedArgs.aiAgentTimeout ? ' (AI Agent Override)' : ''}`);
+                        console.error(`🚀 Executing PowerShell Command: ${validatedArgs.command}`);
+                        const commandTimeoutSeconds = Math.min(300, (validatedArgs.timeoutSeconds ?? 90));
+                        const commandTimeoutMs = commandTimeoutSeconds * 1000;
+                        console.error(`⏱️  Timeout: ${commandTimeoutSeconds}s (${commandTimeoutMs}ms)`);
                         console.error(`🛡️  Security Level: ${securityAssessment.level} (${securityAssessment.risk} RISK)`);
-                        console.error(`📋 Risk Reason: ${securityAssessment.reason}`);
-                        console.error(`🎨 Classification Color: ${securityAssessment.color}`);
+                        console.error(`⚠️ Risk Reason: ${securityAssessment.reason}`);
+                        console.error(`≡ƒÄ¿ Classification Color: ${securityAssessment.color}`);
                         
                         if (validatedArgs.workingDirectory) {
-                            console.error(`📁 Working Directory: ${validatedArgs.workingDirectory}`);
+                            console.error(`≡ƒôü Working Directory: ${validatedArgs.workingDirectory}`);
                         }
                         
                         // Security enforcement
                         if (securityAssessment.blocked) {
                             const blockedError = new McpError(
                                 ErrorCode.InvalidRequest,
-                                `🚫 COMMAND BLOCKED: ${securityAssessment.reason}`
+                                `≡ƒÜ½ COMMAND BLOCKED: ${securityAssessment.reason}`
                             );
                             
-                            console.error(`🚫 BLOCKED: ${securityAssessment.category} - ${securityAssessment.reason}`);
+                            console.error(`≡ƒÜ½ BLOCKED: ${securityAssessment.category} - ${securityAssessment.reason}`);
                             
                             auditLog('ERROR', 'COMMAND_BLOCKED', 'Enterprise security policy blocked command execution', {
                                 requestId,
@@ -1769,10 +1453,10 @@ Use the ai-agent-test tool to validate functionality:
                         if (securityAssessment.requiresPrompt && !validatedArgs.confirmed && !validatedArgs.override) {
                             const promptError = new McpError(
                                 ErrorCode.InvalidRequest,
-                                `⚠️ CONFIRMATION REQUIRED: ${securityAssessment.reason}. Add 'confirmed: true' to proceed or 'override: true' with proper authorization.`
+                                `ΓÜá∩╕Å CONFIRMATION REQUIRED: ${securityAssessment.reason}. Add 'confirmed: true' to proceed or 'override: true' with proper authorization.`
                             );
                             
-                            console.error(`⚠️ CONFIRMATION REQUIRED for ${securityAssessment.category}`);
+                            console.error(`ΓÜá∩╕Å CONFIRMATION REQUIRED for ${securityAssessment.category}`);
                             
                             auditLog('WARNING', 'CONFIRMATION_REQUIRED', 'Command requires user confirmation to proceed', {
                                 requestId,
@@ -1787,22 +1471,23 @@ Use the ai-agent-test tool to validate functionality:
                             throw promptError;
                         }
                         
-                        // Execute the command with appropriate timeout
+                        
+                        // Legacy timeout alias logic removed in restored version; using timeoutSeconds only.
                         console.error(`🚀 Executing enterprise PowerShell command...`);
                         const result = await this.executePowerShellCommand(
                             validatedArgs.command,
-                            commandTimeout,
+                            commandTimeoutMs,
                             validatedArgs.workingDirectory
                         );
                         
                         result.securityAssessment = securityAssessment;
                         
                         // Enhanced result logging
-                        console.error(`✅ COMMAND COMPLETED [${requestId}]`);
-                        console.error(`📊 Result: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+                        console.error(`Γ£à COMMAND COMPLETED [${requestId}]`);
+                        console.error(`≡ƒôè Result: ${result.success ? 'SUCCESS' : 'FAILED'}`);
                         if (result.duration_ms) console.error(`⏱️  Duration: ${result.duration_ms}ms`);
-                        if (result.exitCode !== undefined) console.error(`🔢 Exit Code: ${result.exitCode}`);
-                        console.error("─".repeat(50));
+                        if (result.exitCode !== undefined) console.error(`≡ƒöó Exit Code: ${result.exitCode}`);
+                        console.error("ΓöÇ".repeat(50));
                         
                         // Comprehensive audit logging
                         auditLog('INFO', 'MCP_RESPONSE', `Enterprise tool response: ${name}`, {
@@ -1834,19 +1519,20 @@ Use the ai-agent-test tool to validate functionality:
                         // Security assessment for scripts
                         const securityAssessment = this.classifyCommandSafety(validatedArgs.script);
                         
-                        console.error(`📜 Executing PowerShell Script (${validatedArgs.script.length} characters)`);
-                        const scriptTimeout = validatedArgs.aiAgentTimeout || validatedArgs.timeout;
-                        console.error(`⏱️  Timeout: ${scriptTimeout}ms${validatedArgs.aiAgentTimeout ? ' (AI Agent Override)' : ''}`);
+                        console.error(`🚀 Executing PowerShell Script (${validatedArgs.script.length} characters)`);
+                        const scriptTimeoutSeconds = Math.min(300, (validatedArgs.timeoutSeconds ?? 90));
+                        const scriptTimeoutMs = scriptTimeoutSeconds * 1000;
+                        console.error(`⏱️  Timeout: ${scriptTimeoutSeconds}s (${scriptTimeoutMs}ms)`);
                         console.error(`🛡️  Security Level: ${securityAssessment.level} (${securityAssessment.risk} RISK)`);
                         
                         // Security enforcement for scripts
                         if (securityAssessment.blocked) {
                             const blockedError = new McpError(
                                 ErrorCode.InvalidRequest,
-                                `🚫 SCRIPT BLOCKED: ${securityAssessment.reason}`
+                                `≡ƒÜ½ SCRIPT BLOCKED: ${securityAssessment.reason}`
                             );
                             
-                            console.error(`🚫 BLOCKED: ${securityAssessment.category} - ${securityAssessment.reason}`);
+                            console.error(`≡ƒÜ½ BLOCKED: ${securityAssessment.category} - ${securityAssessment.reason}`);
                             
                             auditLog('ERROR', 'SCRIPT_BLOCKED', 'Enterprise security policy blocked script execution', {
                                 requestId,
@@ -1868,22 +1554,23 @@ Use the ai-agent-test tool to validate functionality:
                         if (securityAssessment.requiresPrompt && !validatedArgs.confirmed && !validatedArgs.override) {
                             throw new McpError(
                                 ErrorCode.InvalidRequest,
-                                `⚠️ SCRIPT CONFIRMATION REQUIRED: ${securityAssessment.reason}. Add 'confirmed: true' to proceed.`
+                                `ΓÜá∩╕Å SCRIPT CONFIRMATION REQUIRED: ${securityAssessment.reason}. Add 'confirmed: true' to proceed.`
                             );
                         }
                         
-                        // Execute the script with appropriate timeout
+                        
+                        // Legacy timeout alias logic removed in restored version.
                         const result = await this.executePowerShellCommand(
                             validatedArgs.script,
-                            scriptTimeout,
+                            scriptTimeoutMs,
                             validatedArgs.workingDirectory
                         );
                         
                         result.securityAssessment = securityAssessment;
                         
-                        console.error(`✅ SCRIPT COMPLETED [${requestId}]`);
-                        console.error(`📊 Result: ${result.success ? 'SUCCESS' : 'FAILED'}`);
-                        console.error("─".repeat(50));
+                        console.error(`Γ£à SCRIPT COMPLETED [${requestId}]`);
+                        console.error(`≡ƒôè Result: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+                        console.error("ΓöÇ".repeat(50));
                         
                         return {
                             content: [{ 
@@ -1896,16 +1583,16 @@ Use the ai-agent-test tool to validate functionality:
                     case 'powershell-syntax-check': {
                         const validatedArgs = SyntaxCheckSchema.parse(args);
                         
-                        console.error(`🔍 Checking PowerShell Syntax (${validatedArgs.content.length} characters)`);
+                        console.error(`≡ƒöì Checking PowerShell Syntax (${validatedArgs.content.length} characters)`);
                         
                         const result = await this.checkPowerShellSyntax(validatedArgs.content);
                         
-                        console.error(`✅ SYNTAX CHECK COMPLETED [${requestId}]`);
-                        console.error(`📊 Valid: ${result.isValid ? 'YES' : 'NO'}`);
+                        console.error(`Γ£à SYNTAX CHECK COMPLETED [${requestId}]`);
+                        console.error(`≡ƒôè Valid: ${result.isValid ? 'YES' : 'NO'}`);
                         if (result.errors.length > 0) {
-                            console.error(`❌ Errors: ${result.errors.length}`);
+                            console.error(`Γ¥î Errors: ${result.errors.length}`);
                         }
-                        console.error("─".repeat(50));
+                        console.error("ΓöÇ".repeat(50));
                         
                         auditLog('INFO', 'SYNTAX_CHECK', `PowerShell syntax validation completed`, {
                             requestId,
@@ -1926,16 +1613,16 @@ Use the ai-agent-test tool to validate functionality:
                     case 'help': {
                         const validatedArgs = HelpSchema.parse(args);
                         
-                        console.error(`📖 Generating Help Documentation`);
+                        console.error(`≡ƒôû Generating Help Documentation`);
                         if (validatedArgs.topic) {
-                            console.error(`📋 Topic: ${validatedArgs.topic}`);
+                            console.error(`⚠️ Topic: ${validatedArgs.topic}`);
                         }
                         
                         const helpContent = this.generateHelpForAIAgents(validatedArgs.topic);
                         
-                        console.error(`✅ HELP GENERATED [${requestId}]`);
-                        console.error(`📊 Content Length: ${helpContent.length} characters`);
-                        console.error("─".repeat(50));
+                        console.error(`Γ£à HELP GENERATED [${requestId}]`);
+                        console.error(`≡ƒôè Content Length: ${helpContent.length} characters`);
+                        console.error("ΓöÇ".repeat(50));
                         
                         auditLog('INFO', 'HELP_REQUEST', `Help documentation provided`, {
                             requestId,
@@ -1956,17 +1643,17 @@ Use the ai-agent-test tool to validate functionality:
                     case 'ai-agent-test': {
                         const validatedArgs = AITestSchema.parse(args);
                         
-                        console.error(`🧪 Running AI Agent Tests`);
-                        console.error(`📋 Test Suite: ${validatedArgs.testSuite}`);
+                        console.error(`≡ƒº¬ Running AI Agent Tests`);
+                        console.error(`⚠️ Test Suite: ${validatedArgs.testSuite}`);
                         console.error(`🛡️  Skip Dangerous: ${validatedArgs.skipDangerous}`);
                         
                         const testResults = await this.runAIAgentTests(validatedArgs.testSuite, validatedArgs.skipDangerous);
                         
-                        console.error(`✅ AI AGENT TESTS COMPLETED [${requestId}]`);
-                        console.error(`📊 Results: ${testResults.passed}/${testResults.totalTests} passed (${testResults.summary.successRate})`);
+                        console.error(`Γ£à AI AGENT TESTS COMPLETED [${requestId}]`);
+                        console.error(`≡ƒôè Results: ${testResults.passed}/${testResults.totalTests} passed (${testResults.summary.successRate})`);
                         console.error(`🛡️  Security Enforcement: ${testResults.summary.securityEnforcement}`);
-                        console.error(`⚡ Safe Execution: ${testResults.summary.safeExecution}`);
-                        console.error("─".repeat(50));
+                        console.error(`ΓÜí Safe Execution: ${testResults.summary.safeExecution}`);
+                        console.error("ΓöÇ".repeat(50));
                         
                         auditLog('INFO', 'AI_AGENT_TEST', `AI agent validation tests completed`, {
                             requestId,
@@ -1994,9 +1681,9 @@ Use the ai-agent-test tool to validate functionality:
                             resetStats: z.boolean().optional()
                         }).parse(args);
                         
-                        console.error(`🔍 Generating Threat Analysis Report`);
-                        console.error(`📊 Include Details: ${validatedArgs.includeDetails || false}`);
-                        console.error(`🔄 Reset Stats: ${validatedArgs.resetStats || false}`);
+                        console.error(`≡ƒöì Generating Threat Analysis Report`);
+                        console.error(`≡ƒôè Include Details: ${validatedArgs.includeDetails || false}`);
+                        console.error(`≡ƒöä Reset Stats: ${validatedArgs.resetStats || false}`);
                         
                         const threatStats = this.getThreatStats();
                         
@@ -2031,15 +1718,15 @@ Use the ai-agent-test tool to validate functionality:
                                 aliasesDetected: 0,
                                 sessionsWithThreats: 0
                             };
-                            console.error(`🔄 Threat tracking statistics have been reset`);
+                            console.error(`≡ƒöä Threat tracking statistics have been reset`);
                         }
                         
-                        console.error(`✅ THREAT ANALYSIS COMPLETED [${requestId}]`);
-                        console.error(`⚠️  Risk Level: ${analysisReport.assessment.overallRisk}`);
-                        console.error(`🚨 Threat Level: ${analysisReport.assessment.threatLevel}`);
-                        console.error(`📊 Unique Threats: ${threatStats.uniqueThreats}`);
-                        console.error(`🔍 Aliases Detected: ${threatStats.aliasesDetected}`);
-                        console.error("─".repeat(50));
+                        console.error(`Γ£à THREAT ANALYSIS COMPLETED [${requestId}]`);
+                        console.error(`ΓÜá∩╕Å  Risk Level: ${analysisReport.assessment.overallRisk}`);
+                        console.error(`≡ƒÜ¿ Threat Level: ${analysisReport.assessment.threatLevel}`);
+                        console.error(`≡ƒôè Unique Threats: ${threatStats.uniqueThreats}`);
+                        console.error(`≡ƒöì Aliases Detected: ${threatStats.aliasesDetected}`);
+                        console.error("ΓöÇ".repeat(50));
                         
                         auditLog('INFO', 'THREAT_ANALYSIS', 'Threat analysis report generated', {
                             requestId,
@@ -2062,17 +1749,17 @@ Use the ai-agent-test tool to validate functionality:
                     }
                     
                     default:
-                        console.error(`❌ Unknown tool: ${name}`);
+                        console.error(`Γ¥î Unknown tool: ${name}`);
                         auditLog('ERROR', 'UNKNOWN_TOOL', `Unknown tool requested: ${name}`, { requestId });
                         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
                 }
             } catch (error) {
                 // Enhanced error logging
-                console.error(`❌ REQUEST FAILED [${requestId}]`);
-                console.error(`🛠️  Tool: ${name}`);
-                console.error(`💥 Error Type: ${error instanceof Error ? error.constructor.name : typeof error}`);
-                console.error(`📝 Error Message: ${error instanceof Error ? error.message : String(error)}`);
-                console.error("─".repeat(50));
+                console.error(`Γ¥î REQUEST FAILED [${requestId}]`);
+                console.error(`≡ƒ¢á∩╕Å  Tool: ${name}`);
+                console.error(`≡ƒÆÑ Error Type: ${error instanceof Error ? error.constructor.name : typeof error}`);
+                console.error(`≡ƒô¥ Error Message: ${error instanceof Error ? error.message : String(error)}`);
+                console.error("ΓöÇ".repeat(50));
                 
                 auditLog('ERROR', 'MCP_ERROR', `Enterprise tool execution failed: ${name}`, {
                     requestId,
@@ -2083,7 +1770,7 @@ Use the ai-agent-test tool to validate functionality:
                 });
                 
                 if (error instanceof z.ZodError) {
-                    console.error(`🔍 Validation Error Details: ${JSON.stringify(error.errors, null, 2)}`);
+                    console.error(`≡ƒöì Validation Error Details: ${JSON.stringify(error.errors, null, 2)}`);
                     throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.message}`);
                 }
                 throw error;
@@ -2104,9 +1791,9 @@ Use the ai-agent-test tool to validate functionality:
         
         await this.server.connect(transport);
         
-        console.error(`✅ ENTERPRISE MCP SERVER CONNECTED SUCCESSFULLY`);
-        console.error(`🔗 Transport: STDIO`);
-        console.error(`📡 Ready for AI agent requests`);
+        console.error(`Γ£à ENTERPRISE MCP SERVER CONNECTED SUCCESSFULLY`);
+        console.error(`≡ƒöù Transport: STDIO`);
+        console.error(`≡ƒôí Ready for AI agent requests`);
         console.error(`🛡️  Enterprise security enforcement active`);
         console.error("=".repeat(60));
         
@@ -2128,13 +1815,13 @@ async function main() {
         
         console.error("=".repeat(60));
         console.error(`🚀 STARTING ENTERPRISE POWERSHELL MCP SERVER`);
-        console.error(`📅 Start Time: ${new Date().toISOString()}`);
-        console.error(`🔢 Process ID: ${process.pid}`);
-        console.error(`📈 Node.js Version: ${process.version}`);
-        console.error(`🏢 Server Version: 2.0.0 (Enterprise TypeScript)`);
-        console.error(`🔐 Authentication: ${authKey ? 'ENTERPRISE MODE (Key Required)' : 'DEVELOPMENT MODE'}`);
+        console.error(`≡ƒôà Start Time: ${new Date().toISOString()}`);
+        console.error(`≡ƒöó Process ID: ${process.pid}`);
+        console.error(`≡ƒôê Node.js Version: ${process.version}`);
+        console.error(`≡ƒÅó Server Version: 2.0.0 (Enterprise TypeScript)`);
+        console.error(`≡ƒöÉ Authentication: ${authKey ? 'ENTERPRISE MODE (Key Required)' : 'DEVELOPMENT MODE'}`);
         console.error(`🛡️  Security: 5-Level Classification System Active`);
-        console.error(`📊 Audit Logging: Comprehensive Enterprise Trail`);
+        console.error(`≡ƒôè Audit Logging: Comprehensive Enterprise Trail`);
         console.error("=".repeat(60));
         
         // Start the server
@@ -2142,7 +1829,7 @@ async function main() {
         
         // Keep the process alive
         process.on('SIGINT', () => {
-            console.error('\n🛑 Received SIGINT, shutting down gracefully...');
+            console.error('\n≡ƒ¢æ Received SIGINT, shutting down gracefully...');
             auditLog('INFO', 'SERVER_SHUTDOWN', 'Enterprise MCP Server shutdown initiated by SIGINT', {
                 uptime: Date.now() - server.startTime.getTime() + 'ms',
                 commandsProcessed: server.commandCount
@@ -2151,7 +1838,7 @@ async function main() {
         });
         
         process.on('SIGTERM', () => {
-            console.error('\n🛑 Received SIGTERM, shutting down gracefully...');
+            console.error('\n≡ƒ¢æ Received SIGTERM, shutting down gracefully...');
             auditLog('INFO', 'SERVER_SHUTDOWN', 'Enterprise MCP Server shutdown initiated by SIGTERM', {
                 uptime: Date.now() - server.startTime.getTime() + 'ms',
                 commandsProcessed: server.commandCount
@@ -2159,10 +1846,10 @@ async function main() {
             process.exit(0);
         });
         
-        console.error(`⏳ Server running... Press Ctrl+C to shutdown`);
+        console.error(`ΓÅ│ Server running... Press Ctrl+C to shutdown`);
         
     } catch (error) {
-        console.error('💥 FATAL ERROR starting Enterprise MCP Server:');
+        console.error('≡ƒÆÑ FATAL ERROR starting Enterprise MCP Server:');
         console.error(error instanceof Error ? error.message : String(error));
         if (error instanceof Error && error.stack) {
             console.error(error.stack);
@@ -2182,8 +1869,13 @@ const isMainModule = import.meta.url === `file://${process.argv[1]}` || process.
 
 if (isMainModule) {
     main().catch((error) => {
-        console.error('💥 Unhandled error in main:');
+        console.error('≡ƒÆÑ Unhandled error in main:');
         console.error(error instanceof Error ? error.message : String(error));
         process.exit(1);
     });
 }
+
+
+
+
+

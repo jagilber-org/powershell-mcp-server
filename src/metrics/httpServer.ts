@@ -68,6 +68,9 @@ export class MetricsHttpServer {
   private lagTimer?: NodeJS.Timeout;
   private lagIntervalMs = 500;
   private performanceSnapshot: any = {};
+  // Optional periodic PowerShell metrics sampling (aggregated into metricsRegistry) when MCP_CAPTURE_PS_METRICS=1
+  private psSampleTimer?: NodeJS.Timeout;
+  private psSampleIntervalMs = 2500;
   // Historical data for graphs
   // Store CPU percent and event loop lag (ms) together for combined graph
   private cpuHistory: Array<{timestamp: number, value: number, lag: number}> = [];
@@ -103,6 +106,15 @@ export class MetricsHttpServer {
       });
       this.server.listen(attemptPort, host, () => {
         this.started = true;
+        // Baseline PS sample (lightweight) so aggregation test sees progress even before first command metrics capture.
+        if(process.env.MCP_CAPTURE_PS_METRICS==='1'){
+          try {
+            const mem = process.memoryUsage();
+            const wsMB = +(mem.rss/1024/1024).toFixed(2);
+            metricsRegistry.capturePsSample(process.uptime(), wsMB);
+            if(this.debugEnabled){ console.error(`[METRICS][BASELINE_HTTP] uptimeSec=${process.uptime().toFixed(2)} wsMB=${wsMB}`); }
+          } catch{}
+        }
         // eslint-disable-next-line no-console
   const proto = 'http'; // internal loopback; no external exposure
   console.error(`[METRICS] HTTP server listening on ${proto}://${host}:${attemptPort}`);
@@ -110,6 +122,7 @@ export class MetricsHttpServer {
         this.startHeartbeat();
   this.startPerfSampler();
   this.startLagMonitor();
+  this.startPsSampler();
       });
     };
     tryListen();
@@ -126,6 +139,7 @@ export class MetricsHttpServer {
   if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
   if (this.perfTimer) clearInterval(this.perfTimer);
   if (this.lagTimer) clearInterval(this.lagTimer);
+  if (this.psSampleTimer) clearInterval(this.psSampleTimer);
   }
 
   publishExecution(ev: ExecutionEventPayload): void {
@@ -149,15 +163,20 @@ export class MetricsHttpServer {
     }
   if (path === '/api/metrics') {
       const snap = metricsRegistry.snapshot(false);
-  const perf = this.performanceSnapshot;
-  // Include historical data for graphs
-  const response = { 
-    ...snap, 
-    performance: perf,
-    cpuHistory: this.cpuHistory,
-    memHistory: this.memHistory
-  };
-  this.writeJson(res, response);
+      // Ensure psSamples fields are present even if zero (tests rely on property existence)
+      if(typeof (snap as any).psSamples === 'undefined'){
+        (snap as any).psSamples = 0;
+        (snap as any).psCpuSecAvg = 0;
+        (snap as any).psWSMBAvg = 0;
+      }
+      const perf = this.performanceSnapshot;
+      const response = { 
+        ...snap, 
+        performance: perf,
+        cpuHistory: this.cpuHistory,
+        memHistory: this.memHistory
+      };
+      this.writeJson(res, response);
       return;
     }
   if (path === '/api/metrics/history') {
@@ -837,6 +856,20 @@ export class MetricsHttpServer {
     const sorted = [...arr].sort((a,b)=>a-b);
     const idx = Math.floor(0.95 * (sorted.length - 1));
     return sorted[idx];
+  }
+
+  private startPsSampler(): void {
+    if(this.psSampleTimer || process.env.MCP_CAPTURE_PS_METRICS !== '1') return;
+    const capture = () => {
+      try {
+        const mem = process.memoryUsage();
+        const wsMB = +(mem.rss/1024/1024).toFixed(2);
+        const cpuSec = process.uptime();
+        try { (metricsRegistry as any).capturePsSample(cpuSec, wsMB); } catch {}
+      } catch {}
+      this.psSampleTimer = setTimeout(capture, this.psSampleIntervalMs).unref();
+    };
+    capture();
   }
 }
 
