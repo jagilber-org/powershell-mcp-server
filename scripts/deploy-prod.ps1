@@ -133,22 +133,27 @@ foreach($item in $artifactList){
 
 # Compute hashes (optional)
 $fileHashes = @()
-if($VerboseHashes -and -not $DryRun){
-  Get-ChildItem -Path $staging -Recurse -File | ForEach-Object {
-    try {
-      $h = Get-FileHash -Algorithm SHA256 -Path $_.FullName
-      $fileHashes += [pscustomobject]@{ Path = $_.FullName.Substring($staging.Length+1); Sha256 = $h.Hash }
-    } catch { Write-Warn "Hash failed: $($_.FullName) $_" }
+if($VerboseHashes){
+  if(-not $DryRun){
+    Get-ChildItem -Path $staging -Recurse -File | ForEach-Object {
+      try {
+        $h = Get-FileHash -Algorithm SHA256 -Path $_.FullName
+        $fileHashes += [pscustomobject]@{ Path = $_.FullName.Substring($staging.Length+1); Sha256 = $h.Hash }
+      } catch { Write-Warn "Hash failed: $($_.FullName) $_" }
+    }
   }
 }
 
 # Backup existing
-if(Test-Path $Destination -and -not $NoBackup){
-  $backupRoot = Join-Path ([IO.Path]::GetDirectoryName($Destination)) ((Split-Path $Destination -Leaf) + '_backup_' + $timestamp)
-  Write-Info "Backing up existing deployment to $backupRoot"
-  if(-not $DryRun){ robocopy $Destination $backupRoot /MIR /NFL /NDL /NJH /NJS | Out-Null }
-} elseif(Test-Path $Destination -and $NoBackup){
-  Write-Warn 'NoBackup specified; existing contents will be overwritten.'
+$hasDestination = Test-Path $Destination
+if($hasDestination){
+  if(-not $NoBackup){
+    $backupRoot = Join-Path ([IO.Path]::GetDirectoryName($Destination)) ((Split-Path $Destination -Leaf) + '_backup_' + $timestamp)
+    Write-Info "Backing up existing deployment to $backupRoot"
+    if(-not $DryRun){ robocopy $Destination $backupRoot /MIR /NFL /NDL /NJH /NJS | Out-Null }
+  } else {
+    Write-Warn 'NoBackup specified; existing contents will be overwritten.'
+  }
 }
 
 if(-not $DryRun){
@@ -164,26 +169,31 @@ if(-not $NoInstall){
   if(-not $DryRun){
     Push-Location $Destination
     if(Test-Path node_modules){ Write-Info 'Removing existing node_modules'; try { Remove-Item -Recurse -Force node_modules } catch { Write-Warn "Failed to remove node_modules: $_" } }
-    $omit = $IncludeDev ? '' : '--omit=dev'
-    npm ci $omit | Write-Host
+    if($IncludeDev){
+      npm ci | Write-Host
+    } else {
+      npm ci --omit=dev | Write-Host
+    }
     Pop-Location
   }
 } else { Write-Warn 'Skipping npm install (NoInstall).' }
 
 # Deployment manifest
+$pkgVersion = $null
+try { $pkgVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version } catch { Write-Warn "Could not read version from package.json: $_" }
 $manifest = [ordered]@{
-  deployedAt = (Get-Date).ToString('o')
-  sourceRepo = (Get-Item $repoRoot).FullName
-  destination = $Destination
-  commit = $gitMeta.'rev-parse HEAD'
-  branch = $gitMeta.'rev-parse --abbrev-ref HEAD'
-  dirty = [bool]($gitMeta.'status --porcelain')
-  version = try { (Get-Content package.json -Raw | ConvertFrom-Json).version } catch { $null }
+  deployedAt          = (Get-Date).ToString('o')
+  sourceRepo          = (Get-Item $repoRoot).FullName
+  destination         = $Destination
+  commit              = $gitMeta.'rev-parse HEAD'
+  branch              = $gitMeta.'rev-parse --abbrev-ref HEAD'
+  dirty               = [bool]($gitMeta.'status --porcelain')
+  version             = $pkgVersion
   includeDevDependencies = [bool]$IncludeDev
-  testsSkipped = [bool]$SkipTests
-  noInstall = [bool]$NoInstall
-  fileHashCount = $fileHashes.Count
-  durationSeconds = [int]((Get-Date) - $script:StartTime).TotalSeconds
+  testsSkipped        = [bool]$SkipTests
+  noInstall           = [bool]$NoInstall
+  fileHashCount       = $fileHashes.Count
+  durationSeconds     = [int]((Get-Date) - $script:StartTime).TotalSeconds
 }
 if($VerboseHashes){ $manifest.fileHashes = $fileHashes }
 
