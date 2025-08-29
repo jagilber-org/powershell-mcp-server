@@ -342,13 +342,26 @@ classDiagram
         +string stdout
         +string stderr
         +int? exitCode
-        +int duration_ms
-        +string command
-        +string? workingDirectory
+        +int duration_ms            // wall‑clock (>=1ms enforced for real executions)
+        +int configuredTimeoutMs
+        +int effectiveTimeoutMs     // after adaptive extensions
+        +int adaptiveExtensions     // count of extensions applied
+        +bool adaptiveExtended      // shorthand (adaptiveExtensions > 0)
+        +int? adaptiveMaxTotalMs
+        +string terminationReason   // completed | timeout | killed | output_overflow
+        +bool timedOut
+        +bool internalSelfDestruct  // exited via internal timer (exitCode 124)
+        +string overflowStrategy    // return | truncate | terminate
+        +bool truncated             // output truncated due to size/line limits
+        +bool overflow              // raw overflow trigger before strategy applied
+        +int totalBytes             // cumulative (pre truncate) bytes captured
+        +object psProcessMetrics    // { CpuSec, WS } when enabled
         +SecurityAssessment securityAssessment
-        +int? processId
-        +bool? timedOut
-        +string? error
+        +int originalTimeoutSeconds
+        +string[] warnings          // deprecation & long-timeout notices
+        +string? workingDirectory
+        +object[] chunks            // internal chunk boundary metadata (not always returned)
+        +string? reason             // legacy alias for certain overflow cases
     }
 ```
 
@@ -364,6 +377,7 @@ classDiagram
 | 4 | Classification | requiresPrompt & !confirmed | Reject | McpError CONFIRMATION_REQUIRED |
 | 5 | Execution | timeout | Kill process | error TIMEOUT |
 | 6 | Output | size/lines exceed | Truncate | Append &lt;TRUNCATED&gt; marker |
+| 7 | Metrics | real execution duration <1ms | Force to 1ms | Avoid misleading 0ms rows |
 
 ---
 
@@ -476,6 +490,65 @@ flowchart LR
 ## 16. Quick Mental Model
 
 > "Every request is a mini pipeline: Authenticate → Rate Limit → Classify → (Confirm?) → Execute → Log → Stream Metrics."
+
+Additional nuance as of Aug 2025:
+
+- Blocked or confirmation-required (unconfirmed) requests still emit a lightweight metrics attempt event, but their zero-duration samples are excluded from latency percentiles/averages.
+- Real executions enforce a minimum reported duration of 1ms (high-resolution timer) to prevent a wall of 0ms rows obscuring distribution shape.
+- Adaptive timeout logic can extend effectiveTimeoutMs in small steps while honoring a hard max (adaptiveMaxTotalMs) and watchdog.
+
+---
+
+## 16.1 Timeout & Adaptive Extension Mechanics
+
+| Element | Behavior |
+|---------|----------|
+| Internal Self‑Destruct | Injected timer (unless MCP_DISABLE_SELF_DESTRUCT=1) exits PowerShell (exit 124) shortly before external timeout / adaptive horizon. |
+| External Timeout | Initial window derived from aiAgentTimeoutSec (or legacy aliases). |
+| Adaptive Window | When remaining <= extendWindowMs AND recent output activity, extend by extendStepMs. |
+| Cap | Never extends beyond adaptiveMaxTotalMs (derived from user input or 3x base timeout, capped at 180s). |
+| terminationReason | Derived atomically at finish(): `completed` \| `timeout` \| `killed` \| `output_overflow`. |
+| Watchdog | Forces resolution hardKillTotal ms after start (accounts for adaptive horizon + grace). |
+
+---
+
+## 16.2 Environment Variables Influencing Execution
+
+| Variable | Effect |
+|----------|-------|
+| MCP_CAPTURE_PS_METRICS=1 | Enable per-invocation PowerShell CPU / WS sampling (with fallback baseline samples). |
+| MCP_DISABLE_SELF_DESTRUCT=1 | Disables injected internal 124 self-destruct timer (useful for debugging). |
+| MCP_OVERFLOW_STRATEGY=(return\|truncate\|terminate) | Chooses overflow handling approach (default return). |
+| METRICS_DEBUG=true | Emits verbose metrics sampling / fallback logs to stderr. |
+
+---
+
+## 16.3 Timeout Parameter Aliases & Deprecations
+
+Canonical field: aiAgentTimeoutSec (seconds).
+
+Accepted aliases (with warnings):
+
+| Alias | Status | Warning Text |
+|-------|--------|--------------|
+| aiAgentTimeout | Deprecated | "Parameter 'aiAgentTimeout' is deprecated; use 'aiAgentTimeoutSec' (seconds)." |
+| timeout | Deprecated | "Parameter 'timeout' is deprecated; use 'aiAgentTimeoutSec' (seconds)." |
+| timeoutSeconds | Transitional | Advisory to prefer aiAgentTimeoutSec. |
+
+Long timeouts (>=60s) add a performance responsiveness warning.
+
+---
+
+## 16.4 Metrics Duration Semantics
+
+| Scenario | Duration Contribution |
+|----------|-----------------------|
+| Blocked command | Recorded attempt event (durationMs=0) but excluded from latency aggregates. |
+| Confirmation required (unconfirmed) | Same as blocked (excluded). |
+| Successful / failed real exec | High-resolution measured; coerced to >=1ms; included in aggregates. |
+| Adaptive extensions | Reflected in effectiveTimeoutMs; duration_ms remains actual wall time. |
+
+Percentiles (p95) use a ceil index over sorted non-zero durations to avoid downward bias for small sample sets.
 
 ---
 

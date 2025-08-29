@@ -68,8 +68,11 @@ Out-of-Scope (Phase Deferred):
 | F10 | Health tool fallback parsing | P1 | DONE |
 | F11 | Adaptive test ensures extension > base | P1 | DONE |
 | F12 | Expose warnings for deprecated timeout params | P2 | DONE |
+| F13 | Enforce minimum reported duration 1ms for real executions | P2 | DONE |
+| F14 | Exclude zero-duration attempts from latency aggregation | P2 | DONE |
 
 ### Non-Functional
+
 | ID | Requirement | Metric |
 |----|-------------|--------|
 | N1 | Performance overhead for SAFE command ≤ +5% | Benchmark (deferred) |
@@ -78,16 +81,19 @@ Out-of-Scope (Phase Deferred):
 | N4 | Config safety | Adaptive never exceeds maxTotalSec |
 
 ## 8. Assumptions
+
 - Agents will transition to using aiAgentTimeoutSec soon; legacy parameters still appear short-term.
 - Adaptive extension only matters for interactive or streaming output tasks.
 - Termination reasons are sufficient without detail codes initially.
 
 ## 9. Constraints
+
 - Must not block existing CI pipelines.
 - Cannot introduce external service dependencies.
 - Must operate within Windows PowerShell and PowerShell Core environments.
 
 ## 10. Risks & Mitigations
+
 | Risk | Impact | Mitigation |
 |------|--------|-----------|
 | Adaptive loop runaway | Starvation of watchdog | Hard cap + watchdog fallback |
@@ -96,12 +102,14 @@ Out-of-Scope (Phase Deferred):
 | Backward client assuming absence of terminationReason | None (additive) | N/A |
 
 ## 11. Architecture Delta Summary
+
 - Added terminationReason derivation in `finish()`.
 - Added adaptive loop with periodic remaining-time checks & extension scheduling.
 - Watchdog marks `killed` if unresolved.
 - Self-destruct timer tuned to maximum adaptive horizon.
 
 ## 12. Data Model Changes
+
 | Field | Type | Notes |
 |-------|------|-------|
 | terminationReason | string enum | Always present |
@@ -110,25 +118,39 @@ Out-of-Scope (Phase Deferred):
 | effectiveTimeoutMs | number | Mirrors configured if no extensions |
 
 ## 13. Telemetry / Observability
-Current: terminationReason included in audit + metrics publish payload (row-level). Future: aggregate distribution, alert if spike in `killed`.
+
+Current: terminationReason included in audit + metrics publish payload (row-level). Non-zero real execution durations aggregated for average & p95; zero-duration attempts (blocked / unconfirmed) excluded. Future: aggregate distribution, alert if spike in `killed`.
+
+Environment Variable Controls (documented for operability):
+
+| Variable | Purpose |
+|----------|---------|
+| MCP_CAPTURE_PS_METRICS=1 | Enable per-invocation CPU/WS sampling (with fallback baseline) |
+| MCP_DISABLE_SELF_DESTRUCT=1 | Disable internal 124 timer (debugging) |
+| MCP_OVERFLOW_STRATEGY=truncate\|return\|terminate | Override overflow handling mode |
+| METRICS_DEBUG=true | Verbose metrics diagnostic logs |
 
 ## 14. Testing Strategy
+
 - Unit / integration hybrid via Jest harness spawning server.
 - Negative control (fast-exit) to guard hang false positive.
 - Adaptive positive path ensures at least one extension (extension window tuned in test).
 - Health resilience test covers structured vs legacy output schema.
 
 ## 15. Rollout Plan
+
 1. Land branch `integrate/timeouts-watchdog` with all tests green.
 2. Monitor audit & metrics manually on staging instance.
 3. Add optional warning in release notes encouraging agents to migrate timeout param.
 
 ## 16. Rollback Strategy
+
 - Revert commits adding terminationReason & adaptive loop.
 - Disable adaptive by not passing adaptiveTimeout flags.
 - Keep hang test for regression detection even after rollback.
 
 ## 17. Open Follow-Ups
+
 | Item | Owner | Target |
 |------|-------|--------|
 | terminationReason metrics aggregation | Eng | Next minor update |
@@ -136,13 +158,16 @@ Current: terminationReason included in audit + metrics publish payload (row-leve
 | terminationReasonDetail extension | Eng | Post metrics |
 
 ## 18. Acceptance Checklist
+
 - [x] All functional requirements F1–F12 met
+- [x] F13 / F14 implemented (min duration + exclusion of zero-duration attempts)
 - [x] All new tests stable locally
 - [ ] Full suite pass on branch (pending)
 - [ ] PR description updated with new scope
 - [ ] Merge approval
 
 ## 19. Appendix: Hang Command Justification
+
 The chosen loop uses `Console.ReadKey($true)` ensuring a blocking wait that doesn’t flood CPU and cannot complete naturally. Sleep fallback protects environments without a console. This ensures the timeout mechanism—not normal completion—ends the process.
 
 ---
