@@ -145,8 +145,7 @@ if($VerboseHashes){
 }
 
 # Backup existing
-$hasDestination = Test-Path $Destination
-if($hasDestination){
+if(Test-Path $Destination){
   if(-not $NoBackup){
     $backupRoot = Join-Path ([IO.Path]::GetDirectoryName($Destination)) ((Split-Path $Destination -Leaf) + '_backup_' + $timestamp)
     Write-Info "Backing up existing deployment to $backupRoot"
@@ -169,32 +168,29 @@ if(-not $NoInstall){
   if(-not $DryRun){
     Push-Location $Destination
     if(Test-Path node_modules){ Write-Info 'Removing existing node_modules'; try { Remove-Item -Recurse -Force node_modules } catch { Write-Warn "Failed to remove node_modules: $_" } }
-    if($IncludeDev){
-      npm ci | Write-Host
-    } else {
-      npm ci --omit=dev | Write-Host
-    }
+    $omit = $IncludeDev ? '' : '--omit=dev'
+    npm ci $omit | Write-Host
     Pop-Location
   }
 } else { Write-Warn 'Skipping npm install (NoInstall).' }
 
-# Deployment manifest
-$pkgVersion = $null
-try { $pkgVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version } catch { Write-Warn "Could not read version from package.json: $_" }
-$manifest = [ordered]@{
-  deployedAt          = (Get-Date).ToString('o')
-  sourceRepo          = (Get-Item $repoRoot).FullName
-  destination         = $Destination
-  commit              = $gitMeta.'rev-parse HEAD'
-  branch              = $gitMeta.'rev-parse --abbrev-ref HEAD'
-  dirty               = [bool]($gitMeta.'status --porcelain')
-  version             = $pkgVersion
-  includeDevDependencies = [bool]$IncludeDev
-  testsSkipped        = [bool]$SkipTests
-  noInstall           = [bool]$NoInstall
-  fileHashCount       = $fileHashes.Count
-  durationSeconds     = [int]((Get-Date) - $script:StartTime).TotalSeconds
-}
+# Deployment manifest (refactored to avoid parser issues on some hosts)
+$pkgJson = $null
+try { $pkgJson = Get-Content package.json -Raw | ConvertFrom-Json } catch { }
+$pkgVersion = if($pkgJson){ $pkgJson.version } else { $null }
+$manifest = [ordered]@{}
+$manifest.deployedAt = (Get-Date).ToString('o')
+$manifest.sourceRepo = (Get-Item $repoRoot).FullName
+$manifest.destination = $Destination
+$manifest.commit = $gitMeta.'rev-parse HEAD'
+$manifest.branch = $gitMeta.'rev-parse --abbrev-ref HEAD'
+$manifest.dirty = [bool]($gitMeta.'status --porcelain')
+$manifest.version = $pkgVersion
+$manifest.includeDevDependencies = [bool]$IncludeDev
+$manifest.testsSkipped = [bool]$SkipTests
+$manifest.noInstall = [bool]$NoInstall
+$manifest.fileHashCount = $fileHashes.Count
+$manifest.durationSeconds = [int]((Get-Date) - $script:StartTime).TotalSeconds
 if($VerboseHashes){ $manifest.fileHashes = $fileHashes }
 
 if(-not $DryRun){

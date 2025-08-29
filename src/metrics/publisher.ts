@@ -41,8 +41,12 @@ export function publishExecutionAttempt(opts: PublishOptions){
       toolName: opts.toolName
     };
     metricsHttpServer.publishExecution(ev);
-    // Record core metrics (confirmation-required counted separately to preserve existing p95 logic)
-    metricsRegistry.record({ level: ev.level as any, blocked: ev.blocked, durationMs: ev.durationMs, truncated: ev.truncated });
+    // If this is an attempt (reason present) avoid skewing duration stats.
+    if(opts.reason){
+      try { (metricsRegistry as any).recordAttempt?.(ev.level, ev.blocked, ev.truncated); } catch {}
+    } else {
+      metricsRegistry.record({ level: ev.level as any, blocked: ev.blocked, durationMs: ev.durationMs, truncated: ev.truncated });
+    }
     if(opts.incrementConfirmation){
       try { (metricsRegistry as any).incrementConfirmation?.(); } catch {}
     }

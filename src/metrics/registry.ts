@@ -71,6 +71,21 @@ export class MetricsRegistry {
     }
   }
 
+  /** Record an attempt (blocked, confirmation-required, unknown) without impacting duration statistics. */
+  recordAttempt(level: SecurityLevel, blocked: boolean, truncated: boolean): void {
+    this.counts.TOTAL++;
+    this.counts[level] = (this.counts[level] || 0) + 1;
+    if(blocked) this.counts.BLOCKED++;
+    if(truncated) this.counts.TRUNCATED++;
+    // Do NOT push a duration sample; attempts have no runtime.
+    this.history.push({ level, blocked, truncated, durationMs: 0, ts: new Date().toISOString(), seq: ++this.seq });
+    if (this.history.length > 1000) this.history.shift();
+    if (process.env.METRICS_DEBUG === 'true') {
+      // eslint-disable-next-line no-console
+      console.error(`[METRICS][ATTEMPT] seq=${this.seq} level=${level} blocked=${blocked} total=${this.counts.TOTAL}`);
+    }
+  }
+
   /** Increment timeout counter (kept separate to avoid changing ExecutionRecord contract) */
   incrementTimeout(): void {
     this.counts.TIMEOUTS++;
