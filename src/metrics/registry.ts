@@ -42,10 +42,21 @@ export class MetricsRegistry {
     DANGEROUS: 0,
     CRITICAL: 0,
     BLOCKED: 0,
-  CONFIRM: 0,
+    CONFIRM: 0,
     UNKNOWN: 0,
   TRUNCATED: 0,
   TIMEOUTS: 0
+  };
+  // Attempt / execution split (added post feedback feature hardening)
+  // ATTEMPT_TOTAL: blocked + confirmation-required attempts (durationMs === 0)
+  // ATTEMPT_CONFIRM: subset of attempts that required confirmation (RISKY / UNKNOWN)
+  // EXECUTIONS: real executions (durationMs > 0)
+  // CONFIRM_EXEC: executions of commands that required confirmation (RISKY / UNKNOWN with confirmed:true)
+  private attemptCounters: Record<string, number> = {
+    ATTEMPT_TOTAL: 0,
+    ATTEMPT_CONFIRM: 0,
+    EXECUTIONS: 0,
+    CONFIRM_EXEC: 0
   };
   private durations: number[] = [];
   private lastReset = new Date().toISOString();
@@ -61,10 +72,15 @@ export class MetricsRegistry {
     this.counts[rec.level] = (this.counts[rec.level] || 0) + 1;
     if (rec.blocked) this.counts.BLOCKED++;
     if (rec.truncated) this.counts.TRUNCATED++;
-  // Only include positive durations in latency statistics; zero values come from
-  // early attempt events (blocked / confirmation-required) and would otherwise
-  // distort p95 and average downward toward 0.
-  if (rec.durationMs > 0) this.durations.push(rec.durationMs);
+    // Attempt / execution classification
+    if(rec.durationMs === 0){
+      this.attemptCounters.ATTEMPT_TOTAL++;
+      if(rec.level === 'RISKY' || rec.level === 'UNKNOWN') this.attemptCounters.ATTEMPT_CONFIRM++;
+    } else if(rec.durationMs > 0){
+      this.durations.push(rec.durationMs); // only positive durations influence latency
+      this.attemptCounters.EXECUTIONS++;
+      if(rec.level === 'RISKY' || rec.level === 'UNKNOWN') this.attemptCounters.CONFIRM_EXEC++;
+    }
     // Append to history (cap 1000)
     this.history.push({ ...rec, ts: new Date().toISOString(), seq: ++this.seq });
     if (this.history.length > 1000) this.history.shift();
@@ -92,6 +108,7 @@ export class MetricsRegistry {
   this.history = [];
   this.seq = 0;
   this.psCpuTotal = 0; this.psWSMBTotal = 0; this.psSamples = 0;
+  Object.keys(this.attemptCounters).forEach(k => this.attemptCounters[k] = 0);
   }
 
   snapshot(resetAfter = false): MetricsSnapshot {
@@ -106,7 +123,7 @@ export class MetricsRegistry {
       dangerousCommands: this.counts.DANGEROUS,
       criticalCommands: this.counts.CRITICAL,
       blockedCommands: this.counts.BLOCKED,
-  confirmationRequired: this.counts.CONFIRM,
+      confirmationRequired: this.counts.CONFIRM,
       unknownCommands: this.counts.UNKNOWN,
       truncatedOutputs: this.counts.TRUNCATED,
   timeouts: this.counts.TIMEOUTS,
@@ -114,6 +131,17 @@ export class MetricsRegistry {
       p95DurationMs: p95,
       lastReset: this.lastReset
     };
+    // Attempt / execution counters surfaced when any non-zero
+    if(this.attemptCounters.ATTEMPT_TOTAL > 0 || this.attemptCounters.EXECUTIONS > 0){
+      (snap as any).attemptCommands = this.attemptCounters.ATTEMPT_TOTAL;
+      (snap as any).attemptConfirmationRequired = this.attemptCounters.ATTEMPT_CONFIRM;
+      (snap as any).executionCommands = this.attemptCounters.EXECUTIONS;
+      (snap as any).confirmedExecutions = this.attemptCounters.CONFIRM_EXEC;
+      if(this.attemptCounters.ATTEMPT_CONFIRM > 0){
+        const conv = this.attemptCounters.CONFIRM_EXEC / Math.max(1, this.attemptCounters.ATTEMPT_CONFIRM);
+        (snap as any).confirmationConversion = +conv.toFixed(3);
+      }
+    }
     if(this.psSamples>0){
       snap.psSamples = this.psSamples;
       snap.psCpuSecAvg = +(this.psCpuTotal / this.psSamples).toFixed(3);

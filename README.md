@@ -297,6 +297,18 @@ JSON snapshot (`/api/metrics`) fields:
 }
 ```
 
+Attempt / execution split (appears when any attempts recorded):
+
+```jsonc
+{
+  "attemptCommands": 5,                 // total blocked + confirmation-required attempts
+  "attemptConfirmationRequired": 4,      // attempts needing confirmation (RISKY/UNKNOWN)
+  "executionCommands": 12,               // real executions with duration > 0
+  "confirmedExecutions": 8,              // executions of RISKY/UNKNOWN with confirmed:true
+  "confirmationConversion": 0.667        // confirmedExecutions / attemptConfirmationRequired
+}
+```
+
 Reset behavior: invoking any future explicit reset endpoint (planned) or process restart clears aggregates. Presently they persist for lifetime of server.
 
 Latency semantics:
@@ -398,6 +410,7 @@ Environment variables (quick reference):
 | MCP_CAPTURE_PS_METRICS=1 | Enable per-invocation CPU / WS sampling |
 | MCP_OVERFLOW_STRATEGY=return\|truncate\|terminate | Select overflow handling mode |
 | METRICS_DEBUG=true | Verbose metrics instrumentation logging |
+| MCP_DISABLE_ATTEMPT_PUBLISH=1 | Suppress early attempt publishing (blocked / confirmation-required) |
 | MCP_OVERFLOW_STRATEGY=truncate | (Example) produce truncated strategy behavior |
 
 Long timeouts (≥60s) emit a responsiveness warning; durations <1ms are promoted to 1ms to avoid misleading 0ms displays.
