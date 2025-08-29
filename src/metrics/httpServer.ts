@@ -226,6 +226,17 @@ export class MetricsHttpServer {
       lines.push('# HELP ps_mcp_command_duration_p95_ms Approximate p95 duration in ms');
       lines.push('# TYPE ps_mcp_command_duration_p95_ms gauge');
       lines.push(`ps_mcp_command_duration_p95_ms ${snap.p95DurationMs}`);
+      if((snap as any).psSamples){
+        lines.push('# HELP ps_mcp_ps_samples_total PowerShell process samples collected');
+        lines.push('# TYPE ps_mcp_ps_samples_total counter');
+        lines.push(`ps_mcp_ps_samples_total ${(snap as any).psSamples}`);
+        lines.push('# HELP ps_mcp_ps_cpu_seconds_avg Average CPU seconds per PowerShell sample');
+        lines.push('# TYPE ps_mcp_ps_cpu_seconds_avg gauge');
+        lines.push(`ps_mcp_ps_cpu_seconds_avg ${(snap as any).psCpuSecAvg}`);
+        lines.push('# HELP ps_mcp_ps_ws_megabytes_avg Average Working Set MB per PowerShell sample');
+        lines.push('# TYPE ps_mcp_ps_ws_megabytes_avg gauge');
+        lines.push(`ps_mcp_ps_ws_megabytes_avg ${(snap as any).psWSMBAvg}`);
+      }
       if (perf.cpuPercent !== undefined) {
         lines.push('# HELP ps_mcp_process_cpu_percent Approximate process CPU percent (single-core)');
         lines.push('# TYPE ps_mcp_process_cpu_percent gauge');
@@ -332,9 +343,9 @@ export class MetricsHttpServer {
     <section class="card"><h3>RSS MB</h3><div class="metric" id="m_rss">0</div></section>
     <section class="card"><h3>HEAP MB</h3><div class="metric" id="m_heap">0</div></section>
     <section class="card"><h3>LOOP LAG</h3><div class="metric" id="m_lag">0</div></section>
-  <section class="card"><h3>PS CPU SEC</h3><div class="metric" id="m_pscpu">0</div></section>
-  <section class="card"><h3>PS WS MB</h3><div class="metric" id="m_psws">0</div></section>
-  <section class="card"><h3>PS SAMPLES</h3><div class="metric" id="m_pssamples">0</div></section>
+  <section class="card" title="Average PowerShell process CPU seconds across samples (approx; sentinel/fallback)"><h3>PS CPU SEC</h3><div class="metric" id="m_pscpu">0</div></section>
+  <section class="card" title="Average PowerShell Working Set MB across samples"><h3>PS WS MB</h3><div class="metric" id="m_psws">0</div></section>
+  <section class="card" title="Number of PowerShell process samples captured"><h3>PS SAMPLES</h3><div class="metric" id="m_pssamples">0</div></section>
     <section class="card grid-full" id="cpuGraphCard">
       <h3>CPU % (Last 2 minutes)</h3>
       <div id="cpuGraphContainer" style="position:relative;height:120px;border:1px solid #333;background:#111">
@@ -432,7 +443,7 @@ export class MetricsHttpServer {
     if(pm && (pm.CpuSec!==undefined || pm.WS!==undefined)){
       const c = pm.CpuSec!==undefined ? pm.CpuSec : '?';
       const w = pm.WS!==undefined ? pm.WS : '?';
-      psInline = '<span style="opacity:.6;font-size:.6rem"> [ps '+c+'/'+w+']</span>';
+  psInline = '<span style="opacity:.6;font-size:.6rem"> [ps '+c+'/'+w+']</span>';
     }
     const isConfirmed = ev.confirmed === true;
     if (isConfirmed) {
