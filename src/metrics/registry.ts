@@ -76,6 +76,11 @@ export class MetricsRegistry {
     this.counts.TIMEOUTS++;
   }
 
+  /** Increment confirmation-required (unconfirmed) counter */
+  incrementConfirmation(): void {
+    this.counts.CONFIRM++;
+  }
+
   reset(): void {
     Object.keys(this.counts).forEach(k => (this.counts[k] = 0));
     this.durations = [];

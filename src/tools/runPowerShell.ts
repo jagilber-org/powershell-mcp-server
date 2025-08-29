@@ -5,6 +5,7 @@ import { ENTERPRISE_CONFIG } from '../core/config.js';
 import { detectShell } from '../core/shellDetection.js';
 import { metricsRegistry } from '../metrics/registry.js';
 import { metricsHttpServer } from '../metrics/httpServer.js';
+import { publishExecutionAttempt } from '../metrics/publisher.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { spawn } from 'child_process';
 import * as fs from 'fs';
@@ -259,10 +260,13 @@ export async function runPowerShellTool(args: any){
   // For backward-compatible test expectations, return inline blocked message instead of throwing so tests that read content[0].text continue to work.
   if(assessment.blocked){
     auditLog('WARNING','BLOCKED_COMMAND','Blocked by security policy',{ reason: assessment.reason, patterns: assessment.patterns, level: assessment.level });
+    // Early publish for blocked attempt
+    publishExecutionAttempt({ toolName:'run-powershell', level: assessment.level, blocked:true, durationMs:0, success:false, exitCode:null, preview: command, reason:'blocked' });
     return { content:[{ type:'text', text: 'Blocked: '+assessment.reason }], structuredContent:{ success:false, blocked:true, securityAssessment: assessment, exitCode: null } };
   }
   if(assessment.requiresPrompt && !args.confirmed) {
-    // Maintain error path here so caller learns confirmation needed
+    // Publish attempt needing confirmation (unconfirmed)
+    publishExecutionAttempt({ toolName:'run-powershell', level: assessment.level, blocked:false, durationMs:0, success:false, exitCode:null, preview: command, reason:'confirmation_required', requiresPrompt:true, incrementConfirmation:true });
     throw new McpError(ErrorCode.InvalidRequest, 'Confirmation required: '+assessment.reason);
   }
   // Timeout is always interpreted as seconds (agent contract) then converted to ms; default config already in ms
