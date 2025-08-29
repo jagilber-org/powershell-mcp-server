@@ -240,6 +240,7 @@ export async function executePowerShell(command: string, timeout: number, workin
 }
 
 export async function runPowerShellTool(args: any){
+  const hrStart = process.hrtime.bigint();
   const command = args.command || args.script;
   if(!command) throw new McpError(ErrorCode.InvalidParams, 'command or script required');
   // Early baseline sample so even blocked / confirmation-required commands contribute to psSamples
@@ -303,6 +304,12 @@ const timeout = Math.round(timeoutSeconds * 1000);
     };
   }
   let result = await executePowerShell(command, timeout, args.workingDirectory, adaptiveConfig ? { adaptive: adaptiveConfig } : undefined);
+  // High-resolution duration overwrite (ns -> ms) for accuracy
+  try {
+    const hrEnd = process.hrtime.bigint();
+    const precise = Number(hrEnd - hrStart) / 1e6; // ms
+    if(!isNaN(precise) && precise > 0) result.duration_ms = Math.max(result.duration_ms || 0, Math.round(precise));
+  } catch {}
   // Output overflow protection
   const maxKB = ENTERPRISE_CONFIG.limits.maxOutputKB || 512;
   const maxLines = ENTERPRISE_CONFIG.limits.maxLines || 4000;

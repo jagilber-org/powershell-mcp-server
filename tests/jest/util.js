@@ -36,3 +36,14 @@ async function request(proc, responses, method, params, id, waitMs=1000){
 }
 
 module.exports = { startServer, waitForReady, collect, rpc, request };
+// Fetch metrics snapshot via HTTP (assumes default port 9090)
+module.exports.fetchMetrics = async function(port=9090){
+  return new Promise((resolve,reject)=>{
+    const http = require('http');
+    const req = http.get({ host:'127.0.0.1', port, path:'/api/metrics', timeout:1200 }, res=>{
+      let data=''; res.on('data',d=> data+=d.toString()); res.on('end',()=>{ try{ resolve(JSON.parse(data)); }catch(e){ reject(e); } });
+    });
+    req.on('error', reject);
+    req.on('timeout', ()=>{ req.destroy(new Error('timeout')); });
+  });
+};
