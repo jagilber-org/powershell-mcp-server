@@ -1,8 +1,57 @@
 # Troubleshooting Guide (Metrics, Adaptive Timeout, Framer)
 
-Last updated: 2025-08-27
+Last updated: 2025-08-29
 
 This guide provides deterministic steps to diagnose common runtime observability issues without speculative patch stacking.
+
+---
+
+## 0. Common Tool Call Errors
+
+### 0.1 Confirmation Required Error
+
+**Symptom**: `MCP error -32600: Confirmation required: Unclassified command requires confirmation`
+
+**Cause**: Commands classified as `RISKY` or `UNKNOWN` require explicit confirmation, but wrong parameter name was used.
+
+**Root Cause Analysis**:
+
+- **UNKNOWN commands** (never seen before): Always require `confirmed: true` on first call
+- **RISKY commands** (pre-classified as potentially disruptive): Always require `confirmed: true`  
+- **SAFE commands** (pre-classified or learned): Execute immediately, no confirmation needed
+
+**Solution**: Use `"confirmed": true`, NOT `"confirm": true`
+
+```json
+❌ Wrong:
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run-powershell","arguments":{"command":"git commit","confirm":true}}}
+
+✅ Correct:
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run-powershell","arguments":{"command":"git commit","confirmed":true}}}
+```
+
+**Why This Happens**: The server code checks `args.confirmed`, but many users intuitively try `confirm`, `confirmation`, or other variants.
+
+**Learning System Note**: Once an UNKNOWN command is approved via the learning system, it becomes SAFE and will execute without `confirmed` on subsequent calls.
+
+### 0.2 Working Directory Issues
+
+**Symptom**: `Working directory not found` or `Working directory outside allowed roots`
+
+**Common Cases**:
+
+- Global MCP server doesn't know VS Code workspace context
+- Relative paths resolved against server startup directory, not workspace
+- Security policy `enforceWorkingDirectory` enabled but path not in `allowedWriteRoots`
+
+**Solution**: Always specify absolute paths when using global MCP server:
+
+```json
+{
+  "command": "Get-ChildItem *.ps1", 
+  "workingDirectory": "C:\\Your\\Actual\\Workspace\\Path"
+}
+```
 
 ---
 

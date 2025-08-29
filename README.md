@@ -57,6 +57,25 @@ Levels: SAFE â†’ RISKY â†’ DANGEROUS (reserved) â†’ CRITICAL â�
 | BLOCKED | N/A | No | `Invoke-Expression` | SECURITY_THREAT |
 | UNKNOWN | Yes | Yes | `foobar-tool --x` | UNKNOWN_COMMAND |
 
+## First Call Execution Behavior
+
+**✅ Commands that execute immediately (no `confirmed` needed):**
+
+- **SAFE commands**: Pre-classified patterns like `Get-ChildItem`, `dir`, `git status`
+- **Learned SAFE commands**: Previously unknown commands that were approved via learning system
+
+**❌ Commands that require `confirmed: true` on first call:**
+
+- **RISKY commands**: Pre-classified as potentially disruptive (e.g., `git commit`, `copy`)
+- **UNKNOWN commands**: Any command not matching SAFE, RISKY, CRITICAL, or BLOCKED patterns
+
+**🚫 Commands that never execute:**
+
+- **BLOCKED commands**: Security threats like `Invoke-Expression`
+- **CRITICAL commands**: Destructive operations like `git reset --hard`
+
+**Key Point**: Once an UNKNOWN command is learned and approved, it becomes SAFE and will execute without `confirmed` on subsequent calls.
+
 Alias & OS classification:
  
 | Category | Examples |
