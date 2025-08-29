@@ -19,24 +19,25 @@ npm run start:enterprise
 
 ## Available Tools (Core + Extended)
 
-| Tool | Purpose | Key Arguments |
-|------|---------|---------------|
+| Tool | Purpose | Key Arguments (selected) |
+|------|---------|-------------------------|
 | `emit-log` | Structured audit log entry | `message` |
-| `learn` | Manage unknown â†’ safe learning queue | action, limit, minCount, normalized[] |
-| `working-directory-policy` | Get/set allowed roots enforcement | action, enabled, allowedWriteRoots[] |
-| `server-stats` | Metrics snapshot & counts | verbose |
-| `memory-stats` | Process memory (MB) | gc |
-| `agent-prompts` | Retrieve prompt library | category, format |
-| `git-status` | Show repository status (porcelain) | porcelain |
-| `git-commit` | Commit staged changes | message |
-| `git-push` | Push current branch | setUpstream |
-| `threat-analysis` | Unknown / threat tracking stats | â€” |
-| 
-un-powershell | Execute command / inline script (classified) | command/script, workingDirectory, aiAgentTimeoutSec (s), confirmed, adaptive* |
-| `run-powershellscript` | Alias: inline or from file (inlined) | script or scriptFile, workingDirectory, timeout, confirmed |
-| `powershell-syntax-check` | Fast heuristic script check | script, filePath |
-| `ai-agent-tests` | Internal harness | testSuite, skipDangerous |
-| `help` | Structured help topics | topic |
+| `learn` | Manage unknown → safe learning queue | `action`, `limit`, `minCount`, `normalized[]` |
+| `working-directory-policy` | Get/set allowed roots enforcement | `action`, `enabled`, `allowedWriteRoots[]` |
+| `server-stats` | Metrics snapshot & counts | `verbose` |
+| `memory-stats` | Process memory (MB) | `gc` |
+| `agent-prompts` | Retrieve prompt library sections | `category`, `format` (markdown/json) |
+| `git-status` | Show repository status | `porcelain` |
+| `git-commit` | Commit staged changes | `message` |
+| `git-push` | Push current branch | `setUpstream` |
+| `threat-analysis` | Unknown / threat tracking stats | — |
+| `run-powershell` | Execute command / inline script (classified) | `command` / `script`, `workingDirectory`, `aiAgentTimeoutSec`, `confirmed`, adaptive params* |
+| `run-powershellscript` | Execute inline or file content | `script` OR `scriptFile`, `workingDirectory`, timeout params, `confirmed` |
+| `powershell-syntax-check` | Fast heuristic script check (no execution) | `script`, `filePath` |
+| `ai-agent-tests` | Internal regression harness | `testSuite`, `skipDangerous` |
+| `help` | Structured help topics | `topic` |
+
+Adaptive timeout params (*): `progressAdaptive` (bool), `adaptiveExtendWindowMs`, `adaptiveExtendStepMs`, `adaptiveMaxTotalSec`.
 
 Notes:
 
@@ -191,19 +192,39 @@ General steps:
 2. Apply selected strategy.
 3. Response flags `overflow:true`, `truncated:true` plus strategy metadata.
 
-Execution response (core fields):
+Execution response (core fields – augmented Aug 2025):
  
 ```jsonc
 {
   "success": true,
   "exitCode": 0,
   "timedOut": false,
-  "overflow": false,
-  "duration_ms": 1234,
+  "terminationReason": "completed",            // completed | timeout | killed | output_overflow
+  "configuredTimeoutMs": 90000,
+  "effectiveTimeoutMs": 90000,                  // > configured if adaptive extensions applied
+  "adaptiveExtensions": 0,
+  "adaptiveExtended": false,
+  "adaptiveMaxTotalMs": 90000,
+  "duration_ms": 1234,                          // high‑res rounded; min 1ms enforced for real execs
   "stdout": "preview",
   "stderr": "",
-  "chunks": { "stdout": [ { "seq":0, "bytes": 5120, "text": "..." } ], "stderr": [] },
-  "securityAssessment": { "level":"SAFE", "category":"INFORMATION_GATHERING", "reason":"Safe pattern: ^Get-", "blocked":false, "requiresPrompt":false }
+  "overflow": false,
+  "overflowStrategy": "return",                // return | truncate | terminate
+  "truncated": false,
+  "totalBytes": 5120,
+  "warnings": [],                               // deprecation & long-timeout notices
+  "originalTimeoutSeconds": 90,
+  "internalSelfDestruct": false,                // true if internal 124 exit
+  "watchdogTriggered": false,
+  "killEscalated": false,
+  "killTreeAttempted": false,
+  "securityAssessment": {
+    "level": "SAFE",
+    "category": "INFORMATION_GATHERING",
+    "reason": "Safe pattern: ^Get-",
+    "blocked": false,
+    "requiresPrompt": false
+  }
 }
 ```
 
@@ -213,7 +234,7 @@ Mitigation tips for large output: narrow queries, use `Select-Object -First N`, 
 
 ## Timeouts & Resilience
 
-External timeout enforced (default 90s). Internal self-destruct (exit 124) can be disabled by setting `MCP_DISABLE_SELF_DESTRUCT=1` (useful for integration harnesses whose parent host crashes on injected timers). When enabled, a lightweight PowerShell `[System.Threading.Timer]` exits early (lead ~300ms) to minimize orphan processes. Post-kill verification escalates to process tree kill on Windows if needed. Metrics: duration, p95, TIMEOUTS counter.
+External timeout enforced (default 90s). Internal self-destruct (exit 124) can be disabled with `MCP_DISABLE_SELF_DESTRUCT=1`. Adaptive mode (enable via `progressAdaptive:true`) opportunistically extends the external timeout when recent output activity is detected and remaining time ≤ `adaptiveExtendWindowMs`, bounded by `adaptiveMaxTotalSec`. Fields `effectiveTimeoutMs`, `adaptiveExtensions`, and `adaptiveExtended` reflect extensions. `terminationReason` unifies completion states (no need to infer from exit code 124). Real execution durations use high‑resolution timing and are coerced to ≥1ms; blocked or unconfirmed attempts record as 0ms but are excluded from latency averages/percentiles.
 
 ### CLI Flags
 
@@ -277,6 +298,12 @@ JSON snapshot (`/api/metrics`) fields:
 ```
 
 Reset behavior: invoking any future explicit reset endpoint (planned) or process restart clears aggregates. Presently they persist for lifetime of server.
+
+Latency semantics:
+
+- Zero-duration rows (blocked / confirmation-required) are NOT added to latency aggregates.
+- Real executions: high-res `duration_ms` (rounded) ≥1ms stored.
+- Percentile (p95) uses ceil-based index over sorted non-zero durations (avoids downward bias with small N).
 
 Per-invocation row columns already list raw `PS CPU(s)` and `WS(MB)` for each run-powershell execution when metrics are enabled.
 
@@ -342,8 +369,36 @@ npm run build
 
 Proprietary (internal hardening branch).
 
-### Timeout Hardening
+### Timeout & Adaptive Hardening (Aug 2025)
 
-Fields: configuredTimeoutMs, effectiveTimeoutMs, originalTimeoutSeconds, warnings[], timedOut, internalSelfDestruct, watchdogTriggered, killEscalated, killTreeAttempted.
-Deprecated params: timeout, aiAgentTimeout (use aiAgentTimeoutSec). Cap: limits.maxTimeoutSeconds (default 600). Long timeouts (>=60s) produce warnings. Adaptive: pass progressAdaptive=true and optional adaptiveExtendWindowMs, adaptiveExtendStepMs, adaptiveMaxTotalSec.
+Core fields: configuredTimeoutMs, effectiveTimeoutMs, originalTimeoutSeconds, warnings[], terminationReason, timedOut, internalSelfDestruct, watchdogTriggered, killEscalated, killTreeAttempted, adaptiveExtensions, adaptiveExtended, adaptiveMaxTotalMs.
+
+Parameter guidance:
+
+| Canonical | Deprecated / Alias | Notes |
+|-----------|--------------------|-------|
+| aiAgentTimeoutSec | aiAgentTimeout | Emits deprecation warning |
+| aiAgentTimeoutSec | timeout / timeoutSeconds | `timeout` deprecated; `timeoutSeconds` accepted with advisory |
+
+Adaptive enable flags: `progressAdaptive:true` (preferred) or legacy `adaptiveTimeout:true`.
+
+Adaptive knobs (optional):
+
+| Field | Default | Purpose |
+|-------|---------|---------|
+| adaptiveExtendWindowMs | 2000 | If remaining time ≤ window & recent activity, consider extend |
+| adaptiveExtendStepMs | 5000 | Extension amount per step |
+| adaptiveMaxTotalSec | min(base*3,180) | Hard cap horizon |
+
+Environment variables (quick reference):
+
+| Env | Effect |
+|-----|--------|
+| MCP_DISABLE_SELF_DESTRUCT=1 | Disable internal early exit timer |
+| MCP_CAPTURE_PS_METRICS=1 | Enable per-invocation CPU / WS sampling |
+| MCP_OVERFLOW_STRATEGY=return\|truncate\|terminate | Select overflow handling mode |
+| METRICS_DEBUG=true | Verbose metrics instrumentation logging |
+| MCP_OVERFLOW_STRATEGY=truncate | (Example) produce truncated strategy behavior |
+
+Long timeouts (≥60s) emit a responsiveness warning; durations <1ms are promoted to 1ms to avoid misleading 0ms displays.
 
