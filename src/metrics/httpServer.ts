@@ -332,6 +332,9 @@ export class MetricsHttpServer {
     <section class="card"><h3>RSS MB</h3><div class="metric" id="m_rss">0</div></section>
     <section class="card"><h3>HEAP MB</h3><div class="metric" id="m_heap">0</div></section>
     <section class="card"><h3>LOOP LAG</h3><div class="metric" id="m_lag">0</div></section>
+  <section class="card"><h3>PS CPU SEC</h3><div class="metric" id="m_pscpu">0</div></section>
+  <section class="card"><h3>PS WS MB</h3><div class="metric" id="m_psws">0</div></section>
+  <section class="card"><h3>PS SAMPLES</h3><div class="metric" id="m_pssamples">0</div></section>
     <section class="card grid-full" id="cpuGraphCard">
       <h3>CPU % (Last 2 minutes)</h3>
       <div id="cpuGraphContainer" style="position:relative;height:120px;border:1px solid #333;background:#111">
@@ -398,7 +401,7 @@ export class MetricsHttpServer {
   const removeSelectedBtn = document.getElementById('removeSelected');
   let selectedCandidate = null; // normalized
   let selectedRow = null;
-  const metricsIds = { total:'m_total', safe:'m_safe', risky:'m_risky', blocked:'m_blocked', confirm:'m_confirm', timeouts:'m_timeouts', avg:'m_avg', p95:'m_p95', cpu:'m_cpu', rss:'m_rss', heap:'m_heap', lag:'m_lag'};
+  const metricsIds = { total:'m_total', safe:'m_safe', risky:'m_risky', blocked:'m_blocked', confirm:'m_confirm', timeouts:'m_timeouts', avg:'m_avg', p95:'m_p95', cpu:'m_cpu', rss:'m_rss', heap:'m_heap', lag:'m_lag', pscpu:'m_pscpu', psws:'m_psws', pssamples:'m_pssamples'};
   const levelOrder = ['SAFE','RISKY','DANGEROUS','CRITICAL','BLOCKED','UNKNOWN'];
   const activeLevels = new Set(levelOrder);
   let lastEventTs = Date.now();
@@ -482,6 +485,16 @@ export class MetricsHttpServer {
       if('heapUsedMB'in p) document.getElementById(metricsIds.heap).textContent=p.heapUsedMB.toFixed(0);
       if('eventLoopLagP95Ms'in p) document.getElementById(metricsIds.lag).textContent=p.eventLoopLagP95Ms.toFixed(1);
       uptimeEl.textContent='Uptime: '+Math.round((Date.now()-Date.parse(m.lastReset))/1000)+'s';
+
+      // PowerShell process metrics (aggregated) when enabled
+      if('psSamples' in m){
+        const psSamples = m.psSamples || 0;
+        const psCpu = typeof m.psCpuSecAvg === 'number' ? m.psCpuSecAvg : 0;
+        const psWS = typeof m.psWSMBAvg === 'number' ? m.psWSMBAvg : 0;
+        document.getElementById(metricsIds.pssamples).textContent = psSamples;
+        document.getElementById(metricsIds.pscpu).textContent = psCpu.toFixed(2);
+        document.getElementById(metricsIds.psws).textContent = psWS.toFixed(1);
+      }
       
       // Update graphs with historical data
       if (m.cpuHistory && m.cpuHistory.length > 0) {
