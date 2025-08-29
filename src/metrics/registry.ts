@@ -61,7 +61,10 @@ export class MetricsRegistry {
     this.counts[rec.level] = (this.counts[rec.level] || 0) + 1;
     if (rec.blocked) this.counts.BLOCKED++;
     if (rec.truncated) this.counts.TRUNCATED++;
-    if (rec.durationMs >= 0) this.durations.push(rec.durationMs);
+  // Only include positive durations in latency statistics; zero values come from
+  // early attempt events (blocked / confirmation-required) and would otherwise
+  // distort p95 and average downward toward 0.
+  if (rec.durationMs > 0) this.durations.push(rec.durationMs);
     // Append to history (cap 1000)
     this.history.push({ ...rec, ts: new Date().toISOString(), seq: ++this.seq });
     if (this.history.length > 1000) this.history.shift();
@@ -121,10 +124,10 @@ export class MetricsRegistry {
   }
 
   private computeP(p: number): number {
-    if (!this.durations.length) return 0;
-    const sorted = [...this.durations].sort((a, b) => a - b);
-    const idx = Math.min(sorted.length - 1, Math.floor(p * sorted.length) - 1);
-    return sorted[Math.max(0, idx)];
+  if (!this.durations.length) return 0;
+  const sorted = [...this.durations].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1));
+  return sorted[idx];
   }
 
   getHistory(): Array<ExecutionRecord & { ts: string; seq: number }> {

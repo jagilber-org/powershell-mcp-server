@@ -256,7 +256,8 @@ export async function runPowerShellTool(args: any){
   if(command.length > maxChars){
     throw new McpError(ErrorCode.InvalidRequest, `Command length ${command.length} exceeds limit ${maxChars}`);
   }
-  const assessment = classifyCommandSafety(command);
+  // Allow server to supply a pre-classified assessment to avoid duplicate UNKNOWN tracking
+  const assessment = args._preClassified || classifyCommandSafety(command);
   // For backward-compatible test expectations, return inline blocked message instead of throwing so tests that read content[0].text continue to work.
   if(assessment.blocked){
     auditLog('WARNING','BLOCKED_COMMAND','Blocked by security policy',{ reason: assessment.reason, patterns: assessment.patterns, level: assessment.level });
@@ -266,7 +267,7 @@ export async function runPowerShellTool(args: any){
   }
   if(assessment.requiresPrompt && !args.confirmed) {
     // Publish attempt needing confirmation (unconfirmed)
-    publishExecutionAttempt({ toolName:'run-powershell', level: assessment.level, blocked:false, durationMs:0, success:false, exitCode:null, preview: command, reason:'confirmation_required', requiresPrompt:true, incrementConfirmation:true });
+    publishExecutionAttempt({ toolName:'run-powershell', level: assessment.level, blocked:false, durationMs:0, success:false, exitCode:null, preview: command, reason:'confirmation_required', requiresPrompt:true, incrementConfirmation: !args._unknownTracked });
     throw new McpError(ErrorCode.InvalidRequest, 'Confirmation required: '+assessment.reason);
   }
   // Timeout is always interpreted as seconds (agent contract) then converted to ms; default config already in ms
