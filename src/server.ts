@@ -47,12 +47,10 @@ interface AliasDetectionResult { alias: string; cmdlet: string; risk: string; ca
 // Pattern arrays
 const REGISTRY_MODIFICATION_PATTERNS: readonly string[] = [ 'New-Item\\s+-Path\\s+HK','Remove-ItemProperty','Set-ItemProperty','sp\\s+hklm:' ];
 const SYSTEM_FILE_PATTERNS: readonly string[] = [ 'System32','Windows\\\\System32','ProgramData' ];
-const ROOT_DELETION_PATTERNS: readonly string[] = [ 'Remove-Item\\s+\\\\?\\\\C:' ];
-const DISK_FORMAT_PATTERNS: readonly string[] = [ 'Format-Volume','format\s+disk','Clear-Disk','Remove-Partition' ];
+const ROOT_DELETION_PATTERNS: readonly string[] = [ 'Remove-Item\\s+\\\\?\\\\C:','Format-Volume' ];
 const REMOTE_MODIFICATION_PATTERNS: readonly string[] = [ 'Invoke-WebRequest','Invoke-RestMethod','curl\\s+http','wget\\s+http' ];
 const CRITICAL_PATTERNS: readonly string[] = [ 'Invoke-Expression','IEX','Set-Alias','New-Alias' ];
-const SERVICE_MANAGEMENT_PATTERNS: readonly string[] = [ 'Stop-Service','Restart-Service','Start-Service','Set-Service','Stop-Process' ];
-const FILE_DESTRUCTIVE_PATTERNS: readonly string[] = [ 'Remove-Item\\s+-Recurse' ];
+const DANGEROUS_COMMANDS: readonly string[] = [ 'Stop-Service','Restart-Service','Remove-Item\\s+-Recurse','Stop-Process' ];
 const RISKY_PATTERNS: readonly string[] = [ 'Set-Variable','Set-Content','Add-Content' ];
 const SAFE_PATTERNS: readonly string[] = [ '^Show-','^Test-.*(?!-Computer)','^Out-Host','^Out-String','^Write-Host','^Write-Output','^Write-Information','^Format-','^Select-','^Where-Object','^Sort-Object','^Group-Object','^Measure-Object' ];
 
@@ -129,28 +127,16 @@ export class EnterprisePowerShellMCPServer {
   }
 
   private classifyCommandSafety(command:string): SecurityAssessment { const upper=command.toUpperCase(); const lower=command.toLowerCase(); const alias=this.detectPowerShellAlias(command); if(alias.isAlias && alias.securityRisk==='CRITICAL'){ return { level:'CRITICAL', risk:'CRITICAL', reason: alias.reason+' - Alias masks dangerous command', color:'RED', blocked:true, requiresPrompt:false, category:'ALIAS_THREAT', patterns:[alias.originalCommand||''], recommendations:['Use full cmdlet names','Review intent'] }; }
-    if(!this.mergedPatterns){
-      const sup=new Set((ENTERPRISE_CONFIG.security.suppressPatterns||[]).map((p:string)=>p.toLowerCase()));
-      const addBlocked=(ENTERPRISE_CONFIG.security.additionalBlocked||[]).map((p:string)=> new RegExp(p,'i'));
-      const addSafe=(ENTERPRISE_CONFIG.security.additionalSafe||[]).map((p:string)=> new RegExp(p,'i'));
-      const filter=(arr:readonly string[])=> arr.filter(p=>!sup.has(p.toLowerCase())).map(p=> new RegExp(p,'i'));
-      // Truly blocked / critical activities
-      const blocked=[ ...filter(ROOT_DELETION_PATTERNS), ...filter(DISK_FORMAT_PATTERNS), ...filter(CRITICAL_PATTERNS), ...addBlocked ];
-      // Risky (confirmation) but allowed operations
-      const risky=[ ...filter(REGISTRY_MODIFICATION_PATTERNS), ...filter(REMOTE_MODIFICATION_PATTERNS), ...filter(SERVICE_MANAGEMENT_PATTERNS), ...filter(FILE_DESTRUCTIVE_PATTERNS), ...filter(RISKY_PATTERNS) ];
-      let learned:RegExp[]=[]; try { learned = loadLearnedPatterns().map(p=> new RegExp(p,'i')); } catch{}
-      const safe=[...filter(SAFE_PATTERNS), ...addSafe, ...learned];
-      this.mergedPatterns={ safe, risky, blocked };
-    }
-  for(const rx of this.mergedPatterns.blocked){ if(rx.test(command)){ return { level: /format-volume|clear-disk|remove-partition/i.test(rx.source)? 'CRITICAL':'BLOCKED', risk:'CRITICAL', reason:`Blocked by security policy: ${rx.source}`, color:'RED', blocked:true, requiresPrompt:false, category:'SECURITY_THREAT', patterns:[rx.source], recommendations:['Remove dangerous operations','Use read-only alternatives'] }; } }
+    if(!this.mergedPatterns){ const sup=new Set((ENTERPRISE_CONFIG.security.suppressPatterns||[]).map((p:string)=>p.toLowerCase())); const addBlocked=(ENTERPRISE_CONFIG.security.additionalBlocked||[]).map((p:string)=> new RegExp(p,'i')); const addSafe=(ENTERPRISE_CONFIG.security.additionalSafe||[]).map((p:string)=> new RegExp(p,'i')); const filter=(arr:readonly string[])=> arr.filter(p=>!sup.has(p.toLowerCase())).map(p=> new RegExp(p,'i')); const blocked=[ ...filter(REGISTRY_MODIFICATION_PATTERNS), ...filter(SYSTEM_FILE_PATTERNS), ...filter(ROOT_DELETION_PATTERNS), ...filter(REMOTE_MODIFICATION_PATTERNS), ...filter(CRITICAL_PATTERNS), ...filter(DANGEROUS_COMMANDS), ...addBlocked ]; const risky=filter(RISKY_PATTERNS); let learned:RegExp[]=[]; try { learned = loadLearnedPatterns().map(p=> new RegExp(p,'i')); } catch{} const safe=[...filter(SAFE_PATTERNS), ...addSafe, ...learned]; this.mergedPatterns={ safe, risky, blocked }; }
+    for(const rx of this.mergedPatterns.blocked){ if(rx.test(command)){ return { level: /powershell|encodedcommand|invoke-webrequest|download|string|webclient|format-volume|set-itemproperty/i.test(rx.source)? 'CRITICAL':'BLOCKED', risk:'CRITICAL', reason:`Blocked by security policy: ${rx.source}`, color:'RED', blocked:true, requiresPrompt:false, category:'SECURITY_THREAT', patterns:[rx.source], recommendations:['Remove dangerous operations','Use read-only alternatives'] }; } }
     if(upper.includes('FORMAT C:')||upper.includes('SHUTDOWN')||lower.includes('rm -rf')||upper.includes('NET USER')){ return { level:'DANGEROUS', risk:'HIGH', reason:'System destructive or privilege escalation command', color:'MAGENTA', blocked:true, requiresPrompt:false, category:'SYSTEM_DESTRUCTION', recommendations:['Use non-destructive alternatives'] }; }
-  for(const rx of this.mergedPatterns.risky){ if(rx.test(command)){ return { level:'RISKY', risk:'MEDIUM', reason:`Potentially impactful operation: ${rx.source}`, color:'YELLOW', blocked:false, requiresPrompt:true, category:'MODIFICATION', patterns:[rx.source], recommendations:['Add confirmed: true','Review necessity','Use -WhatIf where possible'] }; } }
+    for(const rx of this.mergedPatterns.risky){ if(rx.test(command)){ return { level:'RISKY', risk:'MEDIUM', reason:`File/service modification operation: ${rx.source}`, color:'YELLOW', blocked:false, requiresPrompt:true, category:'FILE_OPERATION', patterns:[rx.source], recommendations:['Add confirmed: true','Use -WhatIf for testing'] }; } }
     for(const rx of this.mergedPatterns.safe){ if(rx.test(command)){ return { level:'SAFE', risk:'LOW', reason:`Safe read-only operation: ${rx.source}`, color:'GREEN', blocked:false, requiresPrompt:false, category:'INFORMATION_GATHERING', patterns:[rx.source], recommendations:['Safe to execute'] }; } }
     const unk: SecurityAssessment = { level:'UNKNOWN', risk:'MEDIUM', reason:'Unclassified command requiring confirmation for safety', color:'CYAN', blocked:false, requiresPrompt:true, category:'UNKNOWN_COMMAND', recommendations:['Add confirmed: true','Review command for safety'] }; this.trackUnknownThreat(command, unk); return unk; }
 
   private getThreatStats(){ const recent=Array.from(this.unknownThreats.values()).sort((a,b)=> new Date(b.lastSeen).getTime()-new Date(a.lastSeen).getTime()).slice(0,10); return { ...this.threatStats, recentThreats: recent }; }
 
-  private async handleToolCall(name:string, args:any, requestId:string){ const started=Date.now(); const hrStart=process.hrtime.bigint(); let published=false; const publish=(success:boolean, note?:string)=>{ if(published) return; let duration=Date.now()-started; try { const hrEnd=process.hrtime.bigint(); const precise = Number(hrEnd-hrStart)/1e6; if(precise>0) duration = Math.max(duration, Math.round(precise)); } catch{} if(name==='run-powershell'||name==='run-powershellscript'){ published=true; return; } try { metricsHttpServer.publishExecution({ id:`tool-${Date.now()}-${Math.random().toString(36).slice(2,8)}`, level: success?'SAFE':'UNKNOWN', durationMs: duration, blocked:false, truncated:false, timestamp:new Date().toISOString(), preview:`${name}${note? ' '+note:''}`.substring(0,120), success, exitCode:null, toolName:name }); } catch{} try { metricsRegistry.record({ level: success?'SAFE':'UNKNOWN', blocked:false, durationMs: duration, truncated:false }); } catch{} published=true; };
+  private async handleToolCall(name:string, args:any, requestId:string){ const started=Date.now(); const hrStart=process.hrtime.bigint(); let published=false; const publish=(success:boolean, note?:string)=>{ if(published) return; let duration=Date.now()-started; try { const hrEnd=process.hrtime.bigint(); const precise = Number(hrEnd-hrStart)/1e6; if(precise>0) duration = Math.max(duration, Math.max(1, Math.round(precise))); } catch{} if(name==='run-powershell'||name==='run-powershellscript'){ published=true; return; } try { metricsHttpServer.publishExecution({ id:`tool-${Date.now()}-${Math.random().toString(36).slice(2,8)}`, level: success?'SAFE':'UNKNOWN', durationMs: duration, blocked:false, truncated:false, timestamp:new Date().toISOString(), preview:`${name}${note? ' '+note:''}`.substring(0,120), success, exitCode:null, toolName:name }); } catch{} try { metricsRegistry.record({ level: success?'SAFE':'UNKNOWN', blocked:false, durationMs: duration, truncated:false }); } catch{} published=true; };
     try {
       switch(name){
         case 'emit-log': {

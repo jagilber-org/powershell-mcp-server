@@ -308,7 +308,11 @@ const timeout = Math.round(timeoutSeconds * 1000);
   try {
     const hrEnd = process.hrtime.bigint();
     const precise = Number(hrEnd - hrStart) / 1e6; // ms
-    if(!isNaN(precise) && precise > 0) result.duration_ms = Math.max(result.duration_ms || 0, Math.round(precise));
+    if(!isNaN(precise) && precise > 0) {
+      // Enforce minimum 1ms so dashboard rows don't misleadingly show 0ms for real executions
+      const rounded = Math.max(1, Math.round(precise));
+      result.duration_ms = Math.max(result.duration_ms || 0, rounded);
+    }
   } catch {}
   // Output overflow protection
   const maxKB = ENTERPRISE_CONFIG.limits.maxOutputKB || 512;
