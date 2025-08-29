@@ -41,12 +41,8 @@ export function publishExecutionAttempt(opts: PublishOptions){
       toolName: opts.toolName
     };
     metricsHttpServer.publishExecution(ev);
-    // If this is an attempt (reason present) avoid skewing duration stats.
-    if(opts.reason){
-      try { (metricsRegistry as any).recordAttempt?.(ev.level, ev.blocked, ev.truncated); } catch {}
-    } else {
-      metricsRegistry.record({ level: ev.level as any, blocked: ev.blocked, durationMs: ev.durationMs, truncated: ev.truncated });
-    }
+  // Record all events (attempts + executions) so totals & durations reflect every request.
+  metricsRegistry.record({ level: ev.level as any, blocked: ev.blocked, durationMs: ev.durationMs, truncated: ev.truncated });
     if(opts.incrementConfirmation){
       try { (metricsRegistry as any).incrementConfirmation?.(); } catch {}
     }
