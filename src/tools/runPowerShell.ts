@@ -54,13 +54,20 @@ export async function executePowerShell(command: string, timeout: number, workin
   // Internal self-destruct timer: inject a lightweight timer that exits the host slightly before external timeout
   const lead = ENTERPRISE_CONFIG.limits.internalSelfDestructLeadMs || 300;
   const adaptive = opts?.adaptive && opts.adaptive.enabled ? opts.adaptive : undefined;
+  const sentinelEnabled = process.env.MCP_PS_SENTINEL === '1';
   // Internal timer should cover maximum potential runtime if adaptive enabled
   const internalTarget = adaptive ? Math.min(Math.max(100, (adaptive.maxTotalMs||timeout) - lead), (adaptive.maxTotalMs||timeout)) : timeout;
   const internalMs = opts?.internalTimerMs ? Math.max(100, opts.internalTimerMs - lead) : Math.max(100, internalTarget - lead);
   const disableSelfDestruct = process.env.MCP_DISABLE_SELF_DESTRUCT === '1';
+  let userScript = command;
+  // Append lightweight metrics sentinel emission to *stderr* so we can parse without contaminating stdout.
+  if(sentinelEnabled){
+    // Using Write-Error instead of Write-Host to ensure it routes to stderr regardless of redirection; Write-Error adds category text so use Console directly.
+    userScript = `${command}; try { $p=Get-Process -Id $PID -ErrorAction SilentlyContinue; if($p){ $cpu=[math]::Round(($p.CPU),3); $ws=[math]::Round(($p.WorkingSet64/1MB),2); [Console]::Error.WriteLine(\"__MCP_PS_METRICS__{\\\"cpu\\\":${'$'}cpu,\\\"ws\\\":${'$'}ws}__\"); } } catch {}`;
+  }
   const injected = disableSelfDestruct
-    ? `$ProgressPreference='SilentlyContinue'; Set-StrictMode -Version Latest; ${command}`
-    : `[System.Threading.Timer]::new({[Environment]::Exit(124)}, $null, ${internalMs}, 0)|Out-Null; $ProgressPreference='SilentlyContinue'; Set-StrictMode -Version Latest; ${command}`;
+    ? `$ProgressPreference='SilentlyContinue'; Set-StrictMode -Version Latest; ${userScript}`
+    : `[System.Threading.Timer]::new({[Environment]::Exit(124)}, $null, ${internalMs}, 0)|Out-Null; $ProgressPreference='SilentlyContinue'; Set-StrictMode -Version Latest; ${userScript}`;
   // Pass cwd only if provided (avoids unexpected directory requirement). If not supplied, node inherits server cwd.
   const child = spawn(shellExe, ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command', injected], { windowsHide:true, cwd: resolvedCwd });
   let stdout=''; let stderr='';
@@ -124,20 +131,37 @@ export async function executePowerShell(command: string, timeout: number, workin
     else terminationReason='killed';
     // Optional per-process metrics when enabled (best-effort, Windows focus)
     let psProcessMetrics: any = undefined;
-    if(process.env.MCP_CAPTURE_PS_METRICS === '1' && child.pid){
+    // First attempt: sentinel-based capture (does not require extra process spawn)
+    if(sentinelEnabled){
+      const sentinelRegex = /__MCP_PS_METRICS__(\{[^}]*\})__/;
+      for(const ch of stderrChunks){
+        const m = sentinelRegex.exec(ch.text);
+        if(m){
+          try {
+            const parsed = JSON.parse(m[1]);
+            if(typeof parsed.cpu === 'number' && typeof parsed.ws === 'number'){
+              psProcessMetrics = { CpuSec: parsed.cpu, WS: parsed.ws, sentinel:true };
+              ch.text = ch.text.replace(sentinelRegex,'');
+              try { metricsRegistry.capturePsSample(parsed.cpu, parsed.ws); } catch{}
+            }
+          } catch{}
+        }
+      }
+    }
+    // Fallback: post-exec Get-Process sampling (Windows only) if enabled and sentinel missing
+    if(!psProcessMetrics && process.env.MCP_CAPTURE_PS_METRICS === '1' && child.pid){
       try {
         if(process.platform === 'win32'){
-          // Use wmic for simplicity (deprecated but available) fallback to powershell Get-Process
           const { spawnSync } = require('child_process');
-          let cpuSec:number|undefined; let wsMB:number|undefined;
-          try {
-            const pr = spawnSync('powershell',['-NoProfile','-NonInteractive','-Command',`$p=Get-Process -Id ${child.pid} -ErrorAction SilentlyContinue; if($p){ [Console]::Out.Write(($p.CPU??0)); [Console]::Out.Write(' '); [Console]::Out.Write([Math]::Round($p.WorkingSet64/1MB,2)); }`],{ encoding:'utf8', timeout:1500 });
-            const parts = (pr.stdout||'').trim().split(/\s+/); if(parts.length>=2){ cpuSec = parseFloat(parts[0])||0; wsMB = parseFloat(parts[1])||0; }
-          } catch{}
-          if(typeof cpuSec === 'number' && typeof wsMB === 'number'){
-            psProcessMetrics = { CpuSec: cpuSec, WS: wsMB };
-            try { metricsRegistry.capturePsSample(cpuSec, wsMB); } catch{}
-          }
+            let cpuSec:number|undefined; let wsMB:number|undefined;
+            try {
+              const pr = spawnSync('powershell',[ '-NoProfile','-NonInteractive','-Command',`$p=Get-Process -Id ${child.pid} -ErrorAction SilentlyContinue; if($p){ [Console]::Out.Write(($p.CPU??0)); [Console]::Out.Write(' '); [Console]::Out.Write([Math]::Round($p.WorkingSet64/1MB,2)); }`], { encoding:'utf8', timeout:1500 });
+              const parts = (pr.stdout||'').trim().split(/\s+/); if(parts.length>=2){ cpuSec = parseFloat(parts[0])||0; wsMB = parseFloat(parts[1])||0; }
+            } catch{}
+            if(typeof cpuSec === 'number' && typeof wsMB === 'number'){
+              psProcessMetrics = { CpuSec: cpuSec, WS: wsMB, sentinel:false };
+              try { metricsRegistry.capturePsSample(cpuSec, wsMB); } catch{}
+            }
         }
       } catch{}
     }
