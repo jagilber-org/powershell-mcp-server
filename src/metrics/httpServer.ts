@@ -355,7 +355,7 @@ export class MetricsHttpServer {
         ${debug?'<button id="emit">Emit Synthetic</button>':''}
       </div>
       <div id="eventTableWrap">
-  <table id="eventTable"><thead><tr><th style="width:46px">ID</th><th style="width:78px">Tool</th><th style="width:68px">Level</th><th style="width:70px">Dur</th><th style="width:60px">Code</th><th style="width:55px">OK</th><th style="width:82px">Time</th><th>Details / Preview</th></tr></thead><tbody></tbody></table>
+  <table id="eventTable"><thead><tr><th style="width:46px">ID</th><th style="width:78px">Tool</th><th style="width:68px">Level</th><th style="width:70px">Dur</th><th style="width:60px">Code</th><th style="width:55px">OK</th><th style="width:82px">Time</th><th>Details / Preview (ps: cpuSec/wsMB)</th></tr></thead><tbody></tbody></table>
         <div id="empty">No events yet.</div>
       </div>
       <div id="statusBar">
@@ -426,6 +426,14 @@ export class MetricsHttpServer {
     
     // Check if this was a confirmed command
     const preview=(ev.preview||'').replace(/</g,'&lt;'); 
+    // Inline ps process metrics if present (from tool execution)
+    let psInline='';
+    const pm = (ev as any).psProcessMetrics; // when events include structured sample
+    if(pm && (pm.CpuSec!==undefined || pm.WS!==undefined)){
+      const c = pm.CpuSec!==undefined ? pm.CpuSec : '?';
+      const w = pm.WS!==undefined ? pm.WS : '?';
+      psInline = '<span style="opacity:.6;font-size:.6rem"> [ps '+c+'/'+w+']</span>';
+    }
     const isConfirmed = ev.confirmed === true;
     if (isConfirmed) {
       tr.classList.add('confirmed');
@@ -445,7 +453,7 @@ export class MetricsHttpServer {
       '<td>'+(ev.exitCode===undefined||ev.exitCode===null?'':ev.exitCode)+'</td>'+
       '<td>'+(ev.success===undefined?'':(ev.success?'✔':'✖'))+'</td>'+
       '<td>'+fmtTime(ev.timestamp)+'</td>'+
-      '<td>'+ (markers.length?markers.join(' ')+' ':'') + (preview?preview:'') +'</td>';
+  '<td>'+ (markers.length?markers.join(' ')+' ':'') + (preview?preview:'') + psInline +'</td>';
     
     // Row click selection for UNKNOWN learning
     tr.addEventListener('click', (e)=>{
