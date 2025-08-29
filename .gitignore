@@ -158,3 +158,6 @@ credentials.json
 # Temporary files
 *.tmp
 *.temp
+
+# Added tmp adaptive artifact
+tmp-adaptive.json
