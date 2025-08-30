@@ -4,16 +4,10 @@
  * Endpoints:
  *  - /healthz : liveness
  *  - /readyz  : readiness (server started)
- *  - /metr  tr.level-SAFE td.level{color:var(--safe)}
-  tr.level-RISKY td.level{color:var(--risky)}
-  tr.level-DANGEROUS td.level{color:var(--danger)}
-  tr.level-CRITICAL td.level{color:var(--danger)}
-  tr.level-BLOCKED td.level{color:var(--blocked)}
-  tr.level-UNKNOWN td.level{color:var(--unknown)}
-  tr.confirmed{background:rgba(255, 215, 0, 0.1);border-left:3px solid #ffd700}
-  .bad{color:var(--danger)} .warn{color:var(--risky)} .good{color:var(--safe)}imple Prometheus-style exposition (subset)
+ *  - /metrics : Prometheus-style exposition (subset)
  *  - /api/metrics : JSON snapshot
  *  - /events  : Server-Sent Events stream of executions (security redactions applied upstream)
+ *  - /dashboard : Rich HTML dashboard
  */
 import * as http from 'http';
 import { IncomingMessage, ServerResponse } from 'http';
@@ -38,6 +32,7 @@ export interface ExecutionEventPayload {
   blocked: boolean;
   truncated: boolean;
   timestamp: string;
+  seq?: number; // incremental sequence for fallback polling
   // Optional rich details
   preview?: string;        // partial command / script text
   exitCode?: number | null;
@@ -58,10 +53,13 @@ export class MetricsHttpServer {
   private heartbeatTimer?: NodeJS.Timeout;
   private replayBuffer: ExecutionEventPayload[] = [];
   private replayLimit = 200; // cap buffer size
+  private seqCounter = 0; // monotonic event sequence (SSE + polling fallback)
   private debugEnabled = process.env.METRICS_DEBUG === 'true';
   // Performance sampling
   private perfTimer?: NodeJS.Timeout;
   private perfSampleIntervalMs = 2000;
+  private syntheticTickerTimer?: NodeJS.Timeout;
+  private syntheticTickerIntervalMs = 7000;
   private lastCpu = process.cpuUsage();
   private lastHr = process.hrtime.bigint();
   private lagSamples: number[] = [];
@@ -144,9 +142,13 @@ export class MetricsHttpServer {
 
   publishExecution(ev: ExecutionEventPayload): void {
   // store in ring buffer
+  ev.seq = ++this.seqCounter;
   this.replayBuffer.push(ev);
   if (this.replayBuffer.length > this.replayLimit) this.replayBuffer.shift();
     this.emitter.emit('exec', ev);
+    if (this.debugEnabled) {
+      try { console.error(`[METRICS][EVENT][PUBLISH] id=${ev.id} level=${ev.level} blocked=${ev.blocked} truncated=${ev.truncated} tool=${ev.toolName||''}`); } catch {}
+    }
   }
 
   private route(req: IncomingMessage, res: ServerResponse): void {
@@ -176,7 +178,20 @@ export class MetricsHttpServer {
         cpuHistory: this.cpuHistory,
         memHistory: this.memHistory
       };
+      if (this.debugEnabled) {
+        try { console.error(`[METRICS][API_METRICS] total=${snap.totalCommands} safe=${snap.safeCommands} risky=${snap.riskyCommands} blocked=${snap.blockedCommands} unknown=${snap.unknownCommands} timeouts=${(snap as any).timeouts}`); } catch {}
+      }
       this.writeJson(res, response);
+      return;
+    }
+  if (path.startsWith('/api/events/replay')) {
+      // Polling fallback endpoint: /api/events/replay?since=<seq>&limit=100
+      const q = this.parseQuery(url);
+      const since = q.since ? parseInt(q.since,10) : 0;
+      const limit = q.limit ? Math.min(parseInt(q.limit,10), 500) : 200;
+      const filtered = this.replayBuffer.filter(e=> (e.seq||0) > since);
+      const slice = filtered.slice(-limit);
+      this.writeJson(res, { events: slice, latest: this.seqCounter });
       return;
     }
   if (path === '/api/metrics/history') {
@@ -202,7 +217,7 @@ export class MetricsHttpServer {
       // Also reflect in metrics registry so dashboard cards change even with only synthetic events
       try {
         metricsRegistry.record({
-          level: synthetic.level as any,
+          level: synthetic.level as unknown as any,
           blocked: synthetic.blocked,
             durationMs: synthetic.durationMs,
             truncated: synthetic.truncated
@@ -393,6 +408,16 @@ export class MetricsHttpServer {
 </main>
 <script>
 (()=>{
+  // --- Runtime instrumentation & error overlay (helps diagnose no-update issues) ---
+  const overlayId = 'jsErrorOverlay';
+  function ensureOverlay(){ let ov=document.getElementById(overlayId); if(!ov){ ov=document.createElement('div'); ov.id=overlayId; ov.style.cssText='position:fixed;top:0;left:0;right:0;background:#7f1d1d;color:#fff;font:12px monospace;z-index:9999;padding:4px 8px;display:none;white-space:pre-wrap;max-height:33vh;overflow:auto'; document.body.appendChild(ov);} return ov; }
+  window.addEventListener('error', e=>{ const ov=ensureOverlay(); ov.style.display='block'; ov.textContent='JS ERROR: '+e.message+'\n'+(e.filename||'')+':'+e.lineno+'\n'+(e.error&&e.error.stack?e.error.stack:''); });
+  window.addEventListener('unhandledrejection', e=>{ const ov=ensureOverlay(); ov.style.display='block'; ov.textContent='UNHANDLED REJECTION: '+(e.reason && e.reason.message || e.reason); });
+  let lastMetricsTs = 0; window.__LAST_METRICS_TS = 0;
+  setInterval(()=>{ const now=Date.now(); if(lastMetricsTs && (now - lastMetricsTs) > 15000){ const el=document.getElementById('hbState'); if(el){ el.textContent='HB STALE'; el.className='pill hb-stale'; } }
+    if(!lastMetricsTs){ /* first 5s no metrics fetched? show hint */ const ov=document.getElementById(overlayId); if(!ov && now > 7000){ const o=ensureOverlay(); o.style.display='block'; o.textContent='Metrics fetch not yet succeeded ( >7s ). Check network / CORS. '; }
+  }}, 4000);
+  console.log('[DASH] bootstrap script executing at', new Date().toISOString());
   const debug = ${debug? 'true':'false'};
   const filtersEl = document.getElementById('filters');
   const tableBody = document.querySelector('#eventTable tbody');
@@ -439,7 +464,7 @@ export class MetricsHttpServer {
     const preview=(ev.preview||'').replace(/</g,'&lt;'); 
     // Inline ps process metrics if present (from tool execution)
     let psInline='';
-    const pm = (ev as any).psProcessMetrics; // when events include structured sample
+  const pm = ev.psProcessMetrics; // browser JS (removed TS assertion)
     if(pm && (pm.CpuSec!==undefined || pm.WS!==undefined)){
       const c = pm.CpuSec!==undefined ? pm.CpuSec : '?';
       const w = pm.WS!==undefined ? pm.WS : '?';
@@ -490,39 +515,39 @@ export class MetricsHttpServer {
   async function refreshMetrics(){
     try{
       const r= await fetch('/api/metrics'); if(!r.ok) return; const m= await r.json();
-      document.getElementById(metricsIds.total).textContent=m.totalCommands;
-      document.getElementById(metricsIds.safe).textContent=m.safeCommands;
-      document.getElementById(metricsIds.risky).textContent=m.riskyCommands;
-      document.getElementById(metricsIds.blocked).textContent=m.blockedCommands;
-  document.getElementById(metricsIds.avg).textContent=m.averageDurationMs;
-  if('confirmationRequired' in m) document.getElementById(metricsIds.confirm).textContent=m.confirmationRequired;
-  document.getElementById(metricsIds.p95).textContent=m.p95DurationMs;
-  if('timeouts' in m) document.getElementById(metricsIds.timeouts).textContent=m.timeouts;
+      const seenMissing = [];
+      const setMetric=(id,val)=>{ const el=document.getElementById(id); if(el) el.textContent=String(val); else seenMissing.push(id); };
+      setMetric(metricsIds.total, m.totalCommands);
+      setMetric(metricsIds.safe, m.safeCommands);
+      setMetric(metricsIds.risky, m.riskyCommands);
+      setMetric(metricsIds.blocked, m.blockedCommands);
+      setMetric(metricsIds.avg, m.averageDurationMs);
+      if('confirmationRequired' in m) setMetric(metricsIds.confirm, m.confirmationRequired);
+      setMetric(metricsIds.p95, m.p95DurationMs);
+      if('timeouts' in m) setMetric(metricsIds.timeouts, m.timeouts);
       const p=m.performance||{};
-      if('cpuPercent'in p) document.getElementById(metricsIds.cpu).textContent=p.cpuPercent.toFixed(1);
-      if('rssMB'in p) document.getElementById(metricsIds.rss).textContent=p.rssMB.toFixed(0);
-      if('heapUsedMB'in p) document.getElementById(metricsIds.heap).textContent=p.heapUsedMB.toFixed(0);
-      if('eventLoopLagP95Ms'in p) document.getElementById(metricsIds.lag).textContent=p.eventLoopLagP95Ms.toFixed(1);
-      uptimeEl.textContent='Uptime: '+Math.round((Date.now()-Date.parse(m.lastReset))/1000)+'s';
+      if('cpuPercent' in p) setMetric(metricsIds.cpu, p.cpuPercent.toFixed(1));
+      if('rssMB' in p) setMetric(metricsIds.rss, p.rssMB.toFixed(0));
+      if('heapUsedMB' in p) setMetric(metricsIds.heap, p.heapUsedMB.toFixed(0));
+      if('eventLoopLagP95Ms' in p) setMetric(metricsIds.lag, p.eventLoopLagP95Ms.toFixed(1));
+      if(uptimeEl) uptimeEl.textContent='Uptime: '+Math.round((Date.now()-Date.parse(m.lastReset))/1000)+'s';
 
       // PowerShell process metrics (aggregated) when enabled
       if('psSamples' in m){
         const psSamples = m.psSamples || 0;
         const psCpu = typeof m.psCpuSecAvg === 'number' ? m.psCpuSecAvg : 0;
         const psWS = typeof m.psWSMBAvg === 'number' ? m.psWSMBAvg : 0;
-        document.getElementById(metricsIds.pssamples).textContent = psSamples;
-        document.getElementById(metricsIds.pscpu).textContent = psCpu.toFixed(2);
-        document.getElementById(metricsIds.psws).textContent = psWS.toFixed(1);
+        setMetric(metricsIds.pssamples, psSamples);
+        setMetric(metricsIds.pscpu, psCpu.toFixed(2));
+        setMetric(metricsIds.psws, psWS.toFixed(1));
       }
-      
       // Update graphs with historical data
-      if (m.cpuHistory && m.cpuHistory.length > 0) {
-        updateCpuGraph(m.cpuHistory);
-      }
-      if (m.memHistory && m.memHistory.length > 0) {
-        updateMemGraph(m.memHistory);
-      }
-    }catch{}
+  if (m.cpuHistory && m.cpuHistory.length > 0) updateCpuGraph(m.cpuHistory);
+  if (m.memHistory && m.memHistory.length > 0) updateMemGraph(m.memHistory);
+  lastMetricsTs = Date.now(); window.__LAST_METRICS_TS = lastMetricsTs;
+  if(seenMissing.length && !window.__mWarned){ const ov=document.getElementById(overlayId); if(ov){ ov.style.display='block'; ov.textContent+='\nMissing metric elements: '+seenMissing.join(', '); } }
+      if(seenMissing.length && !window.__mWarned){ console.warn('Missing metric elements:', seenMissing); window.__mWarned=true; }
+    }catch(e){ /* swallow to avoid breaking UI */ }
   }
 
   // Simple graph drawing functions
@@ -683,6 +708,26 @@ export class MetricsHttpServer {
   es.addEventListener('execution', handleEvent); // current server uses 'event: execution'
   es.addEventListener('open',()=>{ lastEventTs=Date.now(); });
   es.onerror = () => { hbState.textContent='SSE ERROR'; hbState.className='pill hb-stale'; };
+  // Polling fallback if no events received within 10s or SSE errors
+  let sseFallbackStarted=false; let lastSeq=0;
+  function startPollingFallback(){
+    if(sseFallbackStarted) return; sseFallbackStarted=true; console.warn('[DASH] Starting polling fallback');
+    const poll= async ()=>{
+      try{
+        const r= await fetch('/api/events/replay?since='+lastSeq+'&limit=200');
+        if(!r.ok){ throw new Error('bad status '+r.status); }
+        const j= await r.json();
+        if(Array.isArray(j.events)){
+          j.events.forEach(ev=>{ lastSeq = Math.max(lastSeq, ev.seq||0); if(ev.level==='HEARTBEAT'){ lastHeartbeat=Date.now(); return; } addRow(ev); lastEventTs=Date.now(); });
+        }
+        if(typeof j.latest==='number') lastSeq = Math.max(lastSeq, j.latest);
+      }catch(err){ console.error('[DASH][POLL_ERR]', err); }
+      setTimeout(poll, 5000);
+    };
+    poll();
+  }
+  setTimeout(()=>{ if(!window.__LAST_METRICS_TS){ startPollingFallback(); } }, 12000);
+  es.addEventListener('error', ()=> startPollingFallback());
   // Count replayed by observing first N ids quickly
   setTimeout(()=>{ replayCountEl.textContent = tableBody.children.length; },1000);
   if(debug){ document.getElementById('emit').onclick=()=>{ fetch('/api/debug/emit?debug=true&level=SAFE&durationMs='+(Math.random()*60|0)).then(r=>r.json()).then(j=>{ addRow(j.synthetic); }); }; }
@@ -781,20 +826,25 @@ export class MetricsHttpServer {
 
   private serializeEvent(ev: ExecutionEventPayload): string {
     this.eventId++;
-    return `id: ${this.eventId}\n` + `event: execution\n` + `data: ${JSON.stringify(ev)}\n\n`;
+  return `id: ${this.eventId}\n` + `event: execution\n` + `data: ${JSON.stringify(ev)}\n\n`;    
   }
 
   private startHeartbeat(): void {
     if (this.heartbeatTimer) return;
     this.heartbeatTimer = setInterval(() => {
-      this.emitter.emit('exec', {
+      const hb: ExecutionEventPayload = {
         id: 'heartbeat',
         level: 'HEARTBEAT',
         durationMs: 0,
         blocked: false,
         truncated: false,
-        timestamp: new Date().toISOString()
-      });
+        timestamp: new Date().toISOString(),
+        seq: ++this.seqCounter
+      };
+      this.emitter.emit('exec', hb);
+      if (this.debugEnabled) {
+        try { console.error('[METRICS][HEARTBEAT] emitted'); } catch {}
+      }
     }, this.heartbeatIntervalMs).unref();
   }
 
@@ -868,6 +918,28 @@ export class MetricsHttpServer {
         }
       } catch {}
     }, this.perfSampleIntervalMs).unref();
+    // Start optional synthetic ticker if env flag enabled to aid debugging SSE
+    if(process.env.METRICS_TICKER === '1' && !this.syntheticTickerTimer){
+      this.syntheticTickerTimer = setInterval(()=>{
+        try {
+          const ev: ExecutionEventPayload = {
+            id: 'ticker-'+Date.now(),
+            level: 'SAFE',
+            durationMs: 1,
+            blocked: false,
+            truncated: false,
+            timestamp: new Date().toISOString(),
+            preview: '[ticker]',
+            success: true,
+            exitCode: 0,
+            toolName: 'ticker'
+          };
+          this.publishExecution(ev);
+          metricsRegistry.record({ level: 'SAFE' as any, blocked:false, durationMs:1, truncated:false });
+          if(this.debugEnabled) console.error('[METRICS][TICKER] emitted synthetic event');
+        } catch {}
+      }, this.syntheticTickerIntervalMs).unref();
+    }
   }
 
   private startLagMonitor(): void {
