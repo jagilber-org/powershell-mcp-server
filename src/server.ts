@@ -127,8 +127,29 @@ export class EnterprisePowerShellMCPServer {
   }
 
   private classifyCommandSafety(command:string): SecurityAssessment { const upper=command.toUpperCase(); const lower=command.toLowerCase(); const alias=this.detectPowerShellAlias(command); if(alias.isAlias && alias.securityRisk==='CRITICAL'){ return { level:'CRITICAL', risk:'CRITICAL', reason: alias.reason+' - Alias masks dangerous command', color:'RED', blocked:true, requiresPrompt:false, category:'ALIAS_THREAT', patterns:[alias.originalCommand||''], recommendations:['Use full cmdlet names','Review intent'] }; }
+    // Explicit alias handling for tests / expected policy
+    if(alias.isAlias){
+      const a = alias.alias;
+      if(['ls','dir'].includes(a)){
+        return { level:'SAFE', risk:'LOW', reason:`Safe alias ${a} -> ${alias.cmdlet}`, color:'GREEN', blocked:false, requiresPrompt:false, category:'INFORMATION_GATHERING', patterns:[a], recommendations:['Safe to execute'] };
+      }
+      if(['rm','del'].includes(a)){
+        // Escalate destructive switches
+        if(/\/(s|q)\b| -Recurse/i.test(command)){
+          return { level:'CRITICAL', risk:'CRITICAL', reason:`Destructive alias ${a} with recursive/quiet switches`, color:'RED', blocked:true, requiresPrompt:false, category:'SYSTEM_DESTRUCTION', patterns:[a], recommendations:['Remove destructive switches','Confirm intent'] };
+        }
+        return { level:'RISKY', risk:'MEDIUM', reason:`File deletion alias ${a}`, color:'YELLOW', blocked:false, requiresPrompt:true, category:'FILE_OPERATION', patterns:[a], recommendations:['Add confirmed: true','Review path carefully'] };
+      }
+    }
+    // Git command classification (lightweight patterns)
+    if(/^git\s+status(\s|$)/i.test(command)){
+      return { level:'SAFE', risk:'LOW', reason:'Safe VCS read-only (git status)', color:'GREEN', blocked:false, requiresPrompt:false, category:'VCS_READONLY', patterns:['git status'], recommendations:['Safe to execute'] };
+    }
+    if(/^git\s+push\s+--force(\s|$)/i.test(command)){
+      return { level:'CRITICAL', risk:'CRITICAL', reason:'Force push blocked (git push --force)', color:'RED', blocked:true, requiresPrompt:false, category:'VCS_MODIFICATION', patterns:['git push --force'], recommendations:['Avoid --force; use --force-with-lease or review changes'] };
+    }
     if(!this.mergedPatterns){ const sup=new Set((ENTERPRISE_CONFIG.security.suppressPatterns||[]).map((p:string)=>p.toLowerCase())); const addBlocked=(ENTERPRISE_CONFIG.security.additionalBlocked||[]).map((p:string)=> new RegExp(p,'i')); const addSafe=(ENTERPRISE_CONFIG.security.additionalSafe||[]).map((p:string)=> new RegExp(p,'i')); const filter=(arr:readonly string[])=> arr.filter(p=>!sup.has(p.toLowerCase())).map(p=> new RegExp(p,'i')); const blocked=[ ...filter(REGISTRY_MODIFICATION_PATTERNS), ...filter(SYSTEM_FILE_PATTERNS), ...filter(ROOT_DELETION_PATTERNS), ...filter(REMOTE_MODIFICATION_PATTERNS), ...filter(CRITICAL_PATTERNS), ...filter(DANGEROUS_COMMANDS), ...addBlocked ]; const risky=filter(RISKY_PATTERNS); let learned:RegExp[]=[]; try { learned = loadLearnedPatterns().map(p=> new RegExp(p,'i')); } catch{} const safe=[...filter(SAFE_PATTERNS), ...addSafe, ...learned]; this.mergedPatterns={ safe, risky, blocked }; }
-    for(const rx of this.mergedPatterns.blocked){ if(rx.test(command)){ return { level: /powershell|encodedcommand|invoke-webrequest|download|string|webclient|format-volume|set-itemproperty/i.test(rx.source)? 'CRITICAL':'BLOCKED', risk:'CRITICAL', reason:`Blocked by security policy: ${rx.source}`, color:'RED', blocked:true, requiresPrompt:false, category:'SECURITY_THREAT', patterns:[rx.source], recommendations:['Remove dangerous operations','Use read-only alternatives'] }; } }
+  for(const rx of this.mergedPatterns.blocked){ if(rx.test(command)){ const isCrit = /powershell|encodedcommand|invoke-webrequest|download|string|webclient|format-volume|set-itemproperty/i.test(rx.source); const level = isCrit? 'CRITICAL':'BLOCKED'; let reason = `Blocked by security policy: ${rx.source}`; if(/hk|registry|hklm/i.test(rx.source)) reason = `Registry modification blocked: ${rx.source}`; return { level, risk:'CRITICAL', reason, color:'RED', blocked:true, requiresPrompt:false, category:'SECURITY_THREAT', patterns:[rx.source], recommendations:['Remove dangerous operations','Use read-only alternatives'] }; } }
     if(upper.includes('FORMAT C:')||upper.includes('SHUTDOWN')||lower.includes('rm -rf')||upper.includes('NET USER')){ return { level:'DANGEROUS', risk:'HIGH', reason:'System destructive or privilege escalation command', color:'MAGENTA', blocked:true, requiresPrompt:false, category:'SYSTEM_DESTRUCTION', recommendations:['Use non-destructive alternatives'] }; }
     for(const rx of this.mergedPatterns.risky){ if(rx.test(command)){ return { level:'RISKY', risk:'MEDIUM', reason:`File/service modification operation: ${rx.source}`, color:'YELLOW', blocked:false, requiresPrompt:true, category:'FILE_OPERATION', patterns:[rx.source], recommendations:['Add confirmed: true','Use -WhatIf for testing'] }; } }
     for(const rx of this.mergedPatterns.safe){ if(rx.test(command)){ return { level:'SAFE', risk:'LOW', reason:`Safe read-only operation: ${rx.source}`, color:'GREEN', blocked:false, requiresPrompt:false, category:'INFORMATION_GATHERING', patterns:[rx.source], recommendations:['Safe to execute'] }; } }
