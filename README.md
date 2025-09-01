@@ -17,34 +17,124 @@ $env:MCP_AUTH_KEY = "your-strong-key"
 npm run start:enterprise
 ```
 
-## Available Tools (Core + Extended)
+## Available Tools (Core MCP Interface)
 
-| Tool | Purpose | Key Arguments (selected) |
-|------|---------|-------------------------|
-| `emit-log` | Structured audit log entry | `message` |
-| `learn` | Manage unknown → safe learning queue | `action`, `limit`, `minCount`, `normalized[]` |
-| `working-directory-policy` | Get/set allowed roots enforcement | `action`, `enabled`, `allowedWriteRoots[]` |
-| `server-stats` | Metrics snapshot & counts | `verbose` |
-| `memory-stats` | Process memory (MB) | `gc` |
-| `agent-prompts` | Retrieve prompt library sections | `category`, `format` (markdown/json) |
-| `git-status` | Show repository status | `porcelain` |
-| `git-commit` | Commit staged changes | `message` |
-| `git-push` | Push current branch | `setUpstream` |
-| `threat-analysis` | Unknown / threat tracking stats | — |
-| `run-powershell` | Execute command / inline script (classified) | `command` / `script`, `workingDirectory`, `aiAgentTimeoutSec`, `confirmed`, adaptive params* |
-| `run-powershellscript` | Execute inline or file content | `script` OR `scriptFile`, `workingDirectory`, timeout params, `confirmed` |
-| `powershell-syntax-check` | Fast heuristic script check (no execution) | `script`, `filePath` |
-| `ai-agent-tests` | Internal regression harness | `testSuite`, `skipDangerous` |
-| `help` | Structured help topics | `topic` |
+| Tool | Purpose | Key Arguments |
+|------|---------|---------------|
+| `run-powershell` | Execute PowerShell command/script (security classified) | `command`, `workingDirectory`, `timeoutSeconds`, `confirmed` |
+| `admin` | Administrative operations (server stats, policy, learning) | `action`, `target`, additional params |
+| `syntax-check` | Validate PowerShell syntax without execution | `script`, `filePath` |
+| `help` | Get help and discover tool capabilities | `topic` |
 
-Adaptive timeout params (*): `progressAdaptive` (bool), `adaptiveExtendWindowMs`, `adaptiveExtendStepMs`, `adaptiveMaxTotalSec`.
+### Tool Tree Structure
 
-Notes:
+The `admin` tool provides access to administrative functions through a hierarchical structure:
 
-1. `RISKY` & `UNKNOWN` require `confirmed: true`.
-2. `run-powershellscript` supports `scriptFile:"relative/or/absolute.ps1"` (read & inlined).
-3. Blocked patterns (`Invoke-Expression`, forced destructive VCS, recursive quiet deletes) are rejected pre-exec.
-4. Working directory enforcement (when enabled) rejects paths outside `allowedWriteRoots`.
+#### `admin` Tool Actions:
+- **`action: "server"`** - Server metrics and health
+  - `target: "stats"` - Get server statistics
+  - `target: "health"` - Get health status  
+  - `target: "memory"` - Get memory usage (optional `gc: true`)
+
+- **`action: "security"`** - Security and policy management
+  - `target: "working-directory"` - Get/set working directory policy
+  - `target: "threat-analysis"` - Get threat tracking statistics
+  - `target: "classification"` - Test command classification
+
+- **`action: "learning"`** - Command learning system
+  - `target: "list"` - List learning candidates
+  - `target: "queue"` - Queue commands for approval
+  - `target: "approve"` - Approve queued commands
+  - `target: "remove"` - Remove from queue
+
+- **`action: "audit"`** - Audit and logging
+  - `target: "emit-log"` - Create audit log entry
+  - `target: "prompts"` - Access agent prompts library
+
+### Core Requirements
+
+1. `RISKY` & `UNKNOWN` commands require `confirmed: true` parameter
+2. `syntax-check` supports both inline `script` and `filePath` for file-based validation  
+3. `run-powershell` accepts either `command` or `script` parameter (equivalent)
+4. Working directory enforcement (when enabled) restricts execution to `allowedWriteRoots`
+5. All administrative functions accessed through unified `admin` tool
+
+### MCP SDK Compliance
+
+This server fully complies with the Model Context Protocol specification:
+
+- Uses official `@modelcontextprotocol/sdk` with proper JSON-RPC 2.0 implementation
+- All tool schemas defined using Zod for type safety and validation  
+- Proper error handling using `McpError` and `ErrorCode` constants
+- Structured logging and audit trails for all operations
+- Transport-agnostic design supporting stdio and future transports
+
+## Tool Schemas & Usage
+
+### `run-powershell` Schema
+
+```json
+{
+  "command": "string (optional)", 
+  "script": "string (optional)",
+  "workingDirectory": "string (optional)",
+  "timeoutSeconds": "number (1-600, optional)",
+  "confirmed": "boolean (optional)",
+  "progressAdaptive": "boolean (optional)",
+  "adaptiveExtendWindowMs": "number (optional)",
+  "adaptiveExtendStepMs": "number (optional)", 
+  "adaptiveMaxTotalSec": "number (optional)"
+}
+```
+
+**Requirements:** Either `command` or `script` must be provided. RISKY/UNKNOWN commands require `confirmed: true`.
+
+### `admin` Schema
+
+```json
+{
+  "action": "server|security|learning|audit",
+  "target": "string",
+  "verbose": "boolean (optional)",
+  "gc": "boolean (optional)",
+  "enabled": "boolean (optional)",
+  "allowedWriteRoots": "string[] (optional)",
+  "limit": "number (optional)",
+  "minCount": "number (optional)", 
+  "normalized": "string[] (optional)",
+  "message": "string (optional)",
+  "category": "string (optional)",
+  "format": "markdown|json (optional)"
+}
+```
+
+**Examples:**
+
+- Server stats: `{"action": "server", "target": "stats"}`
+- Memory usage: `{"action": "server", "target": "memory", "gc": true}`
+- Working directory policy: `{"action": "security", "target": "working-directory"}`
+- Learning queue: `{"action": "learning", "target": "list", "limit": 10}`
+
+### `syntax-check` Schema
+
+```json
+{
+  "script": "string (optional)",
+  "filePath": "string (optional)"  
+}
+```
+
+**Requirements:** Either `script` or `filePath` must be provided.
+
+### `help` Schema
+
+```json
+{
+  "topic": "string (optional)"
+}
+```
+
+**Topics:** security, tools, admin, examples, compliance
 
 ## Security Model
 
@@ -53,27 +143,27 @@ Levels: SAFE â†’ RISKY â†’ DANGEROUS (reserved) â†’ CRITICAL â�
 | Level | Requires confirmed? | Executed? | Example | Category Sample |
 |-------|---------------------|-----------|---------|-----------------|
 | SAFE | No | Yes | `Get-ChildItem` | INFORMATION_GATHERING |
-| RISKY | Yes | Yes | `git pull` | VCS_MUTATION |
-| CRITICAL | N/A | No | `git reset --hard` | VCS_DESTRUCTIVE |
+| RISKY | Yes | Yes | `Stop-Service` | SERVICE_MANAGEMENT |
+| CRITICAL | N/A | No | `Format-Volume` | DISK_DESTRUCTIVE |
 | BLOCKED | N/A | No | `Invoke-Expression` | SECURITY_THREAT |
-| UNKNOWN | Yes | Yes | `foobar-tool --x` | UNKNOWN_COMMAND |
+| UNKNOWN | Yes | Yes | `custom-tool --x` | UNKNOWN_COMMAND |
 
 ## First Call Execution Behavior
 
 **✅ Commands that execute immediately (no `confirmed` needed):**
 
-- **SAFE commands**: Pre-classified patterns like `Get-ChildItem`, `dir`, `git status`
+- **SAFE commands**: Pre-classified patterns like `Get-ChildItem`, `dir`, `Write-Output`
 - **Learned SAFE commands**: Previously unknown commands that were approved via learning system
 
 **❌ Commands that require `confirmed: true` on first call:**
 
-- **RISKY commands**: Pre-classified as potentially disruptive (e.g., `git commit`, `copy`)
+- **RISKY commands**: Pre-classified as potentially disruptive (e.g., `Stop-Service`, `Remove-Item`)
 - **UNKNOWN commands**: Any command not matching SAFE, RISKY, CRITICAL, or BLOCKED patterns
 
 **🚫 Commands that never execute:**
 
 - **BLOCKED commands**: Security threats like `Invoke-Expression`
-- **CRITICAL commands**: Destructive operations like `git reset --hard`
+- **CRITICAL commands**: Destructive operations like `Format-Volume`
 
 **Key Point**: Once an UNKNOWN command is learned and approved, it becomes SAFE and will execute without `confirmed` on subsequent calls.
 
@@ -81,33 +171,14 @@ Alias & OS classification:
  
 | Category | Examples |
 |----------|----------|
-| OS_READONLY | `dir`, `whoami`, `echo` |
-| OS_MUTATION | `copy`, `move`, plain `del file.txt` |
+| OS_READONLY | `dir`, `whoami`, `echo`, `Get-Process` |
+| OS_MUTATION | `copy`, `move`, `New-Item`, `Set-Content` |
 | OS_DESTRUCTIVE (blocked) | `del /s /q`, `rd /s /q`, `format`, `shutdown` |
-| VCS_READONLY | `git status`, `git diff` |
-| VCS_MUTATION | `git commit`, `gh pr create` |
-| VCS_DESTRUCTIVE | `git push --force`, `git clean -xfd` |
+| SERVICE_MANAGEMENT | `Stop-Service`, `Start-Service`, `Restart-Service` |
+| REGISTRY_OPERATION | `Set-ItemProperty`, `New-Item -Path HK*`, `Remove-ItemProperty` |
+| NETWORK_OPERATION | `Invoke-WebRequest`, `Invoke-RestMethod`, `curl`, `wget` |
 
 PowerShell Core preference: auto-detects `pwsh.exe` and falls back to `powershell.exe`. Override with `ENTERPRISE_CONFIG.powershell.executable`.
-
-### Tool Hardening (New)
-
-| Tool | Hardening Added | Limits / Behavior |
-|------|-----------------|-------------------|
-| emit-log | Secret redaction (`apiKey=`, `password=`, `secret=` patterns), control char stripping, length cap | `logging.maxLogMessageChars` (env: `MCP_MAX_LOG_CHARS`, default 2000). Truncated suffix `<TRUNCATED>` |
-| agent-prompts | Category sanitization, secret fenced block redaction (```secret ...```), size cap, audit event | `limits.maxPromptBytes` (env: `MCP_MAX_PROMPT_BYTES`, default 50000) with `<!-- TRUNCATED -->` marker |
-
-Secret fenced block example (will be redacted):
-
-  ```secret
-  Internal strategy text
-  ```
-
-Returned as:
-
-  ```redacted
-  [SECRET BLOCK REDACTED]
-  ```
 
 ## Configuration (excerpt `enterprise-config.json` / minimal core `config.ts` defaults)
 
@@ -302,10 +373,10 @@ Attempt / execution split (appears when any attempts recorded):
 ```jsonc
 {
   "attemptCommands": 5,                 // total blocked + confirmation-required attempts
-  "attemptConfirmationRequired": 4,      // attempts needing confirmation (RISKY/UNKNOWN)
+  "attemptConfirmedRequired": 4,      // attempts needing confirmation (RISKY/UNKNOWN)
   "executionCommands": 12,               // real executions with duration > 0
   "confirmedExecutions": 8,              // executions of RISKY/UNKNOWN with confirmed:true
-  "confirmationConversion": 0.667        // confirmedExecutions / attemptConfirmationRequired
+  "confirmedConversion": 0.667        // confirmedExecutions / attemptConfirmedRequired
 }
 ```
 

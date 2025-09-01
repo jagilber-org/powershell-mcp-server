@@ -7,7 +7,7 @@ describe('metrics minimum 1ms duration enforcement', ()=>{
     const srv = startServer(); await waitForReady(srv); const res = collect(srv);
     // fire several trivial echo commands
     for(let i=0;i<4;i++){
-      rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "hi'+i+'"', confirmed:true, aiAgentTimeoutSec:5 }},'c'+i);
+  rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "hi'+i+'"', confirmed:true, timeoutSeconds:5 }},'c'+i);
       await wait(res,'c'+i,3000);
     }
     // give metrics publisher a moment

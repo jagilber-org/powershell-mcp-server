@@ -118,7 +118,7 @@ When using a global MCP server (configured in VS Code settings), always specify 
     "scriptFile":"scripts/deploy.ps1",
     "workingDirectory":"C:\\Your\\Workspace",
     "confirmed":true,
-    "aiAgentTimeoutSec":120
+  "timeoutSeconds":120
   }
 }}
 ```

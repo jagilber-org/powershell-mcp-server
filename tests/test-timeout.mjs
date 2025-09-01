@@ -16,7 +16,7 @@ server.stdout.on('data', d=>{
       // initialize done -> fire long command with tiny timeout (1s)
       start = Date.now();
   // Use correct tool name and specify timeout in seconds (1s)
-  send(server,{jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'run-powershell',arguments:{command:'Start-Sleep -Seconds 5; Write-Output "FINISHED"',confirmed:true,aiAgentTimeoutSec:1}}});
+  send(server,{jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'run-powershell',arguments:{command:'Start-Sleep -Seconds 5; Write-Output "FINISHED"',confirmed:true,timeoutSeconds:1}}});
     } else if (m.id===2){
       gotResponse = true;
       const elapsed = Date.now()-start;

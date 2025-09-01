@@ -33,7 +33,7 @@ describe('registry / network / service classification end-to-end', ()=>{
 			} else {
 				const sc1 = res['net1'].result?.structuredContent; expect(sc1).toBeTruthy();
 			}
-		rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Invoke-WebRequest -Uri "https://example.com"', confirmed:true, aiAgentTimeoutSec:5 }},'net2');
+		rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Invoke-WebRequest -Uri "https://example.com"', confirmed:true, timeoutSeconds:5 }},'net2');
 		await wait(res,'net2'); srv.kill();
 		const sc = res['net2'].result?.structuredContent; // may be blocked or risky
 		expect(sc).toBeTruthy();

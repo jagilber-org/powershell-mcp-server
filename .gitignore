@@ -161,3 +161,15 @@ credentials.json
 
 # Added tmp adaptive artifact
 tmp-adaptive.json
+tmp_*.json
+tmp_*.txt
+tmp-*.log
+*.bak
+*.orig
+tmp_master_enterprise.ts
+tmp_runPowerShell_original.txt
+scripts/tmp-*.cjs
+scripts/tmp-*.js
+tests/jest/initialize-tools-list-framed.test.js
+tests/jest/tool-schema-enforcement.test.js
+test-mcp-compliant.mjs

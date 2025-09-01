@@ -302,19 +302,23 @@ Supported formats:
 
 ## 9. Tool Surface Overview
 
-| Tool | Purpose | Security Interaction | Typical Use |
-|------|---------|----------------------|-------------|
-| powershell-command | Single command exec | Classify -> enforce | Quick info retrieval |
-| powershell-script | Multi-line script | Classify each invocation | Aggregated logic |
-| powershell-file | Execute .ps1 file | Classify path & content contextually | Existing scripts |
-| powershell-syntax-check | Parser validation | No execution | Pre-flight safety |
-| enforce-working-directory | Toggle WD policy | Administrative | Harden environment |
-| get-working-directory-policy | Inspect policy | Read-only (SAFE) | Agent planning |
-| server-stats | Metrics snapshot | Read-only (SAFE) | Health checks |
-| threat-analysis | Threat stats | Read-only (SAFE) | Security review |
-| ai-agent-test | Validation suite | SAFE + blocked expectations | Regression gating |
-| help | Documentation | Safe | Hints & onboarding |
-| agent-prompts | Reproduction prompts | Safe | Deterministic rebuild |
+| Tool | Purpose | Schema Validation | Typical Use |
+|------|---------|-------------------|-------------|
+| `run-powershell` | Execute PowerShell command/script | Zod schema with security classification | Command execution, script automation |
+| `admin` | Administrative operations via hierarchical actions | Unified schema covering all admin functions | Server management, security policy, learning |
+| `syntax-check` | Validate PowerShell syntax without execution | Script or filePath validation | Pre-flight syntax validation |
+| `help` | Interactive help and documentation | Topic-based help retrieval | User assistance, capability discovery |
+
+### Administrative Tool Hierarchy (`admin`)
+
+The `admin` tool provides structured access to all administrative functions:
+
+- **`action: "server"`** → Server metrics, health, memory management
+- **`action: "security"`** → Working directory policy, threat analysis  
+- **`action: "learning"`** → Command learning queue management
+- **`action: "audit"`** → Logging and prompt library access
+
+This hierarchical approach reduces tool surface complexity while maintaining full functionality access.
 
 ---
 
@@ -504,7 +508,7 @@ Additional nuance as of Aug 2025:
 | Element | Behavior |
 |---------|----------|
 | Internal Self‑Destruct | Injected timer (unless MCP_DISABLE_SELF_DESTRUCT=1) exits PowerShell (exit 124) shortly before external timeout / adaptive horizon. |
-| External Timeout | Initial window derived from aiAgentTimeoutSec (or legacy aliases). |
+| External Timeout | Initial window derived from timeoutSeconds. |
 | Adaptive Window | When remaining <= extendWindowMs AND recent output activity, extend by extendStepMs. |
 | Cap | Never extends beyond adaptiveMaxTotalMs (derived from user input or 3x base timeout, capped at 180s). |
 | terminationReason | Derived atomically at finish(): `completed` \| `timeout` \| `killed` \| `output_overflow`. |
@@ -525,15 +529,13 @@ Additional nuance as of Aug 2025:
 
 ## 16.3 Timeout Parameter Aliases & Deprecations
 
-Canonical field: aiAgentTimeoutSec (seconds).
+Canonical field: timeoutSeconds (seconds).
 
 Accepted aliases (with warnings):
 
 | Alias | Status | Warning Text |
 |-------|--------|--------------|
-| aiAgentTimeout | Deprecated | "Parameter 'aiAgentTimeout' is deprecated; use 'aiAgentTimeoutSec' (seconds)." |
-| timeout | Deprecated | "Parameter 'timeout' is deprecated; use 'aiAgentTimeoutSec' (seconds)." |
-| timeoutSeconds | Transitional | Advisory to prefer aiAgentTimeoutSec. |
+| timeoutSeconds | Active | Primary timeout parameter (seconds). |
 
 Long timeouts (>=60s) add a performance responsiveness warning.
 

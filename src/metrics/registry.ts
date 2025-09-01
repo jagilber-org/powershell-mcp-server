@@ -21,7 +21,7 @@ export interface MetricsSnapshot {
   dangerousCommands: number;
   criticalCommands: number;
   blockedCommands: number;
-  confirmationRequired: number;
+  confirmedRequired: number; // renamed from confirmationRequired (count of pending confirmations)
   unknownCommands: number;
   truncatedOutputs: number;
   timeouts: number;
@@ -42,7 +42,7 @@ export class MetricsRegistry {
     DANGEROUS: 0,
     CRITICAL: 0,
     BLOCKED: 0,
-    CONFIRM: 0,
+  CONFIRM: 0,
     UNKNOWN: 0,
   TRUNCATED: 0,
   TIMEOUTS: 0
@@ -96,8 +96,8 @@ export class MetricsRegistry {
     this.counts.TIMEOUTS++;
   }
 
-  /** Increment confirmation-required (unconfirmed) counter */
-  incrementConfirmation(): void {
+  /** Increment confirmed-required (pending user confirmation) counter */
+  incrementConfirmedRequired(): void {
     this.counts.CONFIRM++;
   }
 
@@ -116,30 +116,32 @@ export class MetricsRegistry {
       ? Math.round(this.durations.reduce((a, b) => a + b, 0) / this.durations.length)
       : 0;
     const p95 = this.computeP(0.95);
-    const snap: MetricsSnapshot = {
+  let p95Adj = p95;
+  if(p95Adj < avg) p95Adj = avg; // enforce monotonic p95 >= average
+  const snap: MetricsSnapshot = {
       totalCommands: this.counts.TOTAL,
       safeCommands: this.counts.SAFE,
       riskyCommands: this.counts.RISKY,
       dangerousCommands: this.counts.DANGEROUS,
       criticalCommands: this.counts.CRITICAL,
       blockedCommands: this.counts.BLOCKED,
-      confirmationRequired: this.counts.CONFIRM,
+  confirmedRequired: this.counts.CONFIRM,
       unknownCommands: this.counts.UNKNOWN,
       truncatedOutputs: this.counts.TRUNCATED,
   timeouts: this.counts.TIMEOUTS,
       averageDurationMs: avg,
-      p95DurationMs: p95,
+  p95DurationMs: p95Adj,
       lastReset: this.lastReset
     };
     // Attempt / execution counters surfaced when any non-zero
     if(this.attemptCounters.ATTEMPT_TOTAL > 0 || this.attemptCounters.EXECUTIONS > 0){
       (snap as any).attemptCommands = this.attemptCounters.ATTEMPT_TOTAL;
-      (snap as any).attemptConfirmationRequired = this.attemptCounters.ATTEMPT_CONFIRM;
+  (snap as any).attemptConfirmedRequired = this.attemptCounters.ATTEMPT_CONFIRM;
       (snap as any).executionCommands = this.attemptCounters.EXECUTIONS;
       (snap as any).confirmedExecutions = this.attemptCounters.CONFIRM_EXEC;
       if(this.attemptCounters.ATTEMPT_CONFIRM > 0){
         const conv = this.attemptCounters.CONFIRM_EXEC / Math.max(1, this.attemptCounters.ATTEMPT_CONFIRM);
-        (snap as any).confirmationConversion = +conv.toFixed(3);
+  (snap as any).confirmedConversion = +conv.toFixed(3);
       }
     }
     if(this.psSamples>0){

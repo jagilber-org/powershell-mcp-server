@@ -16,7 +16,7 @@ interface PublishOptions {
   candidateNorm?: string;        // Normalized UNKNOWN candidate (learning system)
   reason?: string;               // Reason for early publish (e.g. 'blocked','confirmation_required')
   requiresPrompt?: boolean;      // Whether confirmation was required
-  incrementConfirmation?: boolean; // Increment confirmation-required metric
+  incrementConfirmedRequired?: boolean; // Increment confirmed-required metric
 }
 
 /**
@@ -44,8 +44,8 @@ export function publishExecutionAttempt(opts: PublishOptions){
   metricsHttpServer.publishExecution(ev);
   // Record all events (attempts + executions). Execution vs attempt split handled inside registry.
   metricsRegistry.record({ level: ev.level as any, blocked: ev.blocked, durationMs: ev.durationMs, truncated: ev.truncated });
-    if(opts.incrementConfirmation){
-      try { (metricsRegistry as any).incrementConfirmation?.(); } catch {}
+    if(opts.incrementConfirmedRequired){
+      try { (metricsRegistry as any).incrementConfirmedRequired?.(); } catch {}
     }
   } catch {/* swallow */}
 }

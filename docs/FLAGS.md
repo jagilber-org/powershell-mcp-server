@@ -49,10 +49,10 @@ Note: Some flags (`--minimal-stdio`, `--disable-self-destruct`, etc.) are refere
 | Field | Meaning |
 |-------|---------|
 | `attemptCommands` | Total blocked + confirmation-required attempts (duration 0ms) |
-| `attemptConfirmationRequired` | Attempts needing confirmation (RISKY/UNKNOWN) |
+| `attemptConfirmedRequired` | Attempts needing confirmation (RISKY/UNKNOWN) |
 | `executionCommands` | Executions with real duration > 0ms |
 | `confirmedExecutions` | Executions of RISKY/UNKNOWN with confirmation |
-| `confirmationConversion` | confirmedExecutions / attemptConfirmationRequired |
+| `confirmedConversion` | confirmedExecutions / attemptConfirmedRequired |
 | `psSamples` | Number of PowerShell process metric samples captured |
 | `psCpuSecAvg` | Average CPU seconds per sample |
 | `psWSMBAvg` | Average Working Set MB per sample |

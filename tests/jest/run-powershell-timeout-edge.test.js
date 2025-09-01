@@ -11,7 +11,7 @@ describe('run-powershell timeout edge cases', ()=>{
 
   test('high but within cap warns and succeeds', async ()=>{
     const srv=startServer(); await waitForReady(srv); const res=collect(srv);
-    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "hi"', aiAgentTimeoutSec: 590, confirmed:true }},'high');
+  rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "hi"', timeoutSeconds: 590, confirmed:true }},'high');
     const msg = await waitFor(res,'high',8000); srv.kill(); expect(msg).toBeTruthy();
     const sc = msg.result?.structuredContent || {}; expect(sc.originalTimeoutSeconds).toBe(590);
     const warnings = sc.warnings || []; expect(warnings.some(w=> /long timeout/i.test(w))).toBe(true);

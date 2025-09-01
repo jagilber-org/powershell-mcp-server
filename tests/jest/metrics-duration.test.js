@@ -18,7 +18,7 @@ describe('metrics duration recording', () => {
     const r1 = await request(srv, responses, 'tools/call', { name:'server-stats', arguments:{} }, 'dur1', 2000);
     expect(r1).toBeTruthy();
     // Execute a short PowerShell command
-    const r2 = await request(srv, responses, 'tools/call', { name:'run-powershell', arguments:{ command:'Write-Output "hi"', confirmed:true, aiAgentTimeoutSec:2 } }, 'dur2', 4000);
+  const r2 = await request(srv, responses, 'tools/call', { name:'run-powershell', arguments:{ command:'Write-Output "hi"', confirmed:true, timeoutSeconds:2 } }, 'dur2', 4000);
     expect(r2).toBeTruthy();
     // Execute a blocked attempt (should not add positive duration)
     try { await request(srv, responses, 'tools/call', { name:'run-powershell', arguments:{ command:'Invoke-Expression "bad"' } }, 'dur3', 2000); } catch{}

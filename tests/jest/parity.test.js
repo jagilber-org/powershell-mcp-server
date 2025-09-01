@@ -10,7 +10,8 @@ describe('tool parity', () => {
     expect(list).toBeTruthy();
     const tools = list.result?.tools || [];
     const names = tools.map(t=> t.name);
-    for(const required of ['run-powershell','server-stats','threat-analysis','help','powershell-syntax-check','working-directory-policy','learn']){
+  // Minimal core surface intentionally excludes admin tools like threat-analysis and learn
+  for(const required of ['run-powershell','server-stats','help','powershell-syntax-check','working-directory-policy','emit-log']){
       expect(names).toContain(required);
     }
     expect(new Set(names).size).toBe(names.length);

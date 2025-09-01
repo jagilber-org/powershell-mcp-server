@@ -8,6 +8,7 @@ describe('run-powershell timeout hardening', ()=>{
   test('emits deprecation warnings and long-timeout warning', async ()=>{
     const srv = startServer(); await waitForReady(srv); const res = collect(srv);
   // Use ONLY deprecated param to trigger deprecation warning + long timeout (>=60s) without canonical param.
+  // Use deprecated alias aiAgentTimeout to ensure deprecation warning plus long timeout warning
   rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "ok"', aiAgentTimeout:61, confirmed:true }},'hard1');
     for(let i=0;i<80;i++){ if(res['hard1']) break; await new Promise(r=> setTimeout(r,100)); }
     srv.kill();
@@ -22,7 +23,7 @@ describe('run-powershell timeout hardening', ()=>{
 
   test('rejects timeout above cap', async ()=>{
     const srv = startServer(); await waitForReady(srv); const res = collect(srv);
-    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "x"', aiAgentTimeoutSec: 601, confirmed:true }},'hard2');
+  rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "x"', timeoutSeconds: 601, confirmed:true }},'hard2');
     for(let i=0;i<60;i++){ if(res['hard2']) break; await new Promise(r=> setTimeout(r,100)); }
     srv.kill();
     const msg = res['hard2']; expect(msg).toBeTruthy();

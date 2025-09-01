@@ -82,7 +82,7 @@ Out-of-Scope (Phase Deferred):
 
 ## 8. Assumptions
 
-- Agents will transition to using aiAgentTimeoutSec soon; legacy parameters still appear short-term.
+- Unified timeout parameter: timeoutSeconds only (legacy fields removed).
 - Adaptive extension only matters for interactive or streaming output tasks.
 - Termination reasons are sufficient without detail codes initially.
 

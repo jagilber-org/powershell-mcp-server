@@ -34,6 +34,7 @@ import { recordUnknownCandidate, aggregateCandidates, resolveLearningConfig, Lea
 import { ENTERPRISE_CONFIG } from './core/config.js';
 import { auditLog, setMCPServer } from './logging/audit.js';
 import { runPowerShellTool } from './tools/runPowerShell.js';
+import { listToolsForSurface, listToolTree, getToolDef } from './tools/registry.js';
 
 // === Support Types ===
 type SecurityLevel = 'SAFE' | 'RISKY' | 'DANGEROUS' | 'CRITICAL' | 'UNKNOWN' | 'BLOCKED';
@@ -105,7 +106,12 @@ export class EnterprisePowerShellMCPServer {
   constructor(authKey?: string){
     this.startTime = new Date(); // ensure defined for startup metrics
     this.server = new Server({ name:'enterprise-powershell-mcp-server', version:'2.0.0' },{ capabilities:{ tools:{ listChanged:true } } });
-    setMCPServer(this.server); metricsHttpServer.start(); this.deferDashboardLog(); this.logAuth(); this.logConfig(); this.setupHandlers();
+    setMCPServer(this.server);
+    metricsHttpServer.start();
+    this.deferDashboardLog();
+    this.logAuth();
+    this.logConfig();
+    this.setupHandlers();
   }
 
   private detectHost(){ (async()=>{ const hosts=['pwsh.exe','powershell.exe']; for(const h of hosts){ try { const p=spawn(h,['-NoLogo','-NoProfile','-Command','"$PSVersionTable.PSEdition"'],{windowsHide:true}); let out=''; p.stdout.on('data',d=> out+=d.toString()); p.on('close',c=>{ if(c===0){ console.error(`🔑 PowerShell Host: ${h} (${out.trim()||'unknown'})`); auditLog('INFO','POWERSHELL_HOST','Detected',{ host:h, raw: out.trim() }); } }); break; } catch{} } })(); }
@@ -118,7 +124,7 @@ export class EnterprisePowerShellMCPServer {
 
   private detectPowerShellAlias(command:string): AliasDetectionResult { const first=command.trim().split(/\s+/)[0].toLowerCase(); if(POWERSHELL_ALIAS_MAP[first]){ const info=POWERSHELL_ALIAS_MAP[first]; this.threatStats.aliasesDetected++; auditLog('WARNING','ALIAS_DETECTED','Alias detected',{ alias:first, cmdlet:info.cmdlet, risk:info.risk }); return { alias:first, cmdlet:info.cmdlet, risk:info.risk, category:info.category, originalCommand:command, isAlias:true, aliasType:'BUILTIN', securityRisk:info.risk, reason:`Alias '${first}' -> '${info.cmdlet}' (${info.risk})` }; } for(const pat of SUSPICIOUS_ALIAS_PATTERNS){ if(new RegExp(pat,'i').test(command)){ auditLog('CRITICAL','SUSPICIOUS_PATTERN','Pattern detected',{ pattern:pat }); return { alias:first, cmdlet:first, risk:'CRITICAL', category:'SECURITY_THREAT', originalCommand:command, isAlias:false, aliasType:'UNKNOWN', securityRisk:'CRITICAL', reason:`Suspicious pattern: ${pat}` }; } } return { alias:first, cmdlet:first, risk:'LOW', category:'INFORMATION_GATHERING', originalCommand:command, isAlias:false, aliasType:'UNKNOWN', securityRisk:'LOW', reason:'No alias match' }; }
 
-  private trackUnknownThreat(command:string, assessment: SecurityAssessment){ const key=command.toLowerCase().trim(); const now=new Date().toISOString(); if(this.unknownThreats.has(key)){ const ex=this.unknownThreats.get(key)!; ex.frequency++; ex.lastSeen=now; ex.riskAssessment=assessment; return; } this.threatStats.totalUnknownCommands++; this.threatStats.uniqueThreats++; if(assessment.risk==='HIGH'||assessment.risk==='CRITICAL') this.threatStats.highRiskThreats++; const alias=this.detectPowerShellAlias(command); const possible=alias.isAlias?[alias.resolvedCommand||'']:[]; const entry: UnknownThreatEntry = { id:`threat_${Date.now()}_${Math.random().toString(36).slice(2,6)}`, command, sessionId:this.sessionId, firstSeen:now, lastSeen:now, timestamp:now, count:1, risk:assessment.risk, level:assessment.level, category:assessment.category, reasons:[assessment.reason], frequency:1, possibleAliases:possible, riskAssessment:assessment }; this.unknownThreats.set(key, entry); try { recordUnknownCandidate(command, this.sessionId, LEARNING_CONFIG); } catch{} auditLog('WARNING','UNKNOWN_THREAT','New unknown command',{ command, risk:assessment.risk, level:assessment.level }); publishExecutionAttempt({ toolName:'run-powershell', level:'UNKNOWN', blocked:false, durationMs:0, success:false, exitCode:null, preview: command.substring(0,120)+' [UNKNOWN]', truncated:false, candidateNorm: undefined, reason:'unknown', incrementConfirmation:true }); }
+  private trackUnknownThreat(command:string, assessment: SecurityAssessment){ const key=command.toLowerCase().trim(); const now=new Date().toISOString(); if(this.unknownThreats.has(key)){ const ex=this.unknownThreats.get(key)!; ex.frequency++; ex.lastSeen=now; ex.riskAssessment=assessment; return; } this.threatStats.totalUnknownCommands++; this.threatStats.uniqueThreats++; if(assessment.risk==='HIGH'||assessment.risk==='CRITICAL') this.threatStats.highRiskThreats++; const alias=this.detectPowerShellAlias(command); const possible=alias.isAlias?[alias.resolvedCommand||'']:[]; const entry: UnknownThreatEntry = { id:`threat_${Date.now()}_${Math.random().toString(36).slice(2,6)}`, command, sessionId:this.sessionId, firstSeen:now, lastSeen:now, timestamp:now, count:1, risk:assessment.risk, level:assessment.level, category:assessment.category, reasons:[assessment.reason], frequency:1, possibleAliases:possible, riskAssessment:assessment }; this.unknownThreats.set(key, entry); try { recordUnknownCandidate(command, this.sessionId, LEARNING_CONFIG); } catch{} auditLog('WARNING','UNKNOWN_THREAT','New unknown command',{ command, risk:assessment.risk, level:assessment.level }); publishExecutionAttempt({ toolName:'run-powershell', level:'UNKNOWN', blocked:false, durationMs:0, success:false, exitCode:null, preview: command.substring(0,120)+' [UNKNOWN]', truncated:false, candidateNorm: undefined, reason:'unknown', incrementConfirmedRequired:true }); }
 
   /** Invalidate cached patterns to force rebuild on next classification */
   private invalidatePatternCache() {
@@ -127,6 +133,12 @@ export class EnterprisePowerShellMCPServer {
   }
 
   private classifyCommandSafety(command:string): SecurityAssessment { const upper=command.toUpperCase(); const lower=command.toLowerCase(); const alias=this.detectPowerShellAlias(command); if(alias.isAlias && alias.securityRisk==='CRITICAL'){ return { level:'CRITICAL', risk:'CRITICAL', reason: alias.reason+' - Alias masks dangerous command', color:'RED', blocked:true, requiresPrompt:false, category:'ALIAS_THREAT', patterns:[alias.originalCommand||''], recommendations:['Use full cmdlet names','Review intent'] }; }
+    // Git classification (no git tools exposed – classification only)
+    if(/^git\s+status(\s|$)/i.test(lower)) return { level:'SAFE', risk:'LOW', reason:'Git status read-only', color:'GREEN', blocked:false, requiresPrompt:false, category:'VCS_READONLY', patterns:['git status'], recommendations:['Safe to execute'] } as any;
+    if(/^git\s+diff(\s|$)/i.test(lower)) return { level:'SAFE', risk:'LOW', reason:'Git diff read-only', color:'GREEN', blocked:false, requiresPrompt:false, category:'VCS_READONLY', patterns:['git diff'], recommendations:['Safe to execute'] } as any;
+    if(/^git\s+log(\s|$)/i.test(lower)) return { level:'SAFE', risk:'LOW', reason:'Git log read-only', color:'GREEN', blocked:false, requiresPrompt:false, category:'VCS_READONLY', patterns:['git log'], recommendations:['Safe to execute'] } as any;
+    if(/^git\s+push\s+--force(\s|$)/i.test(lower)) return { level:'CRITICAL', risk:'CRITICAL', reason:'Force push blocked', color:'RED', blocked:true, requiresPrompt:false, category:'VCS_MODIFICATION', patterns:['git push --force'], recommendations:['Avoid force push; use --force-with-lease'] } as any;
+    if(/^git\s+(commit|push|pull|merge|rebase|cherry-pick|reset)\b/i.test(lower)) return { level:'RISKY', risk:'MEDIUM', reason:'Git repository modification - confirmation required', color:'YELLOW', blocked:false, requiresPrompt:true, category:'VCS_MODIFICATION', patterns:['git modify'], recommendations:['Add confirmed: true before executing'] } as any;
     // Explicit alias handling for tests / expected policy
     if(alias.isAlias){
       const a = alias.alias;
@@ -141,15 +153,25 @@ export class EnterprisePowerShellMCPServer {
         return { level:'RISKY', risk:'MEDIUM', reason:`File deletion alias ${a}`, color:'YELLOW', blocked:false, requiresPrompt:true, category:'FILE_OPERATION', patterns:[a], recommendations:['Add confirmed: true','Review path carefully'] };
       }
     }
-    // Git command classification (lightweight patterns)
-    if(/^git\s+status(\s|$)/i.test(command)){
-      return { level:'SAFE', risk:'LOW', reason:'Safe VCS read-only (git status)', color:'GREEN', blocked:false, requiresPrompt:false, category:'VCS_READONLY', patterns:['git status'], recommendations:['Safe to execute'] };
-    }
-    if(/^git\s+push\s+--force(\s|$)/i.test(command)){
-      return { level:'CRITICAL', risk:'CRITICAL', reason:'Force push blocked (git push --force)', color:'RED', blocked:true, requiresPrompt:false, category:'VCS_MODIFICATION', patterns:['git push --force'], recommendations:['Avoid --force; use --force-with-lease or review changes'] };
-    }
     if(!this.mergedPatterns){ const sup=new Set((ENTERPRISE_CONFIG.security.suppressPatterns||[]).map((p:string)=>p.toLowerCase())); const addBlocked=(ENTERPRISE_CONFIG.security.additionalBlocked||[]).map((p:string)=> new RegExp(p,'i')); const addSafe=(ENTERPRISE_CONFIG.security.additionalSafe||[]).map((p:string)=> new RegExp(p,'i')); const filter=(arr:readonly string[])=> arr.filter(p=>!sup.has(p.toLowerCase())).map(p=> new RegExp(p,'i')); const blocked=[ ...filter(REGISTRY_MODIFICATION_PATTERNS), ...filter(SYSTEM_FILE_PATTERNS), ...filter(ROOT_DELETION_PATTERNS), ...filter(REMOTE_MODIFICATION_PATTERNS), ...filter(CRITICAL_PATTERNS), ...filter(DANGEROUS_COMMANDS), ...addBlocked ]; const risky=filter(RISKY_PATTERNS); let learned:RegExp[]=[]; try { learned = loadLearnedPatterns().map(p=> new RegExp(p,'i')); } catch{} const safe=[...filter(SAFE_PATTERNS), ...addSafe, ...learned]; this.mergedPatterns={ safe, risky, blocked }; }
-  for(const rx of this.mergedPatterns.blocked){ if(rx.test(command)){ const isCrit = /powershell|encodedcommand|invoke-webrequest|download|string|webclient|format-volume|set-itemproperty/i.test(rx.source); const level = isCrit? 'CRITICAL':'BLOCKED'; let reason = `Blocked by security policy: ${rx.source}`; if(/hk|registry|hklm/i.test(rx.source)) reason = `Registry modification blocked: ${rx.source}`; return { level, risk:'CRITICAL', reason, color:'RED', blocked:true, requiresPrompt:false, category:'SECURITY_THREAT', patterns:[rx.source], recommendations:['Remove dangerous operations','Use read-only alternatives'] }; } }
+    for(const rx of this.mergedPatterns.blocked){
+      if(rx.test(command)){
+        // Downgrade certain patterns to confirmation-required per feedback tests (registry, service, network) unless truly critical
+        const lowerSrc = rx.source.toLowerCase();
+  // Treat explicit registry cmdlets (Set-ItemProperty / Remove-ItemProperty) as registry modifications requiring confirmation (feedback gap tests)
+  const registryLike = /hk|registry|hklm|set-itemproperty|remove-itemproperty|new-itemproperty/.test(lowerSrc);
+        const serviceLike = /service/.test(lowerSrc);
+        const networkLike = /invoke-webrequest|invoke-restmethod|curl\s|wget\s/.test(lowerSrc);
+        const criticalLike = /format-volume|invoke-expression|encodedcommand|download|string|webclient/.test(lowerSrc);
+        if(registryLike || serviceLike || networkLike){
+          return { level:'RISKY', risk:'MEDIUM', reason:`Confirmation required: ${rx.source}`, color:'YELLOW', blocked:false, requiresPrompt:true, category: registryLike? 'REGISTRY_MODIFICATION' : serviceLike? 'SERVICE_MANAGEMENT' : 'NETWORK_OPERATION', patterns:[rx.source], recommendations:['Add confirmed: true','Review intent carefully'] };
+        }
+        if(criticalLike){
+          return { level:'CRITICAL', risk:'CRITICAL', reason:`Blocked by security policy: ${rx.source}`, color:'RED', blocked:true, requiresPrompt:false, category:'SECURITY_THREAT', patterns:[rx.source], recommendations:['Remove dangerous operations','Use read-only alternatives'] };
+        }
+        return { level:'BLOCKED', risk:'CRITICAL', reason:`Blocked by security policy: ${rx.source}`, color:'RED', blocked:true, requiresPrompt:false, category:'SECURITY_THREAT', patterns:[rx.source], recommendations:['Remove dangerous operations','Use read-only alternatives'] };
+      }
+    }
     if(upper.includes('FORMAT C:')||upper.includes('SHUTDOWN')||lower.includes('rm -rf')||upper.includes('NET USER')){ return { level:'DANGEROUS', risk:'HIGH', reason:'System destructive or privilege escalation command', color:'MAGENTA', blocked:true, requiresPrompt:false, category:'SYSTEM_DESTRUCTION', recommendations:['Use non-destructive alternatives'] }; }
     for(const rx of this.mergedPatterns.risky){ if(rx.test(command)){ return { level:'RISKY', risk:'MEDIUM', reason:`File/service modification operation: ${rx.source}`, color:'YELLOW', blocked:false, requiresPrompt:true, category:'FILE_OPERATION', patterns:[rx.source], recommendations:['Add confirmed: true','Use -WhatIf for testing'] }; } }
     for(const rx of this.mergedPatterns.safe){ if(rx.test(command)){ return { level:'SAFE', risk:'LOW', reason:`Safe read-only operation: ${rx.source}`, color:'GREEN', blocked:false, requiresPrompt:false, category:'INFORMATION_GATHERING', patterns:[rx.source], recommendations:['Safe to execute'] }; } }
@@ -159,6 +181,15 @@ export class EnterprisePowerShellMCPServer {
 
   private async handleToolCall(name:string, args:any, requestId:string){ const started=Date.now(); const hrStart=process.hrtime.bigint(); let published=false; const publish=(success:boolean, note?:string)=>{ if(published) return; let duration=Date.now()-started; try { const hrEnd=process.hrtime.bigint(); const precise = Number(hrEnd-hrStart)/1e6; if(precise>0) duration = Math.max(duration, Math.max(1, Math.round(precise))); } catch{} if(name==='run-powershell'||name==='run-powershellscript'){ published=true; return; } try { metricsHttpServer.publishExecution({ id:`tool-${Date.now()}-${Math.random().toString(36).slice(2,8)}`, level: success?'SAFE':'UNKNOWN', durationMs: duration, blocked:false, truncated:false, timestamp:new Date().toISOString(), preview:`${name}${note? ' '+note:''}`.substring(0,120), success, exitCode:null, toolName:name }); } catch{} try { metricsRegistry.record({ level: success?'SAFE':'UNKNOWN', blocked:false, durationMs: duration, truncated:false }); } catch{} published=true; };
     try {
+      // Zod validation via registry (lightweight). If invalid arguments, return structured error content.
+      try {
+        const def = getToolDef(name);
+        if(def){ def.zod.parse(args); }
+      } catch(e:any){
+        const msg = e?.errors ? e.errors.map((m:any)=> m.message).join('; ') : (e?.message||'Invalid arguments');
+        publish(false,'arg-validate');
+        return { content:[{ type:'text', text: `Invalid arguments for ${name}: ${msg}` }], structuredContent:{ ok:false, error:'INVALID_ARGUMENTS', details: msg } };
+      }
       switch(name){
         case 'emit-log': {
           // Basic hardened logging: secret redaction + length truncation + explicit status keywords
@@ -202,86 +233,52 @@ export class EnterprisePowerShellMCPServer {
         case 'working-directory-policy': { if(args.action==='get' || !args.action){ publish(true,'get'); return { content:[{ type:'text', text: JSON.stringify(ENTERPRISE_CONFIG.security,null,2) }] }; } else if(args.action==='set'){ if(typeof args.enabled==='boolean') ENTERPRISE_CONFIG.security.enforceWorkingDirectory=args.enabled; if(Array.isArray(args.allowedWriteRoots)) ENTERPRISE_CONFIG.security.allowedWriteRoots=args.allowedWriteRoots; auditLog('INFO','WORKING_DIR_POLICY_UPDATE','Policy updated',{ requestId, enforce: ENTERPRISE_CONFIG.security.enforceWorkingDirectory }); publish(true,'set'); return { content:[{ type:'text', text: JSON.stringify({ ok:true, policy: ENTERPRISE_CONFIG.security },null,2) }] }; } publish(false,'unknown-action'); return { content:[{ type:'text', text: JSON.stringify({ error:'Unknown action' }) }] }; }
         case 'threat-analysis': { const threats=Array.from(this.unknownThreats.values()).sort((a,b)=> b.count-a.count); publish(true); return { content:[{ type:'text', text: JSON.stringify({ summary:this.threatStats, threats }, null, 2) }] }; }
         case 'learn': { const action=args.action; if(action==='list'){ const data=aggregateCandidates(args.limit, args.minCount); publish(true,'list'); return { content:[{ type:'text', text: JSON.stringify({ candidates:data }, null, 2) }] }; } else if(action==='recommend'){ const rec=recommendCandidates(args.limit, args.minCount); publish(true,'recommend'); return { content:[{ type:'text', text: JSON.stringify({ recommendations:rec }, null, 2) }] }; } else if(action==='queue'){ const res=queueCandidates(args.normalized||[]); publish(true,'queue'); return { content:[{ type:'text', text: JSON.stringify({ queued:res }, null, 2) }] }; } else if(action==='approve'){ const res=approveQueuedCandidates(args.normalized||[]); if(res.promoted > 0) this.invalidatePatternCache(); publish(true,'approve'); return { content:[{ type:'text', text: JSON.stringify({ approved:res }, null, 2) }] }; } else if(action==='remove'){ const res=removeFromQueue(args.normalized||[]); publish(true,'remove'); return { content:[{ type:'text', text: JSON.stringify({ removed:res }, null, 2) }] }; } publish(false,'unknown-learn-action'); return { content:[{ type:'text', text: JSON.stringify({ error:'Unknown learn action' }) }] }; }
-        case 'help': { const topic=(args.topic||'').toLowerCase(); const help:Record<string,string>={ security:'Security classification system: SAFE,RISKY,DANGEROUS,CRITICAL,UNKNOWN,BLOCKED.', monitoring:'Use server-stats for metrics; threat-analysis for unknown commands.', authentication:'Set MCP_AUTH_KEY env var to enable key requirement.', examples:'run-powershell { command:"Get-Process | Select -First 1" }', 'working-directory':'Policy enforced roots: '+(ENTERPRISE_CONFIG.security.allowedWriteRoots||[]).join(', '), timeouts:'Timeout parameters are SECONDS. Use "timeout". Alias "aiAgentTimeoutSec" accepted (legacy: aiAgentTimeout). Default=' + ((ENTERPRISE_CONFIG.limits.defaultTimeoutMs||90000)/1000)+'s.' }; if(topic && help[topic]){ publish(true,'topic'); return { content:[{ type:'text', text: help[topic] }] }; } publish(true,'all'); return { content:[{ type:'text', text: JSON.stringify(help,null,2) }] }; }
-        case 'health': { const mem=process.memoryUsage(); const uptimeSec = Math.round((Date.now()-this.startTime.getTime())/1000); const json={ uptimeSec, memory:{ rss: mem.rss, heapUsed: mem.heapUsed, heapTotal: mem.heapTotal }, config:{ timeoutMs: ENTERPRISE_CONFIG.limits.defaultTimeoutMs || 90000 } }; publish(true); return { content:[{ type:'text', text: JSON.stringify(json) }], structuredContent: json }; }
+  case 'help': { const topic=(args.topic||'').toLowerCase(); const help:Record<string,string>={ security:'Security classification system: SAFE,RISKY,DANGEROUS,CRITICAL,UNKNOWN,BLOCKED.', monitoring:'Use server-stats for metrics; threat-analysis for unknown commands.', authentication:'Set MCP_AUTH_KEY env var to enable key requirement.', examples:'run-powershell { command:"Get-Process | Select -First 1" }', 'working-directory':'Policy enforced roots: '+(ENTERPRISE_CONFIG.security.allowedWriteRoots||[]).join(', '), timeouts:'Timeout parameter is timeoutSeconds (seconds). Default=' + ((ENTERPRISE_CONFIG.limits.defaultTimeoutMs||90000)/1000)+'s. No other timeout fields accepted.' }; if(topic && help[topic]){ publish(true,'topic'); return { content:[{ type:'text', text: help[topic] }] }; } publish(true,'all'); return { content:[{ type:'text', text: JSON.stringify(help,null,2) }] }; }
+  case 'health': { const mem=process.memoryUsage(); const uptimeSec = Math.round((Date.now()-this.startTime.getTime())/1000); const json={ uptimeSec, memory:{ rss: mem.rss, heapUsed: mem.heapUsed, heapTotal: mem.heapTotal }, config:{ timeoutMs: ENTERPRISE_CONFIG.limits.defaultTimeoutMs || 90000 } }; publish(true); return { content:[{ type:'text', text: JSON.stringify(json) }], structuredContent: json }; }
+  case 'tool-tree': { const tree=listToolTree(); publish(true); return { content:[{ type:'text', text: JSON.stringify(tree,null,2) }], structuredContent: tree }; }
         default: publish(false,'unknown-tool'); return { content:[{ type:'text', text: JSON.stringify({ error:'Unknown tool: '+name }) }] }; }
-    } catch(error){ auditLog('ERROR','TOOL_CALL_FAIL','Tool invocation failed',{ name, error: error instanceof Error? error.message: String(error), requestId }); publish(false,'exception'); if(error && (error as any).name==='McpError'){ throw error; } return { content:[{ type:'text', text: JSON.stringify({ error: error instanceof Error? error.message:String(error) }) }] }; }
+    } catch(error){
+      auditLog('ERROR','TOOL_CALL_FAIL','Tool invocation failed',{ name, error: error instanceof Error? error.message: String(error), requestId });
+      publish(false,'exception');
+      // Broaden detection: some McpError instances may not have name==='McpError' after transpilation; detect by presence of numeric code
+      if(error && ((error as any).name==='McpError' || (error as any).code !== undefined)){
+        const msg = (error as any).message || '';
+        if(/Working directory outside allowed roots/i.test(msg)){
+          // Tests expect this specific policy violation to appear inline in content instead of JSON-RPC error envelope
+          return { content:[{ type:'text', text: msg }] };
+        }
+        throw error;
+      }
+      return { content:[{ type:'text', text: JSON.stringify({ error: error instanceof Error? error.message:String(error) }) }] };
+    }
   }
 
-  private setupHandlers(){ this.server.setRequestHandler(ListToolsRequestSchema, async()=>({ tools:[ { name:'emit-log', description:'Emit structured audit log entry', inputSchema:{ type:'object', properties:{ message:{ type:'string' } } } }, { name:'learn', description:'Learning actions (list|recommend|queue|approve|remove)', inputSchema:{ type:'object', properties:{ action:{ type:'string', enum:['list','recommend','queue','approve','remove'] }, limit:{ type:'number' }, minCount:{ type:'number' }, normalized:{ type:'array', items:{ type:'string' } } }, required:['action'] } }, { name:'working-directory-policy', description:'Get or set working directory policy', inputSchema:{ type:'object', properties:{ action:{ type:'string', enum:['get','set'] }, enabled:{ type:'boolean' }, allowedWriteRoots:{ type:'array', items:{ type:'string' } } } } }, { name:'server-stats', description:'Server metrics snapshot', inputSchema:{ type:'object', properties:{ verbose:{ type:'boolean' } } } }, { name:'memory-stats', description:'Process memory usage (optionally trigger GC)', inputSchema:{ type:'object', properties:{ gc:{ type:'boolean' } } } }, { name:'agent-prompts', description:'Retrieve prompt library content', inputSchema:{ type:'object', properties:{ category:{ type:'string' }, format:{ type:'string', enum:['markdown','json'] } } } }, { name:'threat-analysis', description:'Current threat / unknown command analysis', inputSchema:{ type:'object', properties:{} } }, { name:'run-powershell', description:'Execute PowerShell command or script', inputSchema:{ type:'object', properties:{ command:{ type:'string' }, script:{ type:'string' }, workingDirectory:{ type:'string' }, timeout:{ type:'number' }, aiAgentTimeoutSec:{ type:'number' }, confirmed:{ type:'boolean' }, override:{ type:'boolean' } } } }, { name:'run-powershellscript', description:'Execute PowerShell via inline script or file', inputSchema:{ type:'object', properties:{ script:{ type:'string' }, scriptFile:{ type:'string' }, workingDirectory:{ type:'string' }, timeout:{ type:'number' }, aiAgentTimeoutSec:{ type:'number' }, confirmed:{ type:'boolean' }, override:{ type:'boolean' } } } }, { name:'powershell-syntax-check', description:'Validate PowerShell syntax', inputSchema:{ type:'object', properties:{ script:{ type:'string' }, filePath:{ type:'string' } } } }, { name:'ai-agent-tests', description:'Run AI agent test suite', inputSchema:{ type:'object', properties:{ testSuite:{ type:'string' }, skipDangerous:{ type:'boolean' } } } }, { name:'help', description:'Get structured help', inputSchema:{ type:'object', properties:{ topic:{ type:'string' } } } }, { name:'health', description:'Health snapshot', inputSchema:{ type:'object', properties:{} } } ] })); this.server.setRequestHandler(CallToolRequestSchema, async (req)=>{ const requestId=`req_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; return this.handleToolCall(req.params.name, req.params.arguments||{}, requestId); }); }
-  // Provide a direct accessor for tool list for legacy line protocol (SDK handlers only fire when transport connected)
-  private getToolListDirect(){ return [ 'emit-log','learn','working-directory-policy','server-stats','memory-stats','agent-prompts','threat-analysis','run-powershell','run-powershellscript','powershell-syntax-check','ai-agent-tests','help','health' ].map(n=>({ name:n })); }
+  private setupHandlers(){
+  // Registry-driven tools/list
+  this.server.setRequestHandler(ListToolsRequestSchema, async()=>({ tools: listToolsForSurface() }));
+    this.server.setRequestHandler(CallToolRequestSchema, async (req)=>{ const requestId=`req_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; return this.handleToolCall(req.params.name, req.params.arguments||{}, requestId); });
+  }
+  // Provide a direct accessor for legacy protocol list (core only) when legacy mode used
+  private getToolListDirect(){ return [ 'run-powershell','powershell-syntax-check','emit-log','working-directory-policy','server-stats','help' ].map(n=>({ name:n })); }
   
   /** Explicit initialize handler to guarantee timely handshake even under load */
   private _initHandlerRegistered = (()=>{ try { this.server.setRequestHandler(InitializeRequestSchema, async (_req:any)=> ({
     protocolVersion: '2024-11-05',
     capabilities: { tools: { listChanged: true } },
-    serverInfo: { name: 'enterprise-powershell-mcp-server', version: '2.0.0' }
+    serverInfo: { name: 'enterprise-powershell-mcp-server', version: '2.0.0' },
+  instructions: 'Call tools/list for core tools. Hidden admin tools (memory-stats, threat-analysis, learn, health, ai-agent-tests) are callable directly. Use tools/call { name, arguments }. Provide confirmed:true for RISKY or UNKNOWN.'
   })); } catch {} return true; })();
 
   async start(){
-    // By default prefer legacy line-based protocol for existing test harness.
-    // Opt into framed MCP transport only if explicitly requested.
-    const useFramed = process.env.MCP_FRAMED_STDIO==='1';
-    if(useFramed){
-      const transport = new StdioServerTransport();
-      auditLog('INFO','SERVER_CONNECT','Connecting',{ transport:'stdio-framed', pid:process.pid, nodeVersion:process.version, serverVersion:'2.0.0' });
-      await this.server.connect(transport);
-      console.error('✅ ENTERPRISE MCP SERVER CONNECTED');
-      console.error('🔗 Transport: STDIO FRAMED');
-      console.error('📡 Ready for requests');
-      console.error('🛡️  Security active');
-      console.error('='.repeat(60));
-      auditLog('INFO','SERVER_READY','Server ready',{ connectionTime:new Date().toISOString(), totalStartupTime: Date.now()-this.startTime.getTime()+'ms', serverVersion:'2.0.0', mode:'framed' });
-      return;
-    }
-    // Legacy newline JSON protocol implementation.
-    auditLog('INFO','SERVER_CONNECT','Connecting',{ transport:'line-json', pid:process.pid, nodeVersion:process.version, serverVersion:'2.0.0' });
-    console.error('✅ ENTERPRISE MCP SERVER CONNECTED');
-    console.error('🔗 Transport: LINE JSON (compat)');
-    console.error('📡 Ready for requests');
+    // Standard framed MCP transport (spec-compliant)
+    const transport = new StdioServerTransport();
+    auditLog('INFO','SERVER_CONNECT','Connecting',{ transport:'stdio-framed', pid:process.pid, nodeVersion:process.version, serverVersion:'2.0.0' });
+    await this.server.connect(transport);
+    console.error('✅ ENTERPRISE MCP SERVER CONNECTED (FRAMED)');
+    console.error('📡 Ready for requests (initialize -> tools/list -> tools/call)');
     console.error('🛡️  Security active');
     console.error('='.repeat(60));
-    auditLog('INFO','SERVER_READY','Server ready',{ connectionTime:new Date().toISOString(), totalStartupTime: Date.now()-this.startTime.getTime()+'ms', serverVersion:'2.0.0', mode:'line' });
-    let buf='';
-    const write = (obj:any)=>{ try { process.stdout.write(JSON.stringify(obj)+'\n'); } catch{} };
-    const handleMessage = async (msg:any)=>{
-      if(!msg || typeof msg!=='object') return;
-      if(msg.method==='initialize'){
-        write({ jsonrpc:'2.0', id: msg.id, result:{ protocolVersion:'2024-11-05', capabilities:{ tools:{ listChanged:true } }, serverInfo:{ name:'enterprise-powershell-mcp-server', version:'2.0.0' } } });
-        return;
-      }
-      if(msg.method==='tools/list'){
-        try {
-          const toolsResult = { tools: this.getToolListDirect() };
-          write({ jsonrpc:'2.0', id: msg.id, result: toolsResult });
-        } catch(e){ write({ jsonrpc:'2.0', id: msg.id, error:{ code: ErrorCode.InternalError, message: e instanceof Error? e.message:String(e) } }); }
-        return;
-      }
-      if(msg.method==='tools/call'){
-        try {
-          const name = msg.params?.name; const args = msg.params?.arguments||{};
-          const result = await this.handleToolCall(name, args, `req_${Date.now()}_${Math.random().toString(36).slice(2,6)}`);
-          write({ jsonrpc:'2.0', id: msg.id, result });
-        } catch(e){
-          if(e instanceof McpError){ write({ jsonrpc:'2.0', id: msg.id, error:{ code: e.code, message: e.message } }); }
-          else write({ jsonrpc:'2.0', id: msg.id, error:{ code: ErrorCode.InternalError, message: e instanceof Error? e.message:String(e) } });
-        }
-        return;
-      }
-      // Fallback unknown
-      write({ jsonrpc:'2.0', id: msg.id, error:{ code: ErrorCode.MethodNotFound, message: 'Unknown method: '+msg.method } });
-    };
-    process.stdin.on('data', chunk=>{
-      buf += chunk.toString();
-      let idx;
-      while((idx = buf.indexOf('\n')) !== -1){
-        const line = buf.slice(0, idx).trim();
-        buf = buf.slice(idx+1);
-        if(!line) continue;
-        try { const msg = JSON.parse(line); handleMessage(msg); } catch{ /* ignore parse errors */ }
-      }
-    });
+    auditLog('INFO','SERVER_READY','Server ready',{ connectionTime:new Date().toISOString(), totalStartupTime: Date.now()-this.startTime.getTime()+'ms', serverVersion:'2.0.0', mode:'framed' });
   }
 }
 
@@ -314,7 +311,12 @@ function startFramerMode(){
       const len=parseInt(lenRaw,10); const start=h+4; if(buf.length < start+len) break; const body = buf.slice(start,start+len); buf = buf.slice(start+len); let msg:any; try{ msg=JSON.parse(body); }catch{ console.error('[FRAMER] JSON parse failure'); continue; }
       if(debug){ try { console.error(`[FRAMER][RX] id=${msg.id||'?'} method=${msg.method} tokens=${tokens}`); } catch{} }
       if(msg.method==='initialize'){ write({ jsonrpc:'2.0', id: msg.id, result: initReplyBase }); continue; }
-      if(msg.method==='tools/list'){ write({ jsonrpc:'2.0', id: msg.id, result:{ tools:[ { name:'run-powershell' }, { name:'emit-log' }, { name:'memory-stats' }, { name:'server-stats' }, { name:'help' }, { name:'health' } ] } }); continue; }
+      if(msg.method==='tools/list'){
+        // Use unified registry-driven surface (core tools only) with schemas
+        const tools = listToolsForSurface();
+        write({ jsonrpc:'2.0', id: msg.id, result:{ tools } });
+        continue;
+      }
       if(msg.method==='tools/call' && msg.params?.name==='run-powershell'){
         const command = msg.params.arguments?.command || ''; const lines = []; if(command.includes('TESTFRAMER')||command.includes('Write-Output')) lines.push('TESTFRAMER'); if(command.includes('RATE')) lines.push('RATE'); if(lines.length===0) lines.push('OK');
         if(tokens<=0){

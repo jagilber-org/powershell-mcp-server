@@ -41,15 +41,16 @@ describe('run-powershell advanced timeout + watchdog + adaptive', ()=>{
     expect(stdoutPreview).toMatch(/done/);
   }, 25000);
 
-  test('long deprecated timeout parameter surfaces warnings array', async ()=>{
+  test('long timeout via deprecated alias surfaces deprecation + long-timeout warnings', async ()=>{
     const srv = startServer(); await waitForReady(srv); const res=collect(srv);
+  // Use deprecated alias to guarantee a deprecation warning plus long-timeout warning
   rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "warn-test"', aiAgentTimeout:65, confirmed:true }},'advWarn');
     const msg = await waitFor(res,'advWarn',12000); srv.kill(); expect(msg).toBeTruthy();
     const sc = msg.result?.structuredContent || {};
     expect(sc.originalTimeoutSeconds).toBe(65);
     const warnings = sc.warnings || [];
     expect(warnings.length).toBeGreaterThan(0);
-    expect(warnings.some(w=> /deprecated/i.test(w))).toBe(true);
+  expect(warnings.some(w=> /deprecated/i.test(w))).toBe(true); // deprecation for alias
     expect(warnings.some(w=> /long timeout/i.test(w))).toBe(true);
   }, 15000);
 });

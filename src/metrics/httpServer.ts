@@ -113,6 +113,110 @@ export class MetricsHttpServer {
             if(this.debugEnabled){ console.error(`[METRICS][BASELINE_HTTP] uptimeSec=${process.uptime().toFixed(2)} wsMB=${wsMB}`); }
           } catch{}
         }
+        // Emit an initial startup event so dashboard isn't visually empty (can be suppressed via env)
+        if(process.env.METRICS_SUPPRESS_START_EVENT !== '1'){
+          try {
+            const startupEv: ExecutionEventPayload = {
+              id: 'startup-'+Date.now(),
+              level: 'SAFE',
+              durationMs: 0,
+              blocked: false,
+              truncated: false,
+              timestamp: new Date().toISOString(),
+              preview: '[server started]',
+              success: true,
+              exitCode: 0,
+              toolName: 'startup'
+            };
+            this.publishExecution(startupEv);
+            metricsRegistry.record({ level: 'SAFE' as any, blocked:false, durationMs:0, truncated:false });
+            if(this.debugEnabled){ console.error('[METRICS][START_EVENT] published startup event'); }
+          } catch{}
+        }
+        // Fallback: if after a short delay no events exist (e.g., startup event suppressed), emit a synthetic marker
+        setTimeout(() => {
+          try {
+            if(!this.replayBuffer.length){
+              const fallbackEv: ExecutionEventPayload = {
+                id: 'startup-fallback-'+Date.now(),
+                level: 'SAFE',
+                durationMs: 0,
+                blocked: false,
+                truncated: false,
+                timestamp: new Date().toISOString(),
+                preview: '[startup fallback]',
+                success: true,
+                exitCode: 0,
+                toolName: 'startup'
+              };
+              this.publishExecution(fallbackEv);
+              // Only record if totalCommands still zero to avoid double counting when original startup event existed
+              try {
+                const snap = metricsRegistry.snapshot(false);
+                if(snap.totalCommands === 0){
+                  metricsRegistry.record({ level: 'SAFE' as any, blocked:false, durationMs:0, truncated:false });
+                }
+              } catch {}
+              if(this.debugEnabled){ console.error('[METRICS][START_EVENT][FALLBACK] emitted'); }
+            }
+          } catch {}
+        }, 3500).unref?.();
+        // Second-stage probe: after 15s if STILL no events (no commands executed) emit a probe event
+        setTimeout(() => {
+          try {
+            if(!this.replayBuffer.length){
+              const probe: ExecutionEventPayload = {
+                id: 'startup-probe-'+Date.now(),
+                level: 'SAFE',
+                durationMs: 0,
+                blocked: false,
+                truncated: false,
+                timestamp: new Date().toISOString(),
+                preview: '[startup probe]',
+                success: true,
+                exitCode: 0,
+                toolName: 'startup'
+              };
+              this.publishExecution(probe);
+              try {
+                const snap = metricsRegistry.snapshot(false);
+                if(snap.totalCommands === 0){
+                  metricsRegistry.record({ level: 'SAFE' as any, blocked:false, durationMs:0, truncated:false });
+                }
+              } catch {}
+              if(this.debugEnabled){ console.error('[METRICS][START_EVENT][PROBE] emitted'); }
+            }
+          } catch {}
+        }, 15000).unref?.();
+        // Aggressive bootstrap interval: keep emitting until first event observed (safety net if above timers missed)
+        if(process.env.METRICS_DISABLE_BOOTSTRAP !== '1'){
+          let bootstrapAttempts = 0; const bootstrapMax = 8; // up to ~16s (2s * 8) worst case
+          const bootstrapTimer = setInterval(()=>{
+            try {
+              if(this.replayBuffer.length){ clearInterval(bootstrapTimer); return; }
+              bootstrapAttempts++;
+              const boot: ExecutionEventPayload = {
+                id: 'startup-ensure-'+Date.now(),
+                level: 'SAFE',
+                durationMs: 0,
+                blocked: false,
+                truncated: false,
+                timestamp: new Date().toISOString(),
+                preview: '[startup ensure]',
+                success: true,
+                exitCode: 0,
+                toolName: 'startup'
+              };
+              this.publishExecution(boot);
+              try {
+                const snap = metricsRegistry.snapshot(false);
+                if(snap.totalCommands === 0){ metricsRegistry.record({ level:'SAFE' as any, blocked:false, durationMs:0, truncated:false }); }
+              } catch {}
+              if(this.debugEnabled || bootstrapAttempts===1){ console.error('[METRICS][START_EVENT][ENSURE] emitted attempt '+bootstrapAttempts); }
+              if(bootstrapAttempts >= bootstrapMax){ clearInterval(bootstrapTimer); }
+            } catch { clearInterval(bootstrapTimer); }
+          }, 2000).unref?.();
+        }
         // eslint-disable-next-line no-console
   const proto = 'http'; // internal loopback; no external exposure
   console.error(`[METRICS] HTTP server listening on ${proto}://${host}:${attemptPort}`);
@@ -155,6 +259,10 @@ export class MetricsHttpServer {
   const rawUrl = req.url || '/';
   const url = rawUrl; // keep original for query parsing where needed
   const path = rawUrl.split('?')[0];
+  const trace = this.debugEnabled || process.env.METRICS_TRACE === '1';
+  if(trace){
+    try { console.error(`[METRICS][REQ] ${req.method} ${rawUrl}`); } catch {}
+  }
   if (path === '/healthz') {
       this.writeJson(res, { status: 'ok' });
       return;
@@ -178,6 +286,9 @@ export class MetricsHttpServer {
         cpuHistory: this.cpuHistory,
         memHistory: this.memHistory
       };
+      if(trace){
+        try { console.error(`[METRICS][API_METRICS_REQ] total=${snap.totalCommands} seq=${this.seqCounter} replay=${this.replayBuffer.length}`); } catch {}
+      }
       if (this.debugEnabled) {
         try { console.error(`[METRICS][API_METRICS] total=${snap.totalCommands} safe=${snap.safeCommands} risky=${snap.riskyCommands} blocked=${snap.blockedCommands} unknown=${snap.unknownCommands} timeouts=${(snap as any).timeouts}`); } catch {}
       }
@@ -350,7 +461,7 @@ export class MetricsHttpServer {
     <section class="card"><h3>SAFE</h3><div class="metric" id="m_safe">0</div></section>
     <section class="card"><h3>RISKY</h3><div class="metric" id="m_risky">0</div></section>
     <section class="card"><h3>BLOCKED</h3><div class="metric" id="m_blocked">0</div></section>
-    <section class="card"><h3>CONFIRM?</h3><div class="metric" id="m_confirm">0</div></section>
+  <section class="card"><h3>CONFIRM PENDING</h3><div class="metric" id="m_confirm">0</div></section>
   <section class="card"><h3>TIMEOUTS</h3><div class="metric" id="m_timeouts">0</div></section>
     <section class="card"><h3>AVG ms</h3><div class="metric" id="m_avg">0</div></section>
     <section class="card"><h3>P95 ms</h3><div class="metric" id="m_p95">0</div></section>
@@ -522,7 +633,7 @@ export class MetricsHttpServer {
       setMetric(metricsIds.risky, m.riskyCommands);
       setMetric(metricsIds.blocked, m.blockedCommands);
       setMetric(metricsIds.avg, m.averageDurationMs);
-      if('confirmationRequired' in m) setMetric(metricsIds.confirm, m.confirmationRequired);
+  if('confirmedRequired' in m) setMetric(metricsIds.confirm, m.confirmedRequired);
       setMetric(metricsIds.p95, m.p95DurationMs);
       if('timeouts' in m) setMetric(metricsIds.timeouts, m.timeouts);
       const p=m.performance||{};

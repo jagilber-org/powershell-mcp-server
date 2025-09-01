@@ -1403,7 +1403,7 @@ export class VSCodePowerShellMcpServer {
                             rootDeletions: ['Remove-Item C:\\', 'Format-Volume -DriveLetter', 'del C:\\'],
                             remoteOperations: ['-ComputerName (non-localhost)', 'Invoke-Command -ComputerName', 'Enter-PSSession']
                         },
-                        confirmationRequired: {
+                        confirmedRequired: {
                             fileOperations: ['Remove-Item', 'New-Item', 'Set-Content'],
                             serviceOperations: ['Stop-Service', 'Start-Service', 'Set-Service'],
                             networkOperations: ['Test-Connection', 'Invoke-WebRequest']
