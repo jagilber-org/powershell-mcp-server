@@ -2,16 +2,16 @@
 
 This file contains correct usage patterns to avoid common errors.
 
-## Confirmation Parameter Examples
+## confirmed Parameter Examples
 
 ### ❌ Common Mistakes
 
 ```json
 // Wrong parameter name
-{"name":"run-powershell","arguments":{"command":"git commit","confirm":true}}
+{"name":"run-powershell","arguments":{"command":"git commit","confirmed":true}}
 
 // Wrong parameter name variations
-{"name":"run-powershell","arguments":{"command":"git commit","confirmation":true}}
+{"name":"run-powershell","arguments":{"command":"git commit","confirmed":true}}
 {"name":"run-powershell","arguments":{"command":"git commit","approve":true}}
 ```
 
@@ -70,7 +70,7 @@ When using a global MCP server (configured in VS Code settings), always specify 
 }}
 ```
 
-### RISKY Command (Requires Confirmation)
+### RISKY Command (requires confirmed:true)
 
 ```json
 {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{
@@ -83,7 +83,7 @@ When using a global MCP server (configured in VS Code settings), always specify 
 }}
 ```
 
-### UNKNOWN Command - First Call (Requires Confirmation)
+### UNKNOWN Command - First Call (requires confirmed:true)
 
 ```json
 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
@@ -96,7 +96,7 @@ When using a global MCP server (configured in VS Code settings), always specify 
 }}
 ```
 
-### Same UNKNOWN Command - After Learning (No Confirmation Needed)
+### Same UNKNOWN Command - After Learning (No confirmed Needed)
 
 ```json
 // After the custom-tool.exe is learned and approved via learning system:

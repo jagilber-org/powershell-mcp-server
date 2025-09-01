@@ -9,7 +9,7 @@ describe('registry / network / service classification end-to-end', ()=>{
 		rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Set-ItemProperty -Path "HKLM:SOFTWARE\\Test" -Name X -Value 1' }},'reg1');
 		await wait(res,'reg1');
 			if(res['reg1'].error){
-				expect((res['reg1'].error.message||'').toLowerCase()).toMatch(/confirmation required|blocked/);
+				expect((res['reg1'].error.message||'').toLowerCase()).toMatch(/requires confirmed:true|blocked/);
 			} else {
 				// If no error, ensure classification metadata present
 				const sc = res['reg1'].result?.structuredContent;
@@ -29,7 +29,7 @@ describe('registry / network / service classification end-to-end', ()=>{
 		rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Invoke-WebRequest -Uri "https://example.com"' }},'net1');
 		await wait(res,'net1');
 			if(res['net1'].error){
-				expect((res['net1'].error.message||'').toLowerCase()).toMatch(/confirmation required|blocked/);
+				expect((res['net1'].error.message||'').toLowerCase()).toMatch(/requires confirmed:true|blocked/);
 			} else {
 				const sc1 = res['net1'].result?.structuredContent; expect(sc1).toBeTruthy();
 			}
@@ -45,7 +45,7 @@ describe('registry / network / service classification end-to-end', ()=>{
 		rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Stop-Service -Name Spooler' }},'svc1');
 		await wait(res,'svc1'); srv.kill();
 			if(res['svc1'].error){
-				expect((res['svc1'].error.message||'').toLowerCase()).toMatch(/confirmation required|blocked/);
+				expect((res['svc1'].error.message||'').toLowerCase()).toMatch(/requires confirmed:true|blocked/);
 			} else {
 				const sc = res['svc1'].result?.structuredContent; expect(sc).toBeTruthy();
 			}

@@ -8,7 +8,7 @@
 >
 > WHY THIS IS NON-NEGOTIABLE:
 >
-> - Maintains security classification (SAFE/RISKY/DANGEROUS/CRITICAL/BLOCKED/UNKNOWN) & confirmation gating.
+> - Maintains security classification (SAFE/RISKY/DANGEROUS/CRITICAL/BLOCKED/UNKNOWN) & confirmed gating.
 > - Preserves audit invariants (stderr, pretty log, NDJSON) and metrics/rate-limit lineage.
 > - Ensures timeout escalation metadata (timedOut, configuredTimeoutMs, killEscalated) is captured.
 > - Guarantees threat & alias tracking signals reach dashboard + history endpoint.
@@ -47,9 +47,9 @@ Risk Mitigation: <steps to minimize risk>
 
 ## 1. Core Architecture Principles
 
-- **Deterministic Pipeline**: Authenticate → Rate Limit → Classify → (Confirm?) → Execute → Log → Stream Metrics.
-- **Explicit Trust Boundaries**: No execution until classification & (if needed) confirmation succeed.
-- **Fail Closed**: Block on ambiguity (UNKNOWN requires confirmation; blocked patterns never execute).
+- **Deterministic Pipeline**: Authenticate → Rate Limit → Classify → (confirmed?) → Execute → Log → Stream Metrics.
+- **Explicit Trust Boundaries**: No execution until classification & (if needed) confirmed succeed.
+- **Fail Closed**: Block on ambiguity (UNKNOWN requires confirmed:true; blocked patterns never execute).
 - **Observability First**: Every decision pathway emits audit + metrics signals.
 - **Composable Extensibility**: New tools register centrally; dynamic regex overrides allow runtime adaptation without code edits.
 
@@ -58,7 +58,7 @@ Risk Mitigation: <steps to minimize risk>
 | Aspect | Guideline | Rationale |
 |--------|-----------|-----------|
 | Pattern Tiers | SAFE / RISKY / DANGEROUS / CRITICAL / BLOCKED / UNKNOWN | Clear enforcement semantics. |
-| Confirmation | Required only for RISKY + UNKNOWN | Minimizes friction while preserving guard rails. |
+| confirmed | Required only for RISKY + UNKNOWN | Minimizes friction while preserving guard rails. |
 | Blocking | DANGEROUS, CRITICAL, BLOCKED short‑circuit execution | Prevents side‑effects from high‑risk commands. |
 | Dynamic Overrides | Merge additionalSafe / additionalBlocked after suppressing unwanted built‑ins | Runtime flexibility. |
 | Threat Tracking | UNKNOWN frequency + alias correlation | Detect emerging malicious patterns. |

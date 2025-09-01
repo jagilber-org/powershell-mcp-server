@@ -8,7 +8,7 @@ npm run build
 npm run start:enterprise
 ```
 
-> Deprecation: Legacy entry files `vscode-server-enterprise.ts` / `vscode-server.ts` are deprecated and excluded from the TypeScript build. Migrate any scripts invoking `dist/vscode-server-enterprise.js` to `dist/server.js` (preferred) or `dist/index.js`. The deprecated files will be removed in a future major release.
+> Removal: Legacy entry files `vscode-server-enterprise.ts` / `vscode-server.ts` have now been removed. Update any scripts that referenced `dist/vscode-server-enterprise.js` or `dist/vscode-server.js` to use `dist/server.js` (preferred) or `dist/index.js`.
 
 Optional auth:
 
@@ -324,7 +324,7 @@ Use when diagnosing client initialize hangs or suspected framing bugs. Provides:
 
 1. Raw RX/TX framing logs (header/body lengths, hex preview of first bytes)
 2. Reduced surface (only initialize, tools/list, run-powershell)
-3. Forced confirmation bypass (always runs with confirmed=true) for quicker iteration
+3. Forced confirmed bypass (always runs with confirmed=true) for quicker iteration
 
 Not production hardened: no size caps, auth, or metrics integration. Exit this mode before performance or security testing.
 
@@ -372,8 +372,8 @@ Attempt / execution split (appears when any attempts recorded):
 
 ```jsonc
 {
-  "attemptCommands": 5,                 // total blocked + confirmation-required attempts
-  "attemptConfirmedRequired": 4,      // attempts needing confirmation (RISKY/UNKNOWN)
+  "attemptCommands": 5,                 // total blocked + confirmed-required attempts
+  "attemptConfirmedRequired": 4,      // attempts needing confirmed (RISKY/UNKNOWN)
   "executionCommands": 12,               // real executions with duration > 0
   "confirmedExecutions": 8,              // executions of RISKY/UNKNOWN with confirmed:true
   "confirmedConversion": 0.667        // confirmedExecutions / attemptConfirmedRequired
@@ -384,7 +384,7 @@ Reset behavior: invoking any future explicit reset endpoint (planned) or process
 
 Latency semantics:
 
-- Zero-duration rows (blocked / confirmation-required) are NOT added to latency aggregates.
+- Zero-duration rows (blocked / confirmed-required) are NOT added to latency aggregates.
 - Real executions: high-res `duration_ms` (rounded) ≥1ms stored.
 - Percentile (p95) uses ceil-based index over sorted non-zero durations (avoids downward bias with small N).
 
@@ -404,7 +404,7 @@ Coverage highlights: parity (tool surface), run-powershell behaviors (timeout, t
 
 Enable via env `MCP_CAPTURE_PS_METRICS=1` (or config `limits.capturePsProcessMetrics: true`). Aggregated fields: `psSamples`, `psCpuSecAvg`, `psCpuSecP95`, `psWSMBAvg`, `psWSMBP95`.
 
-Test `ps-metrics-aggregation.test.js/ts` ensures these appear (dynamic metrics port detection). If failing, confirm the metrics server port (logs show `HTTP server listening on http://127.0.0.1:<port>`).
+Test `ps-metrics-aggregation.test.js/ts` ensures these appear (dynamic metrics port detection). If failing, confirmed the metrics server port (logs show `HTTP server listening on http://127.0.0.1:<port>`).
 
 Run it (ensure a fresh build so `dist/` contains latest instrumentation):
 
@@ -481,7 +481,7 @@ Environment variables (quick reference):
 | MCP_CAPTURE_PS_METRICS=1 | Enable per-invocation CPU / WS sampling |
 | MCP_OVERFLOW_STRATEGY=return\|truncate\|terminate | Select overflow handling mode |
 | METRICS_DEBUG=true | Verbose metrics instrumentation logging |
-| MCP_DISABLE_ATTEMPT_PUBLISH=1 | Suppress early attempt publishing (blocked / confirmation-required) |
+| MCP_DISABLE_ATTEMPT_PUBLISH=1 | Suppress early attempt publishing (blocked / confirmed-required) |
 | MCP_OVERFLOW_STRATEGY=truncate | (Example) produce truncated strategy behavior |
 
 Long timeouts (≥60s) emit a responsiveness warning; durations <1ms are promoted to 1ms to avoid misleading 0ms displays.

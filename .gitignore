@@ -8,8 +8,6 @@ lerna-debug.log*
 
 # Compiled output - ignore most but allow enterprise server
 dist/*
-#!dist/vscode-server-enterprise.js (deprecated path no longer produced)
-#!dist/vscode-server-enterprise.d.ts (deprecated path no longer produced)
 build/
 out/
 

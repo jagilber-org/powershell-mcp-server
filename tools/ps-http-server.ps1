@@ -193,13 +193,13 @@ function Test-AutoExecutionSafety {
     
     # Check against high-risk verbs
     if ($highRiskVerbs -contains $verb) {
-        return $false  # Requires confirmation
+        return $false  # requires confirmed:true
     }
     
     # Check against specific high-risk patterns
     foreach ($pattern in $highRiskPatterns) {
         if ($Command -match $pattern) {
-            return $false  # Requires confirmation
+            return $false  # requires confirmed:true
         }
     }
     
@@ -375,11 +375,11 @@ function Start-PowerShellHttpServer {
                         $isSafeForAuto = Test-AutoExecutionSafety -Command $cmd
                         
                         if (-not $isSafeForAuto) {
-                            Write-Host "⚠️  Command requires confirmation: $cmd" -ForegroundColor Yellow
+                            Write-Host "⚠️  Command requires confirmed:true: $cmd" -ForegroundColor Yellow
                             
                             $warningResponse = @{
                                 command = $cmd
-                                warning = "Command potentially modifies system state and requires confirmation"
+                                warning = "Command potentially modifies system state and requires confirmed:true"
                                 suggestion = "Use safe read-only commands (Get-, Show-, Test-Path, etc.)"
                                 requires_confirmation = $true
                                 safe_alternatives = @(

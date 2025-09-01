@@ -15,13 +15,13 @@ describe('git/gh classification', ()=>{
     expect(structured.securityAssessment?.category).toBe('VCS_READONLY');
   },8000);
 
-  test('git commit classified RISKY VCS_MUTATION requires confirmation', async ()=>{
+  test('git commit classified RISKY VCS_MUTATION requires confirmed:true', async ()=>{
     const srv=startServer(); await waitForReady(srv); const res=collect(srv);
     rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'git commit -m "test"' }},'risky');
     for(let i=0;i<60;i++){ if(res['risky']) break; await new Promise(r=> setTimeout(r,80)); }
     srv.kill();
     const txt = res['risky'].result?.content?.[0]?.text || res['risky'].error?.message || '';
-    expect(txt.toLowerCase()).toMatch(/confirmation required|risky pattern/);
+  expect(txt.toLowerCase()).toMatch(/requires confirmed:true|risky pattern/);
   },8000);
 
   test('git push --force blocked as CRITICAL', async ()=>{

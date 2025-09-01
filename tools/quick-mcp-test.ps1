@@ -12,7 +12,7 @@ Write-Host $testMessage
 Write-Host ""
 
 Write-Host "Server response:" -ForegroundColor Magenta
-echo $testMessage | node src\vscode-server.js --key testkey
+echo $testMessage | node dist\server.js --key testkey
 
 Write-Host ""
 Write-Host "✅ If you see server logs above, stdio transport is working!" -ForegroundColor Green

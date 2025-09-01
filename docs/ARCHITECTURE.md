@@ -81,10 +81,10 @@ sequenceDiagram
                 Server->>Client: McpError (Blocked)
                 Log-->>(Files): COMMAND_BLOCKED
                 Metrics-->>Dashboard: execution(blocked)
-            else Requires Confirmation (RISKY/UNKNOWN)
+            else requires confirmed:true (RISKY/UNKNOWN)
                 alt confirmed flag missing
                     Server->>Client: McpError (Needs confirmed:true)
-                    Log-->>(Files): CONFIRMATION_REQUIRED
+                    Log-->>(Files): CONFIRMED_REQUIRED
                 else confirmed present
                     Server->>Exec: spawn PowerShell
                     Exec-->>Server: ExecutionResult
@@ -121,10 +121,10 @@ flowchart TD
     E -->|No| F{Danger Fallback?}
     F -->|Yes| DANG[[DANGEROUS]]
     F -->|No| G{RISKY Regex?}
-    G -->|Yes| RISKY[[RISKY\nNeeds Confirm]]
+    G -->|Yes| RISKY[[RISKY\nNeeds confirmed]]
     G -->|No| H{SAFE Regex?}
     H -->|Yes| SAFE[[SAFE]]
-    H -->|No| UNK[[UNKNOWN\nNeeds Confirm]]
+    H -->|No| UNK[[UNKNOWN\nNeeds confirmed]]
 ```
 
 ### Classification Outcomes
@@ -138,10 +138,10 @@ flowchart TD
 | BLOCKED     | FORBIDDEN | true | n/a         | RED           | Registry writes, system file edits |
 | UNKNOWN     | MED  | false   | true           | CYAN          | Anything unmatched |
 
-### Blocking vs Confirmation
+### Blocking vs confirmed
 
 - **Blocked (DANGEROUS / CRITICAL / BLOCKED)**: Immediate denial; server returns McpError.
-- **Confirmation Required (RISKY / UNKNOWN)**: Must include `confirmed: true` param; otherwise McpError instructs to add it.
+- **confirmed Required (RISKY / UNKNOWN)**: Must include `confirmed: true` param; otherwise McpError instructs to add it.
 - **Auto-Allow (SAFE)**: Executes without extra flags.
 
 ---
@@ -378,7 +378,7 @@ classDiagram
 | 1 | Auth | Key invalid (enterprise) | Reject | McpError AUTH_FAILED |
 | 2 | Rate Limit | tokens == 0 | Reject + log + metrics | McpError RATE_LIMIT_EXCEEDED |
 | 3 | Classification | blocked=true | Reject + log + metrics | McpError COMMAND_BLOCKED |
-| 4 | Classification | requiresPrompt & !confirmed | Reject | McpError CONFIRMATION_REQUIRED |
+| 4 | Classification | requiresPrompt & !confirmed | Reject | McpError CONFIRMED_REQUIRED |
 | 5 | Execution | timeout | Kill process | error TIMEOUT |
 | 6 | Output | size/lines exceed | Truncate | Append &lt;TRUNCATED&gt; marker |
 | 7 | Metrics | real execution duration <1ms | Force to 1ms | Avoid misleading 0ms rows |
@@ -399,7 +399,7 @@ classDiagram
 - Classified SAFE → executes directly.
 - Returns success, securityAssessment.level = SAFE.
 
-### B. Risky Command Without Confirmation
+### B. Risky Command Without confirmed
 
 ```json
 {
@@ -409,9 +409,9 @@ classDiagram
 ```
 
 - Classified RISKY → requiresPrompt.
-- Missing `confirmed:true` → McpError advising to add confirmation.
+- Missing `confirmed:true` → McpError advising to add confirmed.
 
-### C. Risky Command With Confirmation
+### C. Risky Command With confirmed
 
 ```json
 {
@@ -420,7 +420,7 @@ classDiagram
 }
 ```
 
-- Executes; audit logs include confirmation intent.
+- Executes; audit logs include confirmed intent.
 
 ### D. Critical Command Attempt
 
@@ -484,7 +484,7 @@ flowchart LR
 | Auth failure | authKey mismatch | Reject request | AUTH_FAILED |
 | Rate limit exceeded | token bucket empty | Backoff & retry | RATE_LIMIT_EXCEEDED |
 | Blocked command | classification.blocked | Inform & suggest safe alternative | COMMAND_BLOCKED |
-| Missing confirmation | requiresPrompt & !confirmed | Ask for confirmed:true | CONFIRMATION_REQUIRED |
+| Missing confirmed | requiresPrompt & !confirmed | Ask for confirmed:true | CONFIRMED_REQUIRED |
 | Timeout | exec duration > timeout | Kill process | TIMEOUT / TIMEOUT_AND_TRUNCATED |
 | Excess output | bytes/lines > limit | Append truncate indicator | OUTPUT_TRUNCATED |
 
@@ -493,11 +493,11 @@ flowchart LR
  
 ## 16. Quick Mental Model
 
-> "Every request is a mini pipeline: Authenticate → Rate Limit → Classify → (Confirm?) → Execute → Log → Stream Metrics."
+> "Every request is a mini pipeline: Authenticate → Rate Limit → Classify → (confirmed?) → Execute → Log → Stream Metrics."
 
 Additional nuance as of Aug 2025:
 
-- Blocked or confirmation-required (unconfirmed) requests still emit a lightweight metrics attempt event, but their zero-duration samples are excluded from latency percentiles/averages.
+- Blocked or confirmed-required (unconfirmed) requests still emit a lightweight metrics attempt event, but their zero-duration samples are excluded from latency percentiles/averages.
 - Real executions enforce a minimum reported duration of 1ms (high-resolution timer) to prevent a wall of 0ms rows obscuring distribution shape.
 - Adaptive timeout logic can extend effectiveTimeoutMs in small steps while honoring a hard max (adaptiveMaxTotalMs) and watchdog.
 
@@ -546,7 +546,7 @@ Long timeouts (>=60s) add a performance responsiveness warning.
 | Scenario | Duration Contribution |
 |----------|-----------------------|
 | Blocked command | Recorded attempt event (durationMs=0) but excluded from latency aggregates. |
-| Confirmation required (unconfirmed) | Same as blocked (excluded). |
+| confirmed required (unconfirmed) | Same as blocked (excluded). |
 | Successful / failed real exec | High-resolution measured; coerced to >=1ms; included in aggregates. |
 | Adaptive extensions | Reflected in effectiveTimeoutMs; duration_ms remains actual wall time. |
 
@@ -571,7 +571,7 @@ Percentiles (p95) use a ceil index over sorted non-zero durations to avoid downw
 | Term | Definition |
 |------|------------|
 | SecurityAssessment | Structured result describing risk, level, reason, and enforcement flags. |
-| requiresPrompt | Flag indicating user/agent must explicitly confirm execution. |
+| requiresPrompt | Flag indicating user/agent must explicitly confirmed execution. |
 | blocked | Hard stop; command never reaches executor. |
 | UnknownThreatEntry | Tracked record for unclassified commands. |
 | Token Bucket | Rate limiting algorithm controlling request bursts over time. |
@@ -582,7 +582,7 @@ Percentiles (p95) use a ceil index over sorted non-zero durations to avoid downw
  
 ## 19. Summary
 
-The server blends deterministic security classification, explicit confirmation semantics, rigorous audit logging, proactive threat tracking, and live observability. Diagrams above map each logical layer so agents and humans can reason about trust boundaries, side effects, and extension points.
+The server blends deterministic security classification, explicit confirmed semantics, rigorous audit logging, proactive threat tracking, and live observability. Diagrams above map each logical layer so agents and humans can reason about trust boundaries, side effects, and extension points.
 
 ### Timeout Escalation (Implementation Note)
 

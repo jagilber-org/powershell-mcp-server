@@ -18,8 +18,11 @@ test('rate limiting engages over burst', done => {
         }
       } else if(f.id>=100 && f.id<100+total){
         responseCount++;
-        // Detect rate limit inside successful result content
+        // Detect rate limit via JSON-RPC error or legacy inline markers
         try {
+          if(f.error && (f.error.code===-32001 || /rate limit/i.test(f.error.message))){
+            errorCount++;
+          }
           if(f.result && Array.isArray(f.result.content)){
             for(const c of f.result.content){
               if(c && typeof c.text==='string' && /rate limit exceeded/i.test(c.text)){

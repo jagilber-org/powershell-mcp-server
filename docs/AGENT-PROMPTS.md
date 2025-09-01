@@ -51,13 +51,13 @@ Implement src/server.ts exporting async start(): create MCP Server (name/version
 ## Phase 2 – Command Execution Engine
 
 ```text
-Add executePowerShellCommand(command, timeoutMs, workingDirectory?). Use powershell.exe -NoProfile -NonInteractive. Capture stdout/stderr, exitCode, duration. Enforce limits (config object): maxOutputKB, maxLines with truncateIndicator. Return { success, stdout, stderr, exitCode, duration_ms, error? }. Add minimal test script invoking Get-Date. Verification: run sample command; confirm truncation logic works with large output.
+Add executePowerShellCommand(command, timeoutMs, workingDirectory?). Use powershell.exe -NoProfile -NonInteractive. Capture stdout/stderr, exitCode, duration. Enforce limits (config object): maxOutputKB, maxLines with truncateIndicator. Return { success, stdout, stderr, exitCode, duration_ms, error? }. Add minimal test script invoking Get-Date. Verification: run sample command; confirmed truncation logic works with large output.
 ```
 
 ## Phase 3 – Security Classification
 
 ```text
-Add classifyCommandSafety(command) returning SecurityAssessment { level: SAFE|RISKY|DANGEROUS|CRITICAL|BLOCKED|UNKNOWN, risk, reason, blocked, requiresPrompt?, category, color }. Pattern groups: safe, risky, registry, system file, root destructive, remote, critical, dangerous. UNKNOWN is default requiring confirmation. No enforcement yet (just classification). Add tests for representative commands. Verification: table of sample commands & levels.
+Add classifyCommandSafety(command) returning SecurityAssessment { level: SAFE|RISKY|DANGEROUS|CRITICAL|BLOCKED|UNKNOWN, risk, reason, blocked, requiresPrompt?, category, color }. Pattern groups: safe, risky, registry, system file, root destructive, remote, critical, dangerous. UNKNOWN is default requiring confirmed. No enforcement yet (just classification). Add tests for representative commands. Verification: table of sample commands & levels.
 ```
 
 ## Phase 4 – Audit Logging
@@ -93,7 +93,7 @@ Add metricsRegistry (counts per security level, durations). Add performance samp
 ## Phase 9 – Dashboard UI & Visualization
 
 ```text
-Serve single-page dashboard: counters, events table (autoscroll), confirmed highlighting, CPU graph (CPU + lag overlay), memory graph (RSS + Heap). Maintain cpuHistory & memHistory arrays (timestamp,value,...). Provide CSS class for confirmed commands. Verification: textual description of rendered sections + confirm presence of graphs canvases.
+Serve single-page dashboard: counters, events table (autoscroll), confirmed highlighting, CPU graph (CPU + lag overlay), memory graph (RSS + Heap). Maintain cpuHistory & memHistory arrays (timestamp,value,...). Provide CSS class for confirmed commands. Verification: textual description of rendered sections + confirmed presence of graphs canvases.
 ```
 
 ## Phase 10 – Test & Validation Scripts
@@ -105,7 +105,7 @@ Add tests/ scripts: Quick-MCPTest (basic tool calls), test-rate-limit, test-mcp-
 ## Phase 11 – Hardening & Dynamic Pattern Overrides
 
 ```text
-Support dynamic pattern arrays in config: additionalSafe, additionalBlocked, suppressPatterns (removes built-ins). Merge lazily. Track metrics for confirmation-required events & truncations. Extend server-stats tool to include dynamicPatterns + rateLimit snapshot. Verification: inject a blocked pattern via config; confirm classification changes.
+Support dynamic pattern arrays in config: additionalSafe, additionalBlocked, suppressPatterns (removes built-ins). Merge lazily. Track metrics for confirmed-required events & truncations. Extend server-stats tool to include dynamicPatterns + rateLimit snapshot. Verification: inject a blocked pattern via config; confirmed classification changes.
 ```
 
 ## Phase 12 – Prompt Retrieval Tool

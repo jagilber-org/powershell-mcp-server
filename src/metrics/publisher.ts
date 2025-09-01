@@ -14,8 +14,8 @@ interface PublishOptions {
   timedOut?: boolean;            // Timeout flag
   preview?: string;              // Short preview of command/tool input
   candidateNorm?: string;        // Normalized UNKNOWN candidate (learning system)
-  reason?: string;               // Reason for early publish (e.g. 'blocked','confirmation_required')
-  requiresPrompt?: boolean;      // Whether confirmation was required
+  reason?: string;               // Reason for early publish (e.g. 'blocked','confirmed_required')
+  requiresPrompt?: boolean;      // Whether confirmed was required
   incrementConfirmedRequired?: boolean; // Increment confirmed-required metric
 }
 

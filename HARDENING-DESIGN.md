@@ -12,7 +12,7 @@ Now includes:
 - Deterministic, shared PowerShell host detection (`detectShell`) with precedence & audit logging
 
 Legacy baseline (retained):
-- Multi-level security classification & confirmation workflow
+- Multi-level security classification & confirmed gating
 - Path enforcement, output truncation, audit logging (NDJSON + human)
 - Unknown threat tracking & learning queue
 - Metrics dashboard + SSE streaming

@@ -6,7 +6,7 @@ export const RunPowerShellSchema = z.object({
   script: z.string().optional().describe('PowerShell script to execute (alternative to command)'),
   workingDirectory: z.string().optional().describe('Working directory for execution'),
   timeoutSeconds: z.number().min(1).max(600).optional().describe('Execution timeout in seconds (1-600)'),
-  confirmed: z.boolean().optional().describe('Required confirmation for RISKY/UNKNOWN commands'),
+  confirmed: z.boolean().optional().describe('Required confirmed for RISKY/UNKNOWN commands'),
   // Adaptive timeout parameters
   progressAdaptive: z.boolean().optional().describe('Enable adaptive timeout extension based on output activity'),
   adaptiveExtendWindowMs: z.number().optional().describe('Window for detecting recent activity (default: 2000ms)'),

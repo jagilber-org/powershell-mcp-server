@@ -124,7 +124,7 @@ function Show-PrettyLogEntry {
         "SERVER_CONNECT"        { $icon = "[C]"; $messageColor = "Cyan" }
         "MCP_REQUEST"           { $icon = "[Q]"; $messageColor = "Blue" }
         "MCP_ERROR"             { $icon = "[X]"; $messageColor = "Red" }
-        "CONFIRMATION_REQUIRED" { $icon = "[?]"; $messageColor = "Yellow" }
+        "CONFIRMED_REQUIRED" { $icon = "[?]"; $messageColor = "Yellow" }
     }
     
     # Main log line with workspace prefix if provided

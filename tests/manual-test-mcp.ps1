@@ -7,7 +7,7 @@ Write-Host ""
 
 # Start the server
 Write-Host "Starting MCP server..." -ForegroundColor Green
-$process = Start-Process -FilePath "node" -ArgumentList "src\vscode-server.js", "--key", "testkey" `
+$process = Start-Process -FilePath "node" -ArgumentList "dist\server.js", "--key", "testkey" `
     -PassThru -NoNewWindow -RedirectStandardInput -RedirectStandardOutput -RedirectStandardError
 
 Write-Host "Server PID: $($process.Id)" -ForegroundColor Green
@@ -64,7 +64,7 @@ Write-Host ""
 
 Write-Host "To send a message:" -ForegroundColor Yellow
 Write-Host "1. Copy one of the JSON messages above"
-Write-Host "2. Echo it to the server: echo 'JSON_HERE' | & 'node' 'src\vscode-server.js' '--key' 'testkey'"
+Write-Host "2. Echo it to the server: echo 'JSON_HERE' | & 'node' 'dist\server.js' '--key' 'testkey'"
 Write-Host ""
 Write-Host "Press Ctrl+C to stop this server when done."
 

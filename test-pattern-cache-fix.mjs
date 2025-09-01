@@ -4,7 +4,7 @@
  * Test script to verify the learning system pattern cache bug fix
  * 
  * Bug: Learning system approval (collectsfdata.exe pattern ^collectsfdata\.exe$) 
- * not affecting runtime security classification. Commands still require confirmation 
+ * not affecting runtime security classification. Commands still require confirmed:true 
  * and classified as UNKNOWN despite successful learn->approve workflow.
  * Learning system appears disconnected from classification engine.
  * 

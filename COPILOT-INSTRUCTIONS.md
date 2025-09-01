@@ -25,7 +25,7 @@ ALWAYS route actions through MCP tools (union of all connected MCP servers). The
 
 Benefits enforced by MCP tool path:
 - Security classification (SAFE/RISKY/DANGEROUS/CRITICAL/BLOCKED/UNKNOWN)
-- Confirmation workflow for RISKY / UNKNOWN
+- confirmed gating for RISKY / UNKNOWN
 - Audit logging (stderr + pretty log + NDJSON)
 - Metrics aggregation & rate limiting
 - Timeout escalation (schedule → trigger → escalate) with structured status
@@ -50,7 +50,7 @@ Benefits enforced by MCP tool path:
 - Prefer creating or using existing tools (e.g., `log-test`) over ad-hoc echo commands.
 - For metrics issues: call `/api/metrics/history` (via existing server utility if exposed) before assuming counters are broken.
 
-## 6. Safety & Confirmation Logic
+## 6. Safety & confirmed Logic
 - If a command might modify files/services and lacks `confirmed: true`, prompt the user or add it once intent is clear.
 - Never auto-set override or bypass security flags without explicit user instruction.
 
@@ -104,7 +104,7 @@ Risk Mitigation: <steps to minimize risk / why not adding tool now>
 If this block is missing → Replace terminal proposal with an MCP tool plan automatically.
 
 ## 14. Future Tool Gap Handling
-- If a needed operation lacks a tool: propose minimal spec (name, input schema, output schema, safety constraints) BEFORE any execution and await confirmation or implement directly.
+- If a needed operation lacks a tool: propose minimal spec (name, input schema, output schema, safety constraints) BEFORE any execution and await confirmed or implement directly.
 - Preference order: existing specialized tool > generic `powershell-command` > propose new tool > (LAST RESORT) Terminal Exception.
 
 ## 15. Update Policy

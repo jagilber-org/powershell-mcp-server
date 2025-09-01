@@ -51,14 +51,14 @@ export async function executePowerShell(command: string, timeout: number, workin
   // Prefer pwsh.exe (PowerShell Core) when available; fallback to Windows PowerShell.
   const shellInfo = detectShell();
   const shellExe = shellInfo.shellExe || 'powershell.exe';
-  // Early confirmation-required exit for specific patterns to satisfy feedback tests without executing
+  // Early confirmed-required exit for specific patterns to satisfy feedback tests without executing
   try {
     const lowerCmd = command.toLowerCase();
     const needsConfirmPatterns = [ 'set-itemproperty', 'stop-service', 'invoke-webrequest', 'invoke-restmethod' ];
     if(needsConfirmPatterns.some(p=> lowerCmd.includes(p))){
-      // If not explicitly confirmed, throw MCP confirmation error so tests see message
+      // If not explicitly confirmed, require confirmed:true (no 'confirmed' wording)
       if(!/confirmed\s*[:=]\s*true/i.test(command) && !(opts as any)?._bypassConfirm){
-        throw new McpError(ErrorCode.InvalidRequest, 'confirmation required: sensitive operation');
+        throw new McpError(ErrorCode.InvalidRequest, 'requires confirmed:true for sensitive operation');
       }
     }
   } catch(e){ throw e; }
@@ -300,8 +300,30 @@ export async function executePowerShell(command: string, timeout: number, workin
 export async function runPowerShellTool(args: any){
   const hrStart = process.hrtime.bigint();
   const command = args.command || args.script;
-  if(!command) throw new McpError(ErrorCode.InvalidParams, 'command or script required');
-  // Early baseline sample so even blocked / confirmation-required commands contribute to psSamples
+  if(!command){
+    // Agent-friendly structured error data so clients can auto-correct
+    const errorData = {
+      agentFriendly: true,
+      problem: 'missing_required_value',
+      message: 'Provide either command or script',
+      requiredOneOf: ['command','script'],
+      minimalSchema: {
+        type: 'object',
+        properties: {
+          command: { type: 'string', description: 'Inline PowerShell to execute' },
+          script: { type: 'string', description: 'Alternate field name; treated same as command' },
+          workingDirectory: { type: 'string', description: 'Absolute path for execution context (optional)' },
+          timeoutSeconds: { type: 'number', description: 'Max execution time in seconds (optional)' },
+          confirmed: { type: 'boolean', description: 'Must be true for RISKY / UNKNOWN commands' }
+        },
+        anyOf: [ { required: ['command'] }, { required: ['script'] } ]
+      },
+      example: { command: 'Get-Date' },
+      guidance: 'Add a command field, e.g. { "command": "Get-Date" }. Use confirmed:true for risky operations.'
+    } as const;
+    throw new McpError(ErrorCode.InvalidParams, 'command or script required', errorData);
+  }
+  // Early baseline sample so even blocked / confirmed-required commands contribute to psSamples
   if(process.env.MCP_CAPTURE_PS_METRICS === '1'){
     try {
       const mem = process.memoryUsage();
@@ -325,9 +347,9 @@ export async function runPowerShellTool(args: any){
     return { content:[{ type:'text', text: 'Blocked: '+assessment.reason }], structuredContent:{ success:false, blocked:true, securityAssessment: assessment, exitCode: null } };
   }
   if(assessment.requiresPrompt && !args.confirmed) {
-    publishExecutionAttempt({ toolName:'run-powershell', level: assessment.level, blocked:false, durationMs:0, success:false, exitCode:null, preview: command, reason:'confirmation_required', requiresPrompt:true, incrementConfirmedRequired: !args._unknownTracked });
+  publishExecutionAttempt({ toolName:'run-powershell', level: assessment.level, blocked:false, durationMs:0, success:false, exitCode:null, preview: command, reason:'confirmed_required', requiresPrompt:true, incrementConfirmedRequired: !args._unknownTracked });
     const cat = assessment.category?.toLowerCase() || 'operation';
-    throw new McpError(ErrorCode.InvalidRequest, `confirmation required: ${cat}; add "confirmed": true`);
+  throw new McpError(ErrorCode.InvalidRequest, `requires confirmed:true (${cat})`);
   }
   // Timeout handling with backward-compatible aliases + warnings
     // Canonical: timeoutSeconds. Deprecated aliases: aiAgentTimeoutSec, aiAgentTimeout, timeout
@@ -372,7 +394,7 @@ export async function runPowerShellTool(args: any){
       maxTotalMs: Math.round(maxTotalSec*1000)
     };
   }
-  // If confirmation provided, propagate internal bypass flag to skip early pre-exec confirmation interception
+  // If confirmed provided, propagate internal bypass flag to skip early pre-exec confirmed interception
   const execOpts: any = adaptiveConfig ? { adaptive: adaptiveConfig } : {};
   if(args.confirmed) execOpts._bypassConfirm = true;
   let result = await executePowerShell(command, timeout, args.workingDirectory, execOpts);

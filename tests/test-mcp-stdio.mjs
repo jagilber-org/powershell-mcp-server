@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Path to your MCP server
-const serverPath = join(__dirname, 'src', 'vscode-server.js');
+const serverPath = join(__dirname, 'dist', 'server.js');
 
 // Test with key authentication
 const authKey = 'testkey';

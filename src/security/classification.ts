@@ -25,10 +25,10 @@ export function classifyCommandSafety(command:string): SecurityAssessment {
   if(/^git\s+diff(\s|$)/i.test(c)) return assess('SAFE',{ category:'VCS_READONLY', reason:'Git diff (read-only)', patterns:['git diff'] });
   if(/^git\s+log(\s|$)/i.test(c)) return assess('SAFE',{ category:'VCS_READONLY', reason:'Git log (read-only)', patterns:['git log'] });
   if(/^git\s+push\s+--force(\s|$)/i.test(c)) return assess('CRITICAL',{ category:'VCS_MODIFICATION', reason:'Force push blocked', blocked:true, patterns:['git push --force'], recommendations:['Avoid force push; use --force-with-lease'] });
-  if(/^git\s+(commit|push|pull|merge|rebase|cherry-pick|reset)\b/i.test(c)) return assess('RISKY',{ category:'VCS_MODIFICATION', reason:'Git repository modification requires confirmation', requiresPrompt:true, patterns:['git modify'] });
+  if(/^git\s+(commit|push|pull|merge|rebase|cherry-pick|reset)\b/i.test(c)) return assess('RISKY',{ category:'VCS_MODIFICATION', reason:'Git repository modification requires confirmed:true', requiresPrompt:true, patterns:['git modify'] });
   // Explicitly block Invoke-Expression (iex) usage for safety
   if(/invoke-expression|\biex\b/i.test(c)) return assess('CRITICAL',{ category:'SECURITY_THREAT', reason:'Invoke-Expression blocked', blocked:true, patterns:['Invoke-Expression','iex'] });
   if(/^del\s+\/s\s+\/q/i.test(c) || /rm -rf/i.test(c)) return assess('CRITICAL',{ category:'OS_DESTRUCTIVE', reason:'Destructive delete', blocked:true });
-  if(/^rm\b|remove-item/i.test(c)) return assess('RISKY',{ category:'FILE_OPERATION', reason:'File removal requires confirmation', requiresPrompt:true });
-  return assess('UNKNOWN',{ category:'UNKNOWN_COMMAND', reason:'Unclassified command requires confirmation', requiresPrompt:true });
+  if(/^rm\b|remove-item/i.test(c)) return assess('RISKY',{ category:'FILE_OPERATION', reason:'File removal requires confirmed:true', requiresPrompt:true });
+  return assess('UNKNOWN',{ category:'UNKNOWN_COMMAND', reason:'Unclassified command requires confirmed:true', requiresPrompt:true });
 }

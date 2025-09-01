@@ -21,7 +21,7 @@ export interface MetricsSnapshot {
   dangerousCommands: number;
   criticalCommands: number;
   blockedCommands: number;
-  confirmedRequired: number; // renamed from confirmationRequired (count of pending confirmations)
+  confirmedRequired: number; // renamed from pendingConfirmed (count of pending confirmed-required operations)
   unknownCommands: number;
   truncatedOutputs: number;
   timeouts: number;
@@ -42,21 +42,21 @@ export class MetricsRegistry {
     DANGEROUS: 0,
     CRITICAL: 0,
     BLOCKED: 0,
-  CONFIRM: 0,
+  confirmed: 0,
     UNKNOWN: 0,
   TRUNCATED: 0,
   TIMEOUTS: 0
   };
   // Attempt / execution split (added post feedback feature hardening)
-  // ATTEMPT_TOTAL: blocked + confirmation-required attempts (durationMs === 0)
-  // ATTEMPT_CONFIRM: subset of attempts that required confirmation (RISKY / UNKNOWN)
+  // ATTEMPT_TOTAL: blocked + confirmed-required attempts (durationMs === 0)
+  // ATTEMPT_CONFIRMED_REQUIRED: subset of attempts that required confirmed:true (RISKY / UNKNOWN)
   // EXECUTIONS: real executions (durationMs > 0)
-  // CONFIRM_EXEC: executions of commands that required confirmation (RISKY / UNKNOWN with confirmed:true)
+  // CONFIRMED_EXEC: executions of commands that required confirmed:true (RISKY / UNKNOWN with confirmed:true)
   private attemptCounters: Record<string, number> = {
     ATTEMPT_TOTAL: 0,
-    ATTEMPT_CONFIRM: 0,
-    EXECUTIONS: 0,
-    CONFIRM_EXEC: 0
+  ATTEMPT_CONFIRMED_REQUIRED: 0,
+  EXECUTIONS: 0,
+  CONFIRMED_EXEC: 0
   };
   private durations: number[] = [];
   private lastReset = new Date().toISOString();
@@ -75,11 +75,11 @@ export class MetricsRegistry {
     // Attempt / execution classification
     if(rec.durationMs === 0){
       this.attemptCounters.ATTEMPT_TOTAL++;
-      if(rec.level === 'RISKY' || rec.level === 'UNKNOWN') this.attemptCounters.ATTEMPT_CONFIRM++;
+  if(rec.level === 'RISKY' || rec.level === 'UNKNOWN') this.attemptCounters.ATTEMPT_CONFIRMED_REQUIRED++;
     } else if(rec.durationMs > 0){
       this.durations.push(rec.durationMs); // only positive durations influence latency
       this.attemptCounters.EXECUTIONS++;
-      if(rec.level === 'RISKY' || rec.level === 'UNKNOWN') this.attemptCounters.CONFIRM_EXEC++;
+  if(rec.level === 'RISKY' || rec.level === 'UNKNOWN') this.attemptCounters.CONFIRMED_EXEC++;
     }
     // Append to history (cap 1000)
     this.history.push({ ...rec, ts: new Date().toISOString(), seq: ++this.seq });
@@ -96,9 +96,9 @@ export class MetricsRegistry {
     this.counts.TIMEOUTS++;
   }
 
-  /** Increment confirmed-required (pending user confirmation) counter */
+  /** Increment confirmed-required (pending user confirmed) counter */
   incrementConfirmedRequired(): void {
-    this.counts.CONFIRM++;
+    this.counts.confirmed++;
   }
 
   reset(): void {
@@ -125,7 +125,7 @@ export class MetricsRegistry {
       dangerousCommands: this.counts.DANGEROUS,
       criticalCommands: this.counts.CRITICAL,
       blockedCommands: this.counts.BLOCKED,
-  confirmedRequired: this.counts.CONFIRM,
+  confirmedRequired: this.counts.confirmed,
       unknownCommands: this.counts.UNKNOWN,
       truncatedOutputs: this.counts.TRUNCATED,
   timeouts: this.counts.TIMEOUTS,
@@ -136,11 +136,11 @@ export class MetricsRegistry {
     // Attempt / execution counters surfaced when any non-zero
     if(this.attemptCounters.ATTEMPT_TOTAL > 0 || this.attemptCounters.EXECUTIONS > 0){
       (snap as any).attemptCommands = this.attemptCounters.ATTEMPT_TOTAL;
-  (snap as any).attemptConfirmedRequired = this.attemptCounters.ATTEMPT_CONFIRM;
+  (snap as any).attemptConfirmedRequired = this.attemptCounters.ATTEMPT_CONFIRMED_REQUIRED;
       (snap as any).executionCommands = this.attemptCounters.EXECUTIONS;
-      (snap as any).confirmedExecutions = this.attemptCounters.CONFIRM_EXEC;
-      if(this.attemptCounters.ATTEMPT_CONFIRM > 0){
-        const conv = this.attemptCounters.CONFIRM_EXEC / Math.max(1, this.attemptCounters.ATTEMPT_CONFIRM);
+      (snap as any).confirmedExecutions = this.attemptCounters.CONFIRMED_EXEC;
+      if(this.attemptCounters.ATTEMPT_CONFIRMED_REQUIRED > 0){
+        const conv = this.attemptCounters.CONFIRMED_EXEC / Math.max(1, this.attemptCounters.ATTEMPT_CONFIRMED_REQUIRED);
   (snap as any).confirmedConversion = +conv.toFixed(3);
       }
     }

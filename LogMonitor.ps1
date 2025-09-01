@@ -52,7 +52,7 @@ function Format-LogEntry {
             "SERVER_CONNECT"      { $icon = "🔗"; $messageColor = "Cyan" }
             "MCP_REQUEST"         { $icon = "📨"; $messageColor = "Blue" }
             "MCP_ERROR"           { $icon = "💥"; $messageColor = "Red" }
-            "CONFIRMATION_REQUIRED" { $icon = "❓"; $messageColor = "Yellow" }
+            "CONFIRMED_REQUIRED" { $icon = "❓"; $messageColor = "Yellow" }
         }
         
         # Clean up the message

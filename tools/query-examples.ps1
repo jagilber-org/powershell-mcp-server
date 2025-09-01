@@ -107,4 +107,4 @@ Write-Host "   - ScriptBlock (fastest, less secure)" -ForegroundColor Gray
 Write-Host ""
 Write-Host "🛡️  The server automatically blocks potentially unsafe commands" -ForegroundColor Yellow
 Write-Host "✅ Safe commands (Get-, Test-, Show-) are allowed automatically" -ForegroundColor Green
-Write-Host "❌ Unsafe commands (Remove-, Stop-, Install-) require confirmation" -ForegroundColor Red
+Write-Host "❌ Unsafe commands (Remove-, Stop-, Install-) require confirmed:true" -ForegroundColor Red

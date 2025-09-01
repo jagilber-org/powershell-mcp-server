@@ -271,7 +271,7 @@ const DANGEROUS_COMMANDS: readonly string[] = [
     'Enable-WindowsOptionalFeature'
 ] as const;
 
-/** Risky operations requiring confirmation */
+/** Risky operations requiring confirmed */
 const RISKY_PATTERNS: readonly string[] = [
     'Remove-Item(?!.*-WhatIf)',
     'Move-Item(?!.*temp)',
@@ -560,7 +560,7 @@ const PowerShellCommandSchema = z.object({
     aiAgentTimeout: z.number().optional().describe('Optional AI agent-specific timeout override in milliseconds'),
     workingDirectory: z.string().optional().describe('Working directory for command execution'),
     key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
-    confirmed: z.boolean().optional().describe('Explicit confirmation for medium-risk commands (required for RISKY/UNKNOWN commands)'),
+    confirmed: z.boolean().optional().describe('Explicit confirmed for medium-risk commands (required for RISKY/UNKNOWN commands)'),
     override: z.boolean().optional().describe('Security override for authorized administrators (use with extreme caution)'),
 });
 
@@ -571,7 +571,7 @@ const PowerShellScriptSchema = z.object({
     aiAgentTimeout: z.number().optional().describe('Optional AI agent-specific timeout override in milliseconds'),
     workingDirectory: z.string().optional().describe('Working directory for script execution'),
     key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
-    confirmed: z.boolean().optional().describe('Explicit confirmation for medium-risk scripts'),
+    confirmed: z.boolean().optional().describe('Explicit confirmed for medium-risk scripts'),
     override: z.boolean().optional().describe('Security override for authorized administrators'),
 });
 
@@ -583,7 +583,7 @@ const PowerShellFileSchema = z.object({
     aiAgentTimeout: z.number().optional().describe('Optional AI agent-specific timeout override in milliseconds'),
     workingDirectory: z.string().optional().describe('Working directory for script execution'),
     key: z.string().optional().describe('Authentication key (required if server has authentication enabled)'),
-    confirmed: z.boolean().optional().describe('Explicit confirmation for medium-risk file operations'),
+    confirmed: z.boolean().optional().describe('Explicit confirmed for medium-risk file operations'),
     override: z.boolean().optional().describe('Security override for authorized administrators'),
 });
 
@@ -1006,7 +1006,7 @@ class EnterprisePowerShellMCPServer {
             };
         }
         
-        // ≡ƒƒí RISKY - Operations requiring confirmation
+        // ≡ƒƒí RISKY - Operations requiring confirmed
         for (const pattern of RISKY_PATTERNS) {
             if (new RegExp(pattern, 'i').test(command)) {
                 return {
@@ -1043,7 +1043,7 @@ class EnterprisePowerShellMCPServer {
         const unknownAssessment: SecurityAssessment = {
             level: 'UNKNOWN',
             risk: 'MEDIUM',
-            reason: 'Unclassified command requiring confirmation for safety',
+            reason: 'Unclassified command requiring confirmed for safety',
             color: 'CYAN',
             blocked: false,
             requiresPrompt: true,
@@ -1231,7 +1231,7 @@ This MCP server provides secure, enterprise-grade PowerShell command execution w
 
 ## ≡ƒ¢í∩╕Å Security Levels
 - **SAFE** (≡ƒƒó): Read-only operations, execute freely
-- **RISKY** (≡ƒƒí): Requires confirmation (add confirmed: true)
+- **RISKY** (≡ƒƒí): requires confirmed:true (add confirmed: true)
 - **DANGEROUS** (≡ƒƒú): Blocked - system modifications
 - **CRITICAL** (≡ƒö┤): Blocked - security threats
 - **BLOCKED** (≡ƒÜ½): Completely prohibited operations`,
@@ -1250,7 +1250,7 @@ This server implements a 5-level security classification system:
 - Write-* commands (Write-Host, Write-Output)
 - Format-*, Select-*, Where-Object, Sort-Object
 
-### ≡ƒƒí RISKY Commands (Require Confirmation)
+### ≡ƒƒí RISKY Commands (require confirmed:true)
 - File operations: Remove-Item, Move-Item, Copy-Item
 - Service operations: Start-Service, Restart-Service
 - Process management: Stop-Process
@@ -1384,7 +1384,7 @@ Include authKey in all tool requests when server requires it:
 }
 \`\`\`
 
-## Risky Operations (Require Confirmation)
+## Risky Operations (require confirmed:true)
 \`\`\`json
 {
   "tool": "powershell-command",
@@ -1448,7 +1448,7 @@ Include authKey in all tool requests when server requires it:
 ## Security Compliance
 - Never override security classifications without authorization
 - Review audit logs for security events
-- Use confirmation parameters for risky operations
+- Use confirmed parameters for risky operations
 - Report security violations immediately
 
 ## Testing and Validation
@@ -1627,7 +1627,7 @@ Use the ai-agent-test tool to validate functionality:
                 tools: [
                     {
                         name: 'powershell-command',
-                        description: 'Execute a PowerShell command with enterprise-grade security classification and comprehensive audit logging. Supports timeout control, working directory specification, and security confirmation.',
+                        description: 'Execute a PowerShell command with enterprise-grade security classification and comprehensive audit logging. Supports timeout control, working directory specification, and security confirmed.',
                         inputSchema: zodToJsonSchema(PowerShellCommandSchema),
                     },
                     {
@@ -1765,16 +1765,16 @@ Use the ai-agent-test tool to validate functionality:
                             throw blockedError;
                         }
                         
-                        // Handle confirmation requirements
+                        // Handle confirmed requirements
                         if (securityAssessment.requiresPrompt && !validatedArgs.confirmed && !validatedArgs.override) {
                             const promptError = new McpError(
                                 ErrorCode.InvalidRequest,
-                                `ΓÜá∩╕Å CONFIRMATION REQUIRED: ${securityAssessment.reason}. Add 'confirmed: true' to proceed or 'override: true' with proper authorization.`
+                                `ΓÜá∩╕Å confirmed REQUIRED: ${securityAssessment.reason}. Add 'confirmed: true' to proceed or 'override: true' with proper authorization.`
                             );
                             
-                            console.error(`ΓÜá∩╕Å CONFIRMATION REQUIRED for ${securityAssessment.category}`);
+                            console.error(`ΓÜá∩╕Å confirmed REQUIRED for ${securityAssessment.category}`);
                             
-                            auditLog('WARNING', 'CONFIRMATION_REQUIRED', 'Command requires user confirmation to proceed', {
+                            auditLog('WARNING', 'CONFIRMED_REQUIRED', 'Command requires user confirmed to proceed', {
                                 requestId,
                                 command: validatedArgs.command,
                                 securityLevel: securityAssessment.level,
@@ -1864,11 +1864,11 @@ Use the ai-agent-test tool to validate functionality:
                             throw blockedError;
                         }
                         
-                        // Handle confirmation for scripts
+                        // Handle confirmed for scripts
                         if (securityAssessment.requiresPrompt && !validatedArgs.confirmed && !validatedArgs.override) {
                             throw new McpError(
                                 ErrorCode.InvalidRequest,
-                                `ΓÜá∩╕Å SCRIPT CONFIRMATION REQUIRED: ${securityAssessment.reason}. Add 'confirmed: true' to proceed.`
+                                `ΓÜá∩╕Å SCRIPT confirmed REQUIRED: ${securityAssessment.reason}. Add 'confirmed: true' to proceed.`
                             );
                         }
                         

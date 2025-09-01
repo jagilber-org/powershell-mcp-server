@@ -31,7 +31,7 @@ Note: Some flags (`--minimal-stdio`, `--disable-self-destruct`, etc.) are refere
 | `MCP_CAPTURE_PS_METRICS` | Enable periodic & per-exec PowerShell CPU/WS sampling (fallback & sampler). | `0` | `runPowerShell.ts`, `metrics/httpServer.ts` |
 | `MCP_PS_SENTINEL` | Enable in-process stderr sentinel emission for CPU/WS (lower overhead). | `0` | `runPowerShell.ts` |
 | `MCP_OVERFLOW_STRATEGY` | Output overflow handling: `return`, `truncate`, `terminate`. | `return` | `runPowerShell.ts` |
-| `MCP_DISABLE_ATTEMPT_PUBLISH` | Suppress publishing of early attempt (blocked / confirmation-required) events. | `0` | `metrics/publisher.ts` |
+| `MCP_DISABLE_ATTEMPT_PUBLISH` | Suppress publishing of early attempt (blocked / confirmed-required) events. | `0` | `metrics/publisher.ts` |
 | `METRICS_DEBUG` | Verbose metrics registry & baseline PS sample logs. | `false` | `registry.ts`, `runPowerShell.ts`, `httpServer.ts` |
 | `MCP_FRAMER_DEBUG` | Verbose output for framing transport (if framed mode). | `0` | `server.ts` (framer mode) |
 | `MCP_FRAMED_STDIO` | Force framed stdio transport (Content-Length). | `0` | `server.ts` |
@@ -48,10 +48,10 @@ Note: Some flags (`--minimal-stdio`, `--disable-self-destruct`, etc.) are refere
 
 | Field | Meaning |
 |-------|---------|
-| `attemptCommands` | Total blocked + confirmation-required attempts (duration 0ms) |
-| `attemptConfirmedRequired` | Attempts needing confirmation (RISKY/UNKNOWN) |
+| `attemptCommands` | Total blocked + confirmed-required attempts (duration 0ms) |
+| `attemptConfirmedRequired` | Attempts needing confirmed (RISKY/UNKNOWN) |
 | `executionCommands` | Executions with real duration > 0ms |
-| `confirmedExecutions` | Executions of RISKY/UNKNOWN with confirmation |
+| `confirmedExecutions` | Executions of RISKY/UNKNOWN with confirmed |
 | `confirmedConversion` | confirmedExecutions / attemptConfirmedRequired |
 | `psSamples` | Number of PowerShell process metric samples captured |
 | `psCpuSecAvg` | Average CPU seconds per sample |

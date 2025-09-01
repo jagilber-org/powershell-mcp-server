@@ -20,28 +20,28 @@ describe('classification coverage for feedback gaps', () => {
     expect(txt.toLowerCase()).toMatch(/blocked|critical/);
   },10000);
 
-  test('registry modification requires confirmation', async () => {
+  test('registry modification requires confirmed:true', async () => {
     const srv=startServer(); await waitForReady(srv); const res=collect(srv);
     rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Set-ItemProperty -Path "HKLM:SOFTWARE\\Test" -Name X -Value 1' }},'reg');
     await wait(res,'reg'); srv.kill();
     const err = res['reg'].error?.message || '';
-    expect(err.toLowerCase()).toMatch(/confirmation required|registry/);
+  expect(err.toLowerCase()).toMatch(/requires confirmed:true|registry/);
   },10000);
 
-  test('service management command requires confirmation', async () => {
+  test('service management command requires confirmed:true', async () => {
     const srv=startServer(); await waitForReady(srv); const res=collect(srv);
     rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Stop-Service -Name Spooler' }},'svc');
     await wait(res,'svc'); srv.kill();
     const err = res['svc'].error?.message || '';
-    expect(err.toLowerCase()).toMatch(/confirmation required|service/);
+  expect(err.toLowerCase()).toMatch(/requires confirmed:true|service/);
   },10000);
 
-  test('network operation requires confirmation', async () => {
+  test('network operation requires confirmed:true', async () => {
     const srv=startServer(); await waitForReady(srv); const res=collect(srv);
   rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Invoke-WebRequest -Uri "https://example.com"' }},'net');
     await wait(res,'net'); srv.kill();
     const err = res['net'].error?.message || '';
-    expect(err.toLowerCase()).toMatch(/confirmation required|network/);
+  expect(err.toLowerCase()).toMatch(/requires confirmed:true|network/);
   },10000);
 
   test('unknown command appears in threat-analysis', async () => {

@@ -46,7 +46,7 @@ function Show-PrettyLogEntry {
         "SERVER_CONNECT"      { $messageColor = "Cyan" }
         "MCP_REQUEST"         { $messageColor = "Blue" }
         "MCP_ERROR"           { $messageColor = "Red" }
-        "CONFIRMATION_REQUIRED" { $messageColor = "Yellow" }
+        "CONFIRMED_REQUIRED" { $messageColor = "Yellow" }
     }
     
     # Main log line

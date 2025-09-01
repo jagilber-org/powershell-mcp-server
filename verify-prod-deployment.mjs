@@ -49,7 +49,7 @@ try {
   console.log('   2. Test collectsfdata.exe classification (should be SAFE now)');
   console.log('   3. Look for PATTERN_CACHE_INVALIDATED audit entries on future approvals');
   console.log('\n💡 Documentation Updated:');
-  console.log('   - Fixed confirmation parameter: use "confirmed": true (not "confirm": true)');
+  console.log('   - Fixed confirmed parameter: use "confirmed": true (not "confirmed": true)');
   console.log('   - Added global MCP server workspace context section');
   console.log('   - Enhanced troubleshooting with common error patterns');
   console.log('   - Clarified first-call execution behavior:');

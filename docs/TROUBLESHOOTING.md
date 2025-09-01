@@ -8,29 +8,29 @@ This guide provides deterministic steps to diagnose common runtime observability
 
 ## 0. Common Tool Call Errors
 
-### 0.1 Confirmation Required Error
+### 0.1 confirmed Required Error
 
-**Symptom**: `MCP error -32600: Confirmation required: Unclassified command requires confirmation`
+**Symptom**: `MCP error -32600: confirmed required: Unclassified command requires confirmed:true`
 
-**Cause**: Commands classified as `RISKY` or `UNKNOWN` require explicit confirmation, but wrong parameter name was used.
+**Cause**: Commands classified as `RISKY` or `UNKNOWN` require explicit confirmed, but wrong parameter name was used.
 
 **Root Cause Analysis**:
 
 - **UNKNOWN commands** (never seen before): Always require `confirmed: true` on first call
 - **RISKY commands** (pre-classified as potentially disruptive): Always require `confirmed: true`  
-- **SAFE commands** (pre-classified or learned): Execute immediately, no confirmation needed
+- **SAFE commands** (pre-classified or learned): Execute immediately, no confirmed needed
 
-**Solution**: Use `"confirmed": true`, NOT `"confirm": true`
+**Solution**: Use `"confirmed": true`, NOT `"confirmed": true`
 
 ```json
 ❌ Wrong:
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run-powershell","arguments":{"command":"git commit","confirm":true}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run-powershell","arguments":{"command":"git commit","confirmed":true}}}
 
 ✅ Correct:
 {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run-powershell","arguments":{"command":"git commit","confirmed":true}}}
 ```
 
-**Why This Happens**: The server code checks `args.confirmed`, but many users intuitively try `confirm`, `confirmation`, or other variants.
+**Why This Happens**: The server code checks `args.confirmed`, but many users intuitively try `confirmed`, `confirmed`, or other variants.
 
 **Learning System Note**: Once an UNKNOWN command is approved via the learning system, it becomes SAFE and will execute without `confirmed` on subsequent calls.
 
@@ -90,7 +90,7 @@ Check /api/metrics (curl or browser) for `psSamples: 1`.
 |------|-------|----------|-------------------|
 | A | Sentinel presence | Raw stream contains __MCP_PSMETRICS__ | If absent run: Get-Process -Id $PID; fallback to GetCurrentProcess() values. |
 | B | Parser debug log | `[METRICS][CAPTURE]` line shows numeric cpu/ws values | If undefined, verify regex & locale; sentinel emitted with invariant culture so investigate chunk split fallback. |
-| C | Registry record | Trace shows incrementing `psSamples` | If not incrementing, confirm `metricsRegistry.record` call not short-circuited by early return. |
+| C | Registry record | Trace shows incrementing `psSamples` | If not incrementing, confirmed `metricsRegistry.record` call not short-circuited by early return. |
 | D | Snapshot | `/api/metrics` includes new ps fields | If arrays populated internally but snapshot empty, ensure snapshot sets ps fields when `psCpu.length > 0`. |
 
 \n### 1.4 Locale Edge Case
@@ -122,7 +122,7 @@ Enable with `progressAdaptive=true` on tool call; examine `structuredContent.ada
 | Issue | Check | Fix |
 |-------|-------|-----|
 | Initialize hang | Missing Content-Length header | Ensure exact `Content-Length: <bytes>\r\n\r\n` framing before JSON. |
-| Tools list empty | `toolList` not populated before framer loop | Confirm server constructor executed `setupHandlers()` before entering loop. |
+| Tools list empty | `toolList` not populated before framer loop | confirmed server constructor executed `setupHandlers()` before entering loop. |
 | Duplicate responses | Both SDK transport and framer active | Avoid calling `server.start()` when `--framer-stdio` is used. |
 
 ---
@@ -147,7 +147,7 @@ Store temporarily; delete once resolved to avoid stale documentation drift.
 ## 5. Removal of Temporary Flags
 
 Before release / merge to `master`:
-\n1. Confirm no references to removed temporary flags.
+\n1. confirmed no references to removed temporary flags.
 2. Remove dead fallback parsing branches.
 3. Run full test suite with flags off to catch hidden dependencies.
 

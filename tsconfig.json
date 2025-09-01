@@ -19,8 +19,6 @@
     "node_modules",
     "dist",
     "**/*.test.ts",
-    "src/vscode-server.ts",
-    "src/vscode-server-enterprise.ts",
     "src/server-*.js",
     "src/extension.*",
     "src/test-*"

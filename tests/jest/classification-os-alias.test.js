@@ -27,7 +27,7 @@ describe('OS and alias classification', ()=>{
     for(let i=0;i<60;i++){ if(res['rm']) break; await new Promise(r=> setTimeout(r,80)); }
     srv.kill();
     const txt = res['rm'].result?.content?.[0]?.text || res['rm'].error?.message || '';
-    expect(txt.toLowerCase()).toMatch(/risky pattern|confirmation required/);
+  expect(txt.toLowerCase()).toMatch(/risky pattern|requires confirmed:true/);
   },8000);
 });
 

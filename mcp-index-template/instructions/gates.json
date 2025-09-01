@@ -16,7 +16,7 @@
       "inputs": ["classification","confirmedFlag"],
       "logic": "!( (classification in ['RISKY','UNKNOWN']) && (confirmedFlag == false) )",
       "failureAction": "reject",
-      "onFailMessage": "Confirmation required.",
+      "onFailMessage": "confirmed required.",
       "record": true
     }
   ]

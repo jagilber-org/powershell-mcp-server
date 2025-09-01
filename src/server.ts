@@ -138,7 +138,7 @@ export class EnterprisePowerShellMCPServer {
     if(/^git\s+diff(\s|$)/i.test(lower)) return { level:'SAFE', risk:'LOW', reason:'Git diff read-only', color:'GREEN', blocked:false, requiresPrompt:false, category:'VCS_READONLY', patterns:['git diff'], recommendations:['Safe to execute'] } as any;
     if(/^git\s+log(\s|$)/i.test(lower)) return { level:'SAFE', risk:'LOW', reason:'Git log read-only', color:'GREEN', blocked:false, requiresPrompt:false, category:'VCS_READONLY', patterns:['git log'], recommendations:['Safe to execute'] } as any;
     if(/^git\s+push\s+--force(\s|$)/i.test(lower)) return { level:'CRITICAL', risk:'CRITICAL', reason:'Force push blocked', color:'RED', blocked:true, requiresPrompt:false, category:'VCS_MODIFICATION', patterns:['git push --force'], recommendations:['Avoid force push; use --force-with-lease'] } as any;
-    if(/^git\s+(commit|push|pull|merge|rebase|cherry-pick|reset)\b/i.test(lower)) return { level:'RISKY', risk:'MEDIUM', reason:'Git repository modification - confirmation required', color:'YELLOW', blocked:false, requiresPrompt:true, category:'VCS_MODIFICATION', patterns:['git modify'], recommendations:['Add confirmed: true before executing'] } as any;
+  if(/^git\s+(commit|push|pull|merge|rebase|cherry-pick|reset)\b/i.test(lower)) return { level:'RISKY', risk:'MEDIUM', reason:'Git repository modification requires confirmed:true', color:'YELLOW', blocked:false, requiresPrompt:true, category:'VCS_MODIFICATION', patterns:['git modify'], recommendations:['Add confirmed: true before executing'] } as any;
     // Explicit alias handling for tests / expected policy
     if(alias.isAlias){
       const a = alias.alias;
@@ -148,7 +148,7 @@ export class EnterprisePowerShellMCPServer {
       if(['rm','del'].includes(a)){
         // Escalate destructive switches
         if(/\/(s|q)\b| -Recurse/i.test(command)){
-          return { level:'CRITICAL', risk:'CRITICAL', reason:`Destructive alias ${a} with recursive/quiet switches`, color:'RED', blocked:true, requiresPrompt:false, category:'SYSTEM_DESTRUCTION', patterns:[a], recommendations:['Remove destructive switches','Confirm intent'] };
+          return { level:'CRITICAL', risk:'CRITICAL', reason:`Destructive alias ${a} with recursive/quiet switches`, color:'RED', blocked:true, requiresPrompt:false, category:'SYSTEM_DESTRUCTION', patterns:[a], recommendations:['Remove destructive switches','confirmed intent'] };
         }
         return { level:'RISKY', risk:'MEDIUM', reason:`File deletion alias ${a}`, color:'YELLOW', blocked:false, requiresPrompt:true, category:'FILE_OPERATION', patterns:[a], recommendations:['Add confirmed: true','Review path carefully'] };
       }
@@ -156,15 +156,15 @@ export class EnterprisePowerShellMCPServer {
     if(!this.mergedPatterns){ const sup=new Set((ENTERPRISE_CONFIG.security.suppressPatterns||[]).map((p:string)=>p.toLowerCase())); const addBlocked=(ENTERPRISE_CONFIG.security.additionalBlocked||[]).map((p:string)=> new RegExp(p,'i')); const addSafe=(ENTERPRISE_CONFIG.security.additionalSafe||[]).map((p:string)=> new RegExp(p,'i')); const filter=(arr:readonly string[])=> arr.filter(p=>!sup.has(p.toLowerCase())).map(p=> new RegExp(p,'i')); const blocked=[ ...filter(REGISTRY_MODIFICATION_PATTERNS), ...filter(SYSTEM_FILE_PATTERNS), ...filter(ROOT_DELETION_PATTERNS), ...filter(REMOTE_MODIFICATION_PATTERNS), ...filter(CRITICAL_PATTERNS), ...filter(DANGEROUS_COMMANDS), ...addBlocked ]; const risky=filter(RISKY_PATTERNS); let learned:RegExp[]=[]; try { learned = loadLearnedPatterns().map(p=> new RegExp(p,'i')); } catch{} const safe=[...filter(SAFE_PATTERNS), ...addSafe, ...learned]; this.mergedPatterns={ safe, risky, blocked }; }
     for(const rx of this.mergedPatterns.blocked){
       if(rx.test(command)){
-        // Downgrade certain patterns to confirmation-required per feedback tests (registry, service, network) unless truly critical
+  // Downgrade certain patterns to requires confirmed:true per feedback tests (registry, service, network) unless truly critical
         const lowerSrc = rx.source.toLowerCase();
-  // Treat explicit registry cmdlets (Set-ItemProperty / Remove-ItemProperty) as registry modifications requiring confirmation (feedback gap tests)
+  // Treat explicit registry cmdlets (Set-ItemProperty / Remove-ItemProperty) as registry modifications requiring confirmed:true (feedback gap tests)
   const registryLike = /hk|registry|hklm|set-itemproperty|remove-itemproperty|new-itemproperty/.test(lowerSrc);
         const serviceLike = /service/.test(lowerSrc);
         const networkLike = /invoke-webrequest|invoke-restmethod|curl\s|wget\s/.test(lowerSrc);
         const criticalLike = /format-volume|invoke-expression|encodedcommand|download|string|webclient/.test(lowerSrc);
         if(registryLike || serviceLike || networkLike){
-          return { level:'RISKY', risk:'MEDIUM', reason:`Confirmation required: ${rx.source}`, color:'YELLOW', blocked:false, requiresPrompt:true, category: registryLike? 'REGISTRY_MODIFICATION' : serviceLike? 'SERVICE_MANAGEMENT' : 'NETWORK_OPERATION', patterns:[rx.source], recommendations:['Add confirmed: true','Review intent carefully'] };
+          return { level:'RISKY', risk:'MEDIUM', reason:`Requires confirmed:true (${rx.source})`, color:'YELLOW', blocked:false, requiresPrompt:true, category: registryLike? 'REGISTRY_MODIFICATION' : serviceLike? 'SERVICE_MANAGEMENT' : 'NETWORK_OPERATION', patterns:[rx.source], recommendations:['Add confirmed: true','Review intent carefully'] };
         }
         if(criticalLike){
           return { level:'CRITICAL', risk:'CRITICAL', reason:`Blocked by security policy: ${rx.source}`, color:'RED', blocked:true, requiresPrompt:false, category:'SECURITY_THREAT', patterns:[rx.source], recommendations:['Remove dangerous operations','Use read-only alternatives'] };
@@ -175,7 +175,7 @@ export class EnterprisePowerShellMCPServer {
     if(upper.includes('FORMAT C:')||upper.includes('SHUTDOWN')||lower.includes('rm -rf')||upper.includes('NET USER')){ return { level:'DANGEROUS', risk:'HIGH', reason:'System destructive or privilege escalation command', color:'MAGENTA', blocked:true, requiresPrompt:false, category:'SYSTEM_DESTRUCTION', recommendations:['Use non-destructive alternatives'] }; }
     for(const rx of this.mergedPatterns.risky){ if(rx.test(command)){ return { level:'RISKY', risk:'MEDIUM', reason:`File/service modification operation: ${rx.source}`, color:'YELLOW', blocked:false, requiresPrompt:true, category:'FILE_OPERATION', patterns:[rx.source], recommendations:['Add confirmed: true','Use -WhatIf for testing'] }; } }
     for(const rx of this.mergedPatterns.safe){ if(rx.test(command)){ return { level:'SAFE', risk:'LOW', reason:`Safe read-only operation: ${rx.source}`, color:'GREEN', blocked:false, requiresPrompt:false, category:'INFORMATION_GATHERING', patterns:[rx.source], recommendations:['Safe to execute'] }; } }
-    const unk: SecurityAssessment = { level:'UNKNOWN', risk:'MEDIUM', reason:'Unclassified command requiring confirmation for safety', color:'CYAN', blocked:false, requiresPrompt:true, category:'UNKNOWN_COMMAND', recommendations:['Add confirmed: true','Review command for safety'] }; this.trackUnknownThreat(command, unk); return unk; }
+  const unk: SecurityAssessment = { level:'UNKNOWN', risk:'MEDIUM', reason:'Unclassified command requires confirmed:true', color:'CYAN', blocked:false, requiresPrompt:true, category:'UNKNOWN_COMMAND', recommendations:['Add confirmed: true','Review command for safety'] }; this.trackUnknownThreat(command, unk); return unk; }
 
   private getThreatStats(){ const recent=Array.from(this.unknownThreats.values()).sort((a,b)=> new Date(b.lastSeen).getTime()-new Date(a.lastSeen).getTime()).slice(0,10); return { ...this.threatStats, recentThreats: recent }; }
 
@@ -317,17 +317,35 @@ function startFramerMode(){
         write({ jsonrpc:'2.0', id: msg.id, result:{ tools } });
         continue;
       }
-      if(msg.method==='tools/call' && msg.params?.name==='run-powershell'){
-        const command = msg.params.arguments?.command || ''; const lines = []; if(command.includes('TESTFRAMER')||command.includes('Write-Output')) lines.push('TESTFRAMER'); if(command.includes('RATE')) lines.push('RATE'); if(lines.length===0) lines.push('OK');
-        if(tokens<=0){
-          if(debug){ console.error('[FRAMER][RATE_LIMIT]'); }
-          write({ jsonrpc:'2.0', id: msg.id, result:{ content:[{ type:'text', text:'RATE LIMIT EXCEEDED\n' },{ type:'text', text: lines.join('\n')+'\n' }], rateLimited:true } });
-        } else {
+      if(msg.method==='tools/call'){
+        const name = msg.params?.name;
+        const args = msg.params?.arguments || {};
+        if(name==='run-powershell'){
+          if(tokens<=0){
+            if(debug){ console.error('[FRAMER][RATE_LIMIT]'); }
+            write({ jsonrpc:'2.0', id: msg.id, error:{ code: -32001, message: 'rate limit exceeded', data:{ retryMs: 1000, agentFriendly:true } } });
+            continue;
+          }
           tokens--;
-          if(debug){ console.error(`[FRAMER][OK] tokens_left=${tokens}`); }
-          write({ jsonrpc:'2.0', id: msg.id, result:{ content:[{ type:'text', text: lines.join('\n')+'\n' }] } });
+          (async ()=>{
+            try {
+              const result = await runPowerShellTool(args);
+              write({ jsonrpc:'2.0', id: msg.id, result });
+            } catch(e:any){
+              if(debug){ console.error('[FRAMER][ERR]', e?.message); }
+              if(e && (e.name==='McpError' || typeof e.code==='number')){
+                write({ jsonrpc:'2.0', id: msg.id, error:{ code: e.code ?? -32000, message: e.message || 'Tool error', data: e.data } });
+              } else {
+                write({ jsonrpc:'2.0', id: msg.id, error:{ code: -32000, message: e?.message || 'Unknown error' } });
+              }
+            }
+          })();
+          continue;
         }
-        continue; }
+        // Fallback minimal stub for other tools in framer mode
+        write({ jsonrpc:'2.0', id: msg.id, result:{ content:[{ type:'text', text:`unhandled tool ${name}\n`}] } });
+        continue;
+      }
       write({ jsonrpc:'2.0', id: msg.id, result:{ content:[{ type:'text', text:'unhandled\n'}] } });
     }
   });

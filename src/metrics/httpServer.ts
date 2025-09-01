@@ -461,7 +461,7 @@ export class MetricsHttpServer {
     <section class="card"><h3>SAFE</h3><div class="metric" id="m_safe">0</div></section>
     <section class="card"><h3>RISKY</h3><div class="metric" id="m_risky">0</div></section>
     <section class="card"><h3>BLOCKED</h3><div class="metric" id="m_blocked">0</div></section>
-  <section class="card"><h3>CONFIRM PENDING</h3><div class="metric" id="m_confirm">0</div></section>
+  <section class="card"><h3>confirmed PENDING</h3><div class="metric" id="m_confirm">0</div></section>
   <section class="card"><h3>TIMEOUTS</h3><div class="metric" id="m_timeouts">0</div></section>
     <section class="card"><h3>AVG ms</h3><div class="metric" id="m_avg">0</div></section>
     <section class="card"><h3>P95 ms</h3><div class="metric" id="m_p95">0</div></section>
@@ -548,7 +548,7 @@ export class MetricsHttpServer {
   const removeSelectedBtn = document.getElementById('removeSelected');
   let selectedCandidate = null; // normalized
   let selectedRow = null;
-  const metricsIds = { total:'m_total', safe:'m_safe', risky:'m_risky', blocked:'m_blocked', confirm:'m_confirm', timeouts:'m_timeouts', avg:'m_avg', p95:'m_p95', cpu:'m_cpu', rss:'m_rss', heap:'m_heap', lag:'m_lag', pscpu:'m_pscpu', psws:'m_psws', pssamples:'m_pssamples'};
+  const metricsIds = { total:'m_total', safe:'m_safe', risky:'m_risky', blocked:'m_blocked', confirmed:'m_confirm', timeouts:'m_timeouts', avg:'m_avg', p95:'m_p95', cpu:'m_cpu', rss:'m_rss', heap:'m_heap', lag:'m_lag', pscpu:'m_pscpu', psws:'m_psws', pssamples:'m_pssamples'};
   const levelOrder = ['SAFE','RISKY','DANGEROUS','CRITICAL','BLOCKED','UNKNOWN'];
   const activeLevels = new Set(levelOrder);
   let lastEventTs = Date.now();
@@ -633,7 +633,7 @@ export class MetricsHttpServer {
       setMetric(metricsIds.risky, m.riskyCommands);
       setMetric(metricsIds.blocked, m.blockedCommands);
       setMetric(metricsIds.avg, m.averageDurationMs);
-  if('confirmedRequired' in m) setMetric(metricsIds.confirm, m.confirmedRequired);
+  if('confirmedRequired' in m) setMetric(metricsIds.confirmed, m.confirmedRequired);
       setMetric(metricsIds.p95, m.p95DurationMs);
       if('timeouts' in m) setMetric(metricsIds.timeouts, m.timeouts);
       const p=m.performance||{};
