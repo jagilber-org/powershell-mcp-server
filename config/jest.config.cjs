@@ -1,5 +1,6 @@
-// Jest config lives in config/ so <rootDir> would otherwise resolve here.
-// Explicitly set rootDir to repository root so tests path '<rootDir>/tests/jest' is valid.
+// Jest config lives in config/, so default <rootDir> would incorrectly resolve here.
+// Force rootDir to repository root so '<rootDir>/tests/jest' resolves properly.
+// (Earlier CI failure showed it was searching for config/tests/jest which does not exist.)
 const path = require('path');
 module.exports = {
   rootDir: path.join(__dirname, '..'),

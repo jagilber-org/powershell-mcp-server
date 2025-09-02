@@ -21,8 +21,9 @@ describe('run-powershell timeout edge cases', ()=>{
     const srv=startServer(); await waitForReady(srv); const res=collect(srv);
     rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "shell"', confirmed:true }},'shell');
     const msg = await waitFor(res,'shell',6000); srv.kill(); expect(msg).toBeTruthy();
-    const sc = msg.result?.structuredContent || {}; expect(typeof sc.shellExe).toBe('string');
-    expect(/pwsh\.exe|powershell\.exe/i.test(sc.shellExe)).toBe(true);
+  const sc = msg.result?.structuredContent || {}; expect(typeof sc.shellExe).toBe('string');
+  // Accept full paths or variants like /usr/bin/pwsh, pwsh, powershell, with or without .exe
+  expect(/[\\/](pwsh|powershell)(\.exe)?$/i.test(sc.shellExe) || /^(pwsh|powershell)(\.exe)?$/i.test(sc.shellExe)).toBe(true);
   }, 10000);
 });
 
