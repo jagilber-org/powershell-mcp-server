@@ -259,7 +259,23 @@ export class EnterprisePowerShellMCPServer {
     this.server.setRequestHandler(CallToolRequestSchema, async (req)=>{ const requestId=`req_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; return this.handleToolCall(req.params.name, req.params.arguments||{}, requestId); });
   }
   // Provide a direct accessor for legacy protocol list (core only) when legacy mode used
-  private getToolListDirect(){ return [ 'run-powershell','powershell-syntax-check','emit-log','working-directory-policy','server-stats','help' ].map(n=>({ name:n })); }
+  private getToolListDirect(){
+    // Legacy line protocol surface (kept only for backward compatibility in certain test paths)
+    // Provide a minimal deterministic inputSchema for run-powershell so legacy tests can assert properties.
+    const runPsSchema = {
+      type:'object',
+      properties:{
+        command:{ type:'string' },
+        script:{ type:'string' },
+        workingDirectory:{ type:'string' },
+        timeoutSeconds:{ type:'number' },
+        confirmed:{ type:'boolean' },
+        adaptiveTimeout:{ type:'boolean' }
+      }
+    };
+    return [ 'run-powershell','powershell-syntax-check','emit-log','working-directory-policy','server-stats','help' ]
+      .map(n=> n==='run-powershell' ? { name:n, inputSchema: runPsSchema } : { name:n });
+  }
   
   /** Explicit initialize handler to guarantee timely handshake even under load */
   private _initHandlerRegistered = (()=>{ try { this.server.setRequestHandler(InitializeRequestSchema, async (_req:any)=> ({
@@ -314,7 +330,14 @@ function startFramerMode(){
       if(msg.method==='tools/list'){
         // Use unified registry-driven surface (core tools only) with schemas
         const tools = listToolsForSurface();
-        write({ jsonrpc:'2.0', id: msg.id, result:{ tools } });
+        if(debug){
+          try {
+            const rp = tools.find(t=> t.name==='run-powershell');
+            const pc = rp && rp.inputSchema && rp.inputSchema.properties ? Object.keys(rp.inputSchema.properties).length : (rp && rp.inputSchema ? -1 : -2);
+            console.error(`[FRAMER][TOOLS_LIST] run-powershell propCount=${pc}`);
+          } catch(e){ console.error('[FRAMER][TOOLS_LIST][DEBUG_ERROR]', e instanceof Error? e.message:String(e)); }
+        }
+  write({ jsonrpc:'2.0', id: msg.id, result:{ tools } });
         continue;
       }
       if(msg.method==='tools/call'){

@@ -51,13 +51,23 @@ jobs:
       - name: Build
         run: npm run build:only
       - name: Health script
-        run: npm run health | Out-File -FilePath health-win.json -Encoding utf8
+        shell: pwsh
+        run: |
+          # Run the PowerShell health script directly to avoid npm adding non-JSON prefix lines
+          $json = powershell -ExecutionPolicy Bypass -File scripts/health-check.ps1
+          # Write only the JSON object line to file
+          $json | Set-Content -Path health-win.json -Encoding utf8
       - name: Show health
         run: Get-Content health-win.json
       - name: Validate health
         run: |
+          # Parse the JSON we just wrote (single-line object)
           $data = Get-Content health-win.json | ConvertFrom-Json
-          if($data.status -ne 'ok'){ Write-Error 'Health not ok'; exit 1 }
+            if($data.status -ne 'ok'){ Write-Error "Health not ok: status=$($data.status)"; exit 1 }
+            if(-not $data.package.version){ Write-Error 'Missing package.version in health JSON'; exit 1 }
+            $pkgVer = (Get-Content package.json -Raw | ConvertFrom-Json).version
+            if($data.package.version -ne $pkgVer){ Write-Error "Version mismatch health=$($data.package.version) package=$pkgVer"; exit 1 }
+            Write-Host "Health validated OK with version $($data.package.version)"
       - name: Upload health artifact
         uses: actions/upload-artifact@v4
         with:
