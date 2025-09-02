@@ -486,3 +486,29 @@ Environment variables (quick reference):
 
 Long timeouts (≥60s) emit a responsiveness warning; durations <1ms are promoted to 1ms to avoid misleading 0ms displays.
 
+## Syntax Check Enhancements (Sept 2025)
+
+The `syntax-check` tool now provides:
+
+- Real PowerShell parser validation (fallback legacy delimiter balancer retained for forced mode)
+- LRU cache (100 entries) keyed by SHA-256 of script content (`cacheHit: true` when served from cache)
+- Optional style/static analysis via `PSScriptAnalyzer` when available and `PWSH_SYNTAX_ANALYZER=1`
+- Environment flags:
+  - `PWSH_SYNTAX_FORCE_FALLBACK=1` forces legacy fallback parser
+  - `PWSH_SYNTAX_ANALYZER=1` enables analyzer pass (`analyzerIssues`, `analyzerAvailable`)
+
+Example response snippet:
+
+```jsonc
+{
+  "ok": true,
+  "issues": [],
+  "parser": "powershell",
+  "scriptLength": 128,
+  "cacheHit": true,
+  "analyzerAvailable": false
+}
+```
+
+Analyzer results (when available) add `analyzerIssues` array entries with `RuleName`, `Severity`, `Line`, `Column`, `Message`.
+

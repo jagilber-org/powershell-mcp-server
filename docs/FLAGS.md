@@ -44,6 +44,15 @@ Note: Some flags (`--minimal-stdio`, `--disable-self-destruct`, etc.) are refere
 | `PWSH_EXE` | Explicit PowerShell Core executable path for detection override. | Probe search | `core/shellDetection.ts` |
 | `MCP_QUIET` | Suppress verbose startup logs (planned). | `0` | (future main/server) |
 
+## Added (Sept 2025)
+
+| Variable | Description | Default / Range | Module(s) |
+|----------|-------------|-----------------|-----------|
+| `PWSH_SYNTAX_FORCE_FALLBACK` | Force legacy delimiter fallback parser for all syntax checks (diagnostics/perf baselining). | `0` | `pwshSyntax.ts` |
+| `PWSH_SYNTAX_ANALYZER` | Enable optional PSScriptAnalyzer pass (surfaces `analyzerIssues` & `analyzerAvailable`). | `0` | `pwshSyntax.ts` |
+
+`cacheHit` field appears in `structuredContent` when a script hash lookup returns cached parse results.
+
 ### Derived / Internal Counters (exposed via `/api/metrics`)
 
 | Field | Meaning |
