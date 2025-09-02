@@ -35,6 +35,7 @@ import {
   approveQueuedCandidates, 
   removeFromQueue 
 } from './learning.js';
+import { parsePowerShellSyntax } from './tools/pwshSyntax.js';
 
 export class MCPCompliantPowerShellServer {
   private server: Server;
@@ -359,35 +360,8 @@ export class MCPCompliantPowerShellServer {
     if (!script) {
       throw new McpError(ErrorCode.InvalidParams, "Either 'script' or 'filePath' parameter is required");
     }
-
-    // Simple PowerShell syntax validation (bracket matching)
-    const stack: string[] = [];
-    const pairs: Record<string, string> = { '(': ')', '{': '}', '[': ']' };
-    let balanced = true;
-    
-    for (const ch of script) {
-      if (pairs[ch]) {
-        stack.push(ch);
-      } else if (Object.values(pairs).includes(ch)) {
-        const last = stack.pop();
-        if (!last || pairs[last] !== ch) {
-          balanced = false;
-          break;
-        }
-      }
-    }
-    
-    const isValid = balanced && stack.length === 0;
-    const result = {
-      ok: isValid,
-      issues: isValid ? [] : ['Unbalanced delimiters detected'],
-      scriptLength: script.length
-    };
-    
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-      structuredContent: result
-    };
+    const result = await parsePowerShellSyntax(script);
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], structuredContent: result };
   }
 
   private async handleHelp(args: any, requestId: string) {
