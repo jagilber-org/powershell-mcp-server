@@ -170,5 +170,17 @@ Environment Variable Controls (documented for operability):
 
 The chosen loop uses `Console.ReadKey($true)` ensuring a blocking wait that doesn’t flood CPU and cannot complete naturally. Sleep fallback protects environments without a console. This ensures the timeout mechanism—not normal completion—ends the process.
 
+## 20. Syntax Check Enhancements (Sept 2025)
+
+Added optional analyzer & caching not in original scope.
+
+| ID | Requirement | Priority | Status |
+|----|-------------|----------|--------|
+| S1 | Cache parse results (≤100) | P2 | DONE |
+| S2 | Expose `cacheHit` field | P2 | DONE |
+| S3 | Optional analyzer pass w/ availability flag | P2 | DONE |
+| S4 | Structural imbalance post-parse scan | P2 | DONE |
+| S5 | Env flags documented (`PWSH_SYNTAX_FORCE_FALLBACK`, `PWSH_SYNTAX_ANALYZER`) | P2 | DONE |
+
 ---
 End of PRD

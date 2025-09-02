@@ -590,3 +590,31 @@ Execution timeouts now perform a two‑stage termination: SIGTERM at the configu
 
 ---
 End of Architecture Document
+
+### Syntax Check Pipeline (Sept 2025 Enhancements)
+
+```mermaid
+flowchart LR
+  A[Request syntax-check] --> B{Cache Lookup}
+  B -->|Hit| R[Return Cached Result]
+  B -->|Miss| P[PowerShell Parser]
+  P --> E{Parse Errors?}
+  E -->|Yes| O[Emit issues]
+  E -->|No| S[Structural Balance Scan]
+  S -->|Imbalance| O
+  S -->|Balanced| A1{Analyzer Enabled?}
+  A1 -->|No| C[Store+Cache Result]
+  A1 -->|Yes| AN[PSScriptAnalyzer]
+  AN --> C[Store+Cache Result]
+  C --> R
+```
+
+Key behaviors:
+
+- LRU cache (100 entries) keyed by SHA-256 of script content; adds `cacheHit` field.
+- Forced fallback mode via `PWSH_SYNTAX_FORCE_FALLBACK=1` bypasses parser and analyzer.
+- Optional analyzer pass (rules/style) enabled by `PWSH_SYNTAX_ANALYZER=1` when `PSScriptAnalyzer` is installed; adds `analyzerAvailable` and `analyzerIssues`.
+- Post-parse structural balance scan detects unmatched braces still considered parse-success by the underlying parser edge cases.
+- Fallback delimiter balancer retained for resilience on spawn / JSON parse failures.
+
+Returned fields (superset): `ok`, `issues[]`, `parser`, `scriptLength`, `durationMs`, `cacheHit?`, `analyzerAvailable?`, `analyzerIssues?`.
