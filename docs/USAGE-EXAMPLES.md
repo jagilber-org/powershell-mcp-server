@@ -4,7 +4,7 @@ This file contains correct usage patterns to avoid common errors.
 
 ## confirmed Parameter Examples
 
-### ❌ Common Mistakes
+### X Common Mistakes
 
 ```json
 // Wrong parameter name
@@ -15,7 +15,7 @@ This file contains correct usage patterns to avoid common errors.
 {"name":"run-powershell","arguments":{"command":"git commit","approve":true}}
 ```
 
-### ✅ Correct Usage
+### * Correct Usage
 
 ```json
 // Correct: Use "confirmed" parameter
@@ -35,10 +35,10 @@ This file contains correct usage patterns to avoid common errors.
 When using a global MCP server (configured in VS Code settings), always specify absolute paths:
 
 ```json
-// ❌ Wrong: Relative path (resolved against server startup directory)
+// X Wrong: Relative path (resolved against server startup directory)
 {"name":"run-powershell","arguments":{"command":"Get-ChildItem","workingDirectory":"./src"}}
 
-// ✅ Correct: Absolute path to actual workspace
+// * Correct: Absolute path to actual workspace
 {"name":"run-powershell","arguments":{"command":"Get-ChildItem","workingDirectory":"C:\\Code\\MyProject\\src"}}
 ```
 

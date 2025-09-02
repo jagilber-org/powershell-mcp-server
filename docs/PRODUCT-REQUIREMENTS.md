@@ -1,6 +1,6 @@
 # Product Requirements Document (PRD)
 
-Title: PowerShell MCP Server – Timeout Hardening, Adaptive Execution, and Deterministic Termination
+Title: PowerShell MCP Server - Timeout Hardening, Adaptive Execution, and Deterministic Termination
 Version: 1.0 (Aug 2025)
 Status: In Implementation (Pending Full Suite Validation & Merge)
 Owner: Engineering (Enterprise Tooling)
@@ -13,7 +13,7 @@ Provide reliable, explainable, and enforceable execution lifecycle guarantees fo
 |------|-------------|----------------|
 | Deterministic Outcome | Every execution communicates canonical end state | 100% responses include terminationReason |
 | Hang Accuracy | No false positives for hangs | 0 failing hang tests across 30 consecutive runs |
-| Adaptive Efficiency | Reduce need for large static timeouts while allowing progress | ≥1 adaptive extension in >70% of synthetic progressive tasks |
+| Adaptive Efficiency | Reduce need for large static timeouts while allowing progress | 1 adaptive extension in >70% of synthetic progressive tasks |
 | Backward Compatibility | No breaking change to existing clients/scripts | All legacy tests pass |
 | Observability | Easier analytics on termination patterns | Future metrics can group by terminationReason with no retrofits |
 
@@ -62,7 +62,7 @@ Out-of-Scope (Phase Deferred):
 | F4 | Expose effectiveTimeoutMs, adaptiveExtensions | P1 | DONE |
 | F5 | Preserve backward overflowStrategy | P1 | DONE |
 | F6 | Provide forced hang test (loop) | P0 | DONE |
-| F7 | Enforce hang duration ≥ 80% configured timeout | P1 | DONE |
+| F7 | Enforce hang duration  80% configured timeout | P1 | DONE |
 | F8 | Add fast exit control test | P1 | DONE |
 | F9 | Update docs (README, Architecture, Hardening) | P0 | DONE |
 | F10 | Health tool fallback parsing | P1 | DONE |
@@ -75,7 +75,7 @@ Out-of-Scope (Phase Deferred):
 
 | ID | Requirement | Metric |
 |----|-------------|--------|
-| N1 | Performance overhead for SAFE command ≤ +5% | Benchmark (deferred) |
+| N1 | Performance overhead for SAFE command  +5% | Benchmark (deferred) |
 | N2 | Deterministic test stability | No intermittent failures across 20 CI runs |
 | N3 | Log clarity | terminationReason present in 100% audit entries |
 | N4 | Config safety | Adaptive never exceeds maxTotalSec |
@@ -159,7 +159,7 @@ Environment Variable Controls (documented for operability):
 
 ## 18. Acceptance Checklist
 
-- [x] All functional requirements F1–F12 met
+- [x] All functional requirements F1-F12 met
 - [x] F13 / F14 implemented (min duration + exclusion of zero-duration attempts)
 - [x] All new tests stable locally
 - [ ] Full suite pass on branch (pending)
@@ -168,7 +168,7 @@ Environment Variable Controls (documented for operability):
 
 ## 19. Appendix: Hang Command Justification
 
-The chosen loop uses `Console.ReadKey($true)` ensuring a blocking wait that doesn’t flood CPU and cannot complete naturally. Sleep fallback protects environments without a console. This ensures the timeout mechanism—not normal completion—ends the process.
+The chosen loop uses `Console.ReadKey($true)` ensuring a blocking wait that doesn't flood CPU and cannot complete naturally. Sleep fallback protects environments without a console. This ensures the timeout mechanism--not normal completion--ends the process.
 
 ## 20. Syntax Check Enhancements (Sept 2025)
 
@@ -176,7 +176,7 @@ Added optional analyzer & caching not in original scope.
 
 | ID | Requirement | Priority | Status |
 |----|-------------|----------|--------|
-| S1 | Cache parse results (≤100) | P2 | DONE |
+| S1 | Cache parse results (100) | P2 | DONE |
 | S2 | Expose `cacheHit` field | P2 | DONE |
 | S3 | Optional analyzer pass w/ availability flag | P2 | DONE |
 | S4 | Structural imbalance post-parse scan | P2 | DONE |

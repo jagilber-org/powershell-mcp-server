@@ -13,7 +13,7 @@ program
   .description('Enterprise PowerShell MCP Server CLI')
   .option('--no-metrics', 'Disable in-memory metrics collection (Phase 1)')
   .option('-k, --key <key>', 'Authentication key (overrides MCP_AUTH_KEY)')
-  .option('-c, --config <path>', 'Path to enterprise-config.json override (future)')
+  .option('-c, --config <path>', 'Path to config/enterprise-config.json override (future)')
   .option('--metrics-port <port>', 'Metrics HTTP starting port (default 9090)')
   .option('--dump-config', 'Print merged configuration and exit')
   .option('--dry-run', 'Validate configuration without starting server')

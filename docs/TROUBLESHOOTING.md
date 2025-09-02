@@ -23,10 +23,10 @@ This guide provides deterministic steps to diagnose common runtime observability
 **Solution**: Use `"confirmed": true`, NOT `"confirmed": true`
 
 ```json
-❌ Wrong:
+X Wrong:
 {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run-powershell","arguments":{"command":"git commit","confirmed":true}}}
 
-✅ Correct:
+* Correct:
 {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run-powershell","arguments":{"command":"git commit","confirmed":true}}}
 ```
 
@@ -109,7 +109,7 @@ After confirmed working:
 | Symptom | Likely Cause | Resolution |
 |---------|--------------|-----------|
 | Premature timeout despite output | Extend window too small | Increase `adaptiveExtendWindowMs` relative to emission interval. |
-| Runtime grows unbounded | Missing `adaptiveMaxTotalSec` | Set explicit cap (default 3× base or <=180s). |
+| Runtime grows unbounded | Missing `adaptiveMaxTotalSec` | Set explicit cap (default 3 base or <=180s). |
 | No extensions logged | Output inactivity / classification blocked | Inspect `adaptiveLog` events; ensure progress produced inside window. |
 
 \n### 2.1 Capturing Adaptive Log

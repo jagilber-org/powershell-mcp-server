@@ -7,12 +7,11 @@
 ## 1. High-Level Component Architecture (Updated Aug 2025)
 
 ```mermaid
-%%{init: {'theme':'dark','themeVariables': { 'primaryColor': '#1e2730','primaryTextColor':'#e6f1ff','primaryBorderColor':'#4fa3ff','lineColor':'#6ea8ff','secondaryColor':'#2a3542','tertiaryColor':'#16202a','nodeTextColor':'#e6f1ff','clusterBkg':'#111a23','clusterBorder':'#4fa3ff','noteBkgColor':'#2d3640','noteTextColor':'#e6f1ff','fontFamily':'Segoe UI,Inter,Arial'}}}%%
 flowchart LR
     subgraph Client Side
         A[AI Assistant / MCP Client]
     end
-    A -- stdio (MCP Protocol) --> T[Stdio Transport]
+    A -- stdio MCP Protocol --> T[Stdio Transport]
     T --> C[Core MCP Server]
 
     subgraph Core Runtime
@@ -24,24 +23,23 @@ flowchart LR
         C --> EXEC[PowerShell Executor]
         C --> LOG[Audit Logger]
         C --> THREAT[Threat / Alias Tracker]
-    C --> METRICS[Metrics Registry]
+        C --> METRICS[Metrics Registry]
         C --> PROMPTS[Prompt Retrieval]
         C --> CONFIG[Enterprise Config Loader]
     end
 
     EXEC --> PS[PowerShell Host]
     SEC --> PATTERNS[Pattern Sets + Dynamic Overrides]
-    METRICS --> HTTP[(HTTP / SSE Server)]
-    %% (Removed outdated Git Tool Surface node – git commands are handled through Security Classifier + PowerShell Executor, no dedicated git tools exposed)
+    METRICS --> HTTP[HTTP / SSE Server]
     HTTP --> DASH[Browser Dashboard]
-    LOG --> FILES[(Log Files + NDJSON)]
+    LOG --> FILES[Log Files + NDJSON]
     THREAT --> METRICS
     RL --> METRICS
     EXEC --> METRICS
     EXEC --> LOG
     SEC --> LOG
     THREAT --> LOG
-    PROMPTS --> FILEPROMPTS[(docs/AGENT-PROMPTS.md)]
+    PROMPTS --> FILEPROMPTS[docs/AGENT-PROMPTS.md]
 ```
 
 ---
@@ -49,7 +47,6 @@ flowchart LR
 ## 2. Request Lifecycle (Sequence)
 
 ```mermaid
-%%{init: {'theme':'dark','themeVariables': { 'primaryColor': '#1e2730','primaryTextColor':'#e6f1ff','primaryBorderColor':'#4fa3ff','lineColor':'#6ea8ff','secondaryColor':'#2a3542','tertiaryColor':'#16202a','actorBkg':'#2a3542','actorBorder':'#4fa3ff','fontFamily':'Segoe UI,Inter,Arial'}}}%%
 sequenceDiagram
     participant Client as MCP Client
     participant Server as MCP Server Core
@@ -60,43 +57,43 @@ sequenceDiagram
     participant Log as Audit Logger
     participant Metrics as Metrics Registry
 
-    Client->>Server: CallTool (e.g. powershell-command)
-    Server->>Auth: Validate key (optional)
+    Client->>Server: CallTool
+    Server->>Auth: Validate key
     Auth-->>Server: ok / fail
     alt Auth Fail
-        Server->>Client: McpError (InvalidRequest)
+        Server->>Client: McpError
         Log-->>(Files): AUTH_FAILED
     else Auth OK
-        Server->>Rate: consumeToken(parentPid)
+        Server->>Rate: consumeToken
         Rate-->>Server: allowed? remaining/reset
         alt Rate Exceeded
-            Server->>Client: McpError (Rate Limit)
+            Server->>Client: McpError
             Log-->>(Files): RATE_LIMIT_EXCEEDED
-            Metrics-->>Dashboard: execution(blocked)
+            Metrics-->>Dashboard: execution blocked
         else Within Limit
-            Server->>Sec: classify(command)
+            Server->>Sec: classify command
             Sec-->>Server: SecurityAssessment
             alt Blocked Assessment
-                Server->>Client: McpError (Blocked)
+                Server->>Client: McpError
                 Log-->>(Files): COMMAND_BLOCKED
-                Metrics-->>Dashboard: execution(blocked)
-            else requires confirmed:true (RISKY/UNKNOWN)
+                Metrics-->>Dashboard: execution blocked
+            else requires confirmed true
                 alt confirmed flag missing
-                    Server->>Client: McpError (Needs confirmed:true)
+                    Server->>Client: McpError
                     Log-->>(Files): CONFIRMED_REQUIRED
                 else confirmed present
                     Server->>Exec: spawn PowerShell
                     Exec-->>Server: ExecutionResult
                     Server->>Client: structured output
                     Log-->>(Files): COMMAND_EXECUTED
-                    Metrics-->>Dashboard: execution(success/fail)
+                    Metrics-->>Dashboard: execution success/fail
                 end
             else Safe
                 Server->>Exec: spawn PowerShell
                 Exec-->>Server: ExecutionResult
                 Server->>Client: structured output
                 Log-->>(Files): COMMAND_EXECUTED
-                Metrics-->>Dashboard: execution(success/fail)
+                Metrics-->>Dashboard: execution success/fail
             end
             Sec-->>Log: classification entry
             Sec-->>Metrics: increment counters
@@ -109,21 +106,20 @@ sequenceDiagram
 ## 3. Security Classification Logic (Decision Flow)
 
 ```mermaid
-%%{init: {"theme":"dark","themeVariables": {"primaryColor": "#1e2730","primaryTextColor":"#e6f1ff","primaryBorderColor":"#ff7b72","lineColor":"#ffb347","secondaryColor":"#2a3542","tertiaryColor":"#16202a","fontFamily":"Segoe UI,Inter,Arial"}}}%%
 flowchart TD
     A[Input Command] --> B[Alias / Suspicious Checks]
-    B --> C{High-Risk Alias\nor Suspicious?}
-    C -->|Yes| CRIT[[CRITICAL BLOCK]]
-    C -->|No| D[Merge Dynamic\nPatterns]
+    B --> C{High-Risk Alias or Suspicious?}
+    C -->|Yes| CRIT[CRITICAL BLOCK]
+    C -->|No| D[Merge Dynamic Patterns]
     D --> E{Blocked Regex?}
-    E -->|Yes| BLK[[BLOCKED]]
+    E -->|Yes| BLK[BLOCKED]
     E -->|No| F{Danger Fallback?}
-    F -->|Yes| DANG[[DANGEROUS]]
+    F -->|Yes| DANG[DANGEROUS]
     F -->|No| G{RISKY Regex?}
-    G -->|Yes| RISKY[[RISKY\nNeeds confirmed]]
+    G -->|Yes| RISKY[RISKY Needs confirmed]
     G -->|No| H{SAFE Regex?}
-    H -->|Yes| SAFE[[SAFE]]
-    H -->|No| UNK[[UNKNOWN\nNeeds confirmed]]
+    H -->|Yes| SAFE[SAFE]
+    H -->|No| UNK[UNKNOWN Needs confirmed]
 ```
 
 ### Classification Outcomes
@@ -148,12 +144,11 @@ flowchart TD
 ## 4. Rate Limiter (Token Bucket) Lifecycle
 
 ```mermaid
-%%{init: {"theme":"dark","themeVariables": {"primaryColor": "#1e2730","primaryTextColor":"#e6f1ff","primaryBorderColor":"#c9d1d9","lineColor":"#6ea8ff","secondaryColor":"#2a3542","tertiaryColor":"#16202a"}}}%%
 flowchart LR
     subgraph TOKEN_BUCKET
         START[Init Tokens] --> USE[Request]
         USE --> CHECK{tokens > 0?}
-        CHECK -->|No| DENY[[RATE LIMIT]]
+        CHECK -->|No| DENY[RATE LIMIT]
         CHECK -->|Yes| CONSUME[Take One]
         CONSUME --> ALLOW[Proceed]
         DENY --> WAIT[Client Backoff]
@@ -170,12 +165,11 @@ flowchart LR
 ## 5. Working Directory Enforcement
 
 ```mermaid
-%%{init: {"theme":"dark","themeVariables": {"primaryColor": "#1e2730","primaryTextColor":"#e6f1ff","primaryBorderColor":"#c9d1d9","lineColor":"#f0883e","secondaryColor":"#2a3542","tertiaryColor":"#16202a"}}}%%
 flowchart TD
     A{workingDirectory provided?} -->|No| SKIP[Skip Enforcement]
     A -->|Yes| RESOLVE[Resolve Real Path]
-    RESOLVE --> VALID{Path Starts With\nAllowed Root?}
-    VALID -->|No| BLOCK[[VIOLATION]]
+    RESOLVE --> VALID{Path Starts With Allowed Root?}
+    VALID -->|No| BLOCK[VIOLATION]
     VALID -->|Yes| CONT[Execute]
 ```
 
@@ -189,7 +183,6 @@ Enforcement toggled via tools:
 ## 6. Metrics & Observability Flow
 
 ```mermaid
-%%{init: {"theme":"dark","themeVariables": { "primaryColor": "#1e2730","primaryTextColor":"#e6f1ff","primaryBorderColor":"#58a6ff","lineColor":"#58a6ff","secondaryColor":"#2a3542","tertiaryColor":"#16202a"}}}%%
 flowchart LR
     EXEC_EVENT[Execution Result] --> METR[metricsRegistry]
     CLASSIFY[Security Classification] --> METR
@@ -197,7 +190,7 @@ flowchart LR
     METR --> SNAPSHOT[GET /api/metrics]
     METR --> SSE[STREAM /events]
     SSE --> DASH[Browser Dashboard]
-    LOGS[(Audit Logs)] --> ANALYSIS[External Analysis]
+    LOGS[Audit Logs] --> ANALYSIS[External Analysis]
 ```
 
 Dashboard Visuals:
@@ -227,28 +220,13 @@ The registry snapshot then surfaces aggregated fields:
 
 Dashboard cards for these stay hidden until `psSamples > 0` to avoid empty noise when disabled.
 
-Reset Strategy: Currently only a process restart or future planned reset endpoint clears arrays (no implicit decay). Consumers should snapshot externally if needing long‑term trends.
+Reset Strategy: Currently only a process restart or future planned reset endpoint clears arrays (no implicit decay). Consumers should snapshot externally if needing long-term trends.
 
 ---
 
 ## 7. Threat & Alias Tracking Data Model
 
 ```mermaid
-%%{init: {"theme":"dark","themeVariables": { 
-    "primaryColor": "#1e2730",
-    "primaryTextColor":"#e6f1ff",
-    "primaryBorderColor":"#4fa3ff",
-    "lineColor":"#6ea8ff",
-    "secondaryColor":"#2a3542",
-    "tertiaryColor":"#16202a",
-    "noteBkgColor":"#2d3640",
-    "noteTextColor":"#e6f1ff",
-    "classTextColor":"#e6f1ff",
-    "classTitleColor":"#ffffff",
-    "classBackground":"#1e2730",
-    "classBorderColor":"#4fa3ff",
-    "fontFamily":"Segoe UI,Inter,Arial"
-}}%%
 classDiagram
     class UnknownThreatEntry {
         +string command
@@ -277,19 +255,18 @@ classDiagram
 ## 8. Prompt Retrieval Tool (`agent-prompts`)
 
 ```mermaid
-%%{init: {'theme':'dark','themeVariables': { 'primaryColor': '#1e2730','primaryTextColor':'#e6f1ff','primaryBorderColor':'#4fa3ff','lineColor':'#6ea8ff','secondaryColor':'#2a3542','tertiaryColor':'#16202a'}}}%%
 sequenceDiagram
     participant Client
     participant Server
     participant File as AGENT-PROMPTS.md
 
-    Client->>Server: CallTool(agent-prompts {category?, format?})
+    Client->>Server: CallTool agent-prompts
     Server->>File: Read file contents
-    Server->>Server: Extract headings (## ...)
+    Server->>Server: Extract headings
     alt Category Filter Provided
         Server->>Server: Slice from matched heading to next
     end
-    Server-->>Client: { format, categories, content, category? }
+    Server-->>Client: format categories content category
 ```
 
 Supported formats:
@@ -312,10 +289,10 @@ Supported formats:
 
 The `admin` tool provides structured access to all administrative functions:
 
-- **`action: "server"`** → Server metrics, health, memory management
-- **`action: "security"`** → Working directory policy, threat analysis  
-- **`action: "learning"`** → Command learning queue management
-- **`action: "audit"`** → Logging and prompt library access
+- **`action: "server"`** -> Server metrics, health, memory management
+- **`action: "security"`** -> Working directory policy, threat analysis  
+- **`action: "learning"`** -> Command learning queue management
+- **`action: "audit"`** -> Logging and prompt library access
 
 This hierarchical approach reduces tool surface complexity while maintaining full functionality access.
 
@@ -324,47 +301,32 @@ This hierarchical approach reduces tool surface complexity while maintaining ful
 ## 10. Execution Output Struct (Simplified)
 
 ```mermaid
-%%{init: {"theme":"dark","themeVariables": { 
-    "primaryColor": "#1e2730",
-    "primaryTextColor":"#e6f1ff",
-    "primaryBorderColor":"#4fa3ff",
-    "lineColor":"#6ea8ff",
-    "secondaryColor":"#2a3542",
-    "tertiaryColor":"#16202a",
-    "noteBkgColor":"#2d3640",
-    "noteTextColor":"#e6f1ff",
-    "classTextColor":"#e6f1ff",
-    "classTitleColor":"#ffffff",
-    "classBackground":"#1e2730",
-    "classBorderColor":"#4fa3ff",
-    "fontFamily":"Segoe UI,Inter,Arial"
-}}%%
 classDiagram
     class PowerShellExecutionResult {
         +bool success
         +string stdout
         +string stderr
-        +int? exitCode
-        +int duration_ms            // wall‑clock (>=1ms enforced for real executions)
+        +int exitCode
+        +int duration_ms
         +int configuredTimeoutMs
-        +int effectiveTimeoutMs     // after adaptive extensions
-        +int adaptiveExtensions     // count of extensions applied
-        +bool adaptiveExtended      // shorthand (adaptiveExtensions > 0)
-        +int? adaptiveMaxTotalMs
-        +string terminationReason   // completed | timeout | killed | output_overflow
+        +int effectiveTimeoutMs
+        +int adaptiveExtensions
+        +bool adaptiveExtended
+        +int adaptiveMaxTotalMs
+        +string terminationReason
         +bool timedOut
-        +bool internalSelfDestruct  // exited via internal timer (exitCode 124)
-        +string overflowStrategy    // return | truncate | terminate
-        +bool truncated             // output truncated due to size/line limits
-        +bool overflow              // raw overflow trigger before strategy applied
-        +int totalBytes             // cumulative (pre truncate) bytes captured
-        +object psProcessMetrics    // { CpuSec, WS } when enabled
+        +bool internalSelfDestruct
+        +string overflowStrategy
+        +bool truncated
+        +bool overflow
+        +int totalBytes
+        +object psProcessMetrics
         +SecurityAssessment securityAssessment
         +int originalTimeoutSeconds
-        +string[] warnings          // deprecation & long-timeout notices
-        +string? workingDirectory
-        +object[] chunks            // internal chunk boundary metadata (not always returned)
-        +string? reason             // legacy alias for certain overflow cases
+        +string[] warnings
+        +string workingDirectory
+        +object[] chunks
+        +string reason
     }
 ```
 
@@ -395,7 +357,7 @@ classDiagram
 }
 ```
 
-- Classified SAFE → executes directly.
+- Classified SAFE -> executes directly.
 - Returns success, securityAssessment.level = SAFE.
 
 ### B. Risky Command Without confirmed
@@ -407,8 +369,8 @@ classDiagram
 }
 ```
 
-- Classified RISKY → requiresPrompt.
-- Missing `confirmed:true` → McpError advising to add confirmed.
+- Classified RISKY -> requiresPrompt.
+- Missing `confirmed:true` -> McpError advising to add confirmed.
 
 ### C. Risky Command With confirmed
 
@@ -430,7 +392,7 @@ classDiagram
 }
 ```
 
-- Classified CRITICAL → blocked; no execution spawned.
+- Classified CRITICAL -> blocked; no execution spawned.
 
 ### E. Unknown Command
 
@@ -441,7 +403,7 @@ classDiagram
 }
 ```
 
-- Classified UNKNOWN → requiresPrompt.
+- Classified UNKNOWN -> requiresPrompt.
 - Tracked in unknownThreats map for frequency.
 
 ---
@@ -449,7 +411,6 @@ classDiagram
 ## 13. Dynamic Pattern Overrides
 
 ```mermaid
-%%{init: {"theme":"dark","themeVariables": { "primaryColor": "#1e2730","primaryTextColor":"#e6f1ff","primaryBorderColor":"#4fa3ff","lineColor":"#6ea8ff","secondaryColor":"#2a3542","tertiaryColor":"#16202a"}}}%%
 flowchart LR
     DEFAULT[Built-in Pattern Sets] --> MERGE[Merge Layer]
     ADD_SAFE[additionalSafe array] --> MERGE
@@ -492,7 +453,7 @@ flowchart LR
  
 ## 16. Quick Mental Model
 
-> "Every request is a mini pipeline: Authenticate → Rate Limit → Classify → (confirmed?) → Execute → Log → Stream Metrics."
+> "Every request is a mini pipeline: Authenticate -> Rate Limit -> Classify -> (confirmed?) -> Execute -> Log -> Stream Metrics."
 
 Additional nuance as of Aug 2025:
 
@@ -506,7 +467,7 @@ Additional nuance as of Aug 2025:
 
 | Element | Behavior |
 |---------|----------|
-| Internal Self‑Destruct | Injected timer (unless MCP_DISABLE_SELF_DESTRUCT=1) exits PowerShell (exit 124) shortly before external timeout / adaptive horizon. |
+| Internal Self-Destruct | Injected timer (unless MCP_DISABLE_SELF_DESTRUCT=1) exits PowerShell (exit 124) shortly before external timeout / adaptive horizon. |
 | External Timeout | Initial window derived from timeoutSeconds. |
 | Adaptive Window | When remaining <= extendWindowMs AND recent output activity, extend by extendStepMs. |
 | Cap | Never extends beyond adaptiveMaxTotalMs (derived from user input or 3x base timeout, capped at 180s). |
@@ -585,7 +546,7 @@ The server blends deterministic security classification, explicit confirmed sema
 
 ### Timeout Escalation (Implementation Note)
 
-Execution timeouts now perform a two‑stage termination: SIGTERM at the configured threshold followed by an automatic SIGKILL escalation after a short grace window (min 2s, max 5s, ~10% of timeout). Metrics record each timeout (TIMEOUTS counter) and dashboard rows display a TIMEOUT marker when `timedOut=true`.
+Execution timeouts now perform a two-stage termination: SIGTERM at the configured threshold followed by an automatic SIGKILL escalation after a short grace window (min 2s, max 5s, ~10% of timeout). Metrics record each timeout (TIMEOUTS counter) and dashboard rows display a TIMEOUT marker when `timedOut=true`.
 
 ---
 End of Architecture Document

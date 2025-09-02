@@ -1,22 +1,22 @@
-# Unknown Command Learning (Phases A – C Queue Workflow)
+# Unknown Command Learning (Phases A - C Queue Workflow)
 
-This document details the secure, human‑in‑the‑loop pipeline for evolving UNKNOWN PowerShell commands into explicitly approved safe patterns **without ever storing raw unredacted command text**.
+This document details the secure, human-in-the-loop pipeline for evolving UNKNOWN PowerShell commands into explicitly approved safe patterns **without ever storing raw unredacted command text**.
 
 ## Goals
 
 - Capture emergent, frequently used UNKNOWN commands.
 - Redact potentially sensitive tokens immediately (paths, GUIDs, IPs, hashes, emails).
 - Normalize & hash (HMAC) structure for aggregation while preventing raw leakage.
-- Provide transparent scoring to assist human reviewers (recommendations, NOT auto‑promotion).
+- Provide transparent scoring to assist human reviewers (recommendations, NOT auto-promotion).
 - Promote only approved normalized forms as anchored regex patterns (exact intent, flexible whitespace).
 
 ## Phase A: Capture & Aggregation
 
 1. Detection: Any command classified UNKNOWN triggers journaling via `recordUnknownCandidate`.
-2. Redaction: Deterministic regex replacement → placeholders (e.g., `OBF_PATH`).
-3. Normalization: Lowercase + single‑space collapse ensures equivalent structural forms merge.
-4. HMAC Structural Hash: Non‑reversible digest ensures uniqueness without exposing source.
-5. Journal File: `learnCandidates.jsonl` (rotated by size; append‑only NDJSON lines).
+2. Redaction: Deterministic regex replacement -> placeholders (e.g., `OBF_PATH`).
+3. Normalization: Lowercase + single-space collapse ensures equivalent structural forms merge.
+4. HMAC Structural Hash: Non-reversible digest ensures uniqueness without exposing source.
+5. Journal File: `learnCandidates.jsonl` (rotated by size; append-only NDJSON lines).
 6. Aggregation: `aggregateCandidates()` groups by normalized form, tracking:
    - count
    - first / last timestamp
@@ -29,7 +29,7 @@ Returns aggregated candidates (redacted + normalized) for manual review.
 
 ## Phase B: Recommendations (Scoring)
 
-Adds intelligent scoring to prioritize review – but does **not** itself approve anything.
+Adds intelligent scoring to prioritize review - but does **not** itself approve anything.
 
 ### Scoring Model (`recommendCandidates`)
 
@@ -40,7 +40,7 @@ Weights (sum=1):
 - Density (count / span seconds): 0.20
 - Recency (1/(1+hoursSinceLast)): 0.15
 
-Score = weighted normalized components → scaled 0–100 (two decimals). Rationale string embeds raw factor values for audit.
+Score = weighted normalized components -> scaled 0-100 (two decimals). Rationale string embeds raw factor values for audit.
 
 ### Tool: `recommend-unknown-candidates`
 
@@ -63,13 +63,13 @@ File: `learn-queue.json` (array of entries) with fields:
 
 ### Tools
 
-- `queue-learn-candidates` → `{ added, skipped, total }`
-- `list-learn-queue` → `{ queued: [...] }`
-- `approve-learn-queue` → Promotes provided normalized forms then removes them from queue. Returns `{ promoted, added, skipped, total, patterns }`.
-- `remove-from-learn-queue` → Deletes specified queued normalized forms without promotion `{ removed, remaining }`.
+- `queue-learn-candidates` -> `{ added, skipped, total }`
+- `list-learn-queue` -> `{ queued: [...] }`
+- `approve-learn-queue` -> Promotes provided normalized forms then removes them from queue. Returns `{ promoted, added, skipped, total, patterns }`.
+- `remove-from-learn-queue` -> Deletes specified queued normalized forms without promotion `{ removed, remaining }`.
 
 ### Approval / Promotion Path
-When approving, each normalized string is transformed into an anchored case‑insensitive regex with flexible internal whitespace: `^<escaped_norm_with_\s+>$`. Entries are appended to `learned-safe.json` including metadata `{ normalized, added, pattern, source }` and the in-memory merged SAFE pattern set is reloaded so new approvals take effect immediately.
+When approving, each normalized string is transformed into an anchored case-insensitive regex with flexible internal whitespace: `^<escaped_norm_with_\s+>$`. Entries are appended to `learned-safe.json` including metadata `{ normalized, added, pattern, source }` and the in-memory merged SAFE pattern set is reloaded so new approvals take effect immediately.
 
 ### Direct Promotion (Legacy / Migration)
 `promote-learned-candidates` still exists for batch operations outside the normal queue (e.g., migrating pre-reviewed patterns). Standard governance SHOULD prefer queue + approve.
@@ -93,7 +93,7 @@ When approving, each normalized string is transformed into an anchored case‑in
 | File | Purpose |
 |------|---------|
 | `src/learning.ts` | Redaction, normalization, journaling, aggregation, scoring, promotion persistence |
-| `learnCandidates.jsonl` | Append‑only journal (redacted) |
+| `learnCandidates.jsonl` | Append-only journal (redacted) |
 | `learned-safe.json` | Approved normalized entries + regex patterns (active SAFE expansion) |
 | `learn-queue.json` | Pending review queue prior to approval |
 | `src/server.ts` | Emits `candidateNorm` in UNKNOWN events; exposes MCP tools |
@@ -103,7 +103,7 @@ When approving, each normalized string is transformed into an anchored case‑in
 
 - Research / analysis stage (static risk heuristics) before approval button enabled.
 - Pattern generalization (parameter placeholders) with differential risk scoring.
-- Expiration / decay for stale low‑frequency queued or learned patterns.
+- Expiration / decay for stale low-frequency queued or learned patterns.
 - Enhanced UI: rationale tooltips, diff vs existing SAFE patterns, score sorting in queue.
 - Telemetry: score distribution snapshots + queue aging metrics.
 
@@ -134,10 +134,10 @@ Queue then Approve:
 ## Review Checklist for Approval
 
 - [ ] Redaction placeholders acceptable (no sensitive literal remnants)
-- [ ] Command semantics safe (read‑only, introspection, harmless path access)
+- [ ] Command semantics safe (read-only, introspection, harmless path access)
 - [ ] Frequency justifies allowlisting (avoid noise)
 - [ ] No overlap with blocked/risky patterns
-- [ ] Normalization retains intended specificity (not over‑generalized)
+- [ ] Normalization retains intended specificity (not over-generalized)
 
 ## Changelog
 

@@ -8,17 +8,17 @@ Unless noted, flags apply when launching via `node dist/server.js` or the packag
 
 | Flag | Alias | Description | Side Effects / Env Bridge |
 |------|-------|-------------|----------------------------|
-| `-k, --key <key>` | — | Sets authentication key used to require `key` param on initialize / tool calls. | Sets `MCP_AUTH_KEY` in-process. |
-| `--metrics-port <port>` | — | Preferred starting port for metrics HTTP server (scans upward if busy). Default 9090. | Sets `METRICS_PORT`. |
-| `--no-metrics` | — | Disables in-memory metrics registry & dashboard. | Forces `cfg.metrics.enable=false`. |
-| `--dump-config` | — | Prints merged runtime configuration JSON then exits. | No server start. |
-| `--dry-run` | — | Validates configuration & exits (health check for deployment). | No server start. |
-| `--framer-stdio` | — | Start in framed Content-Length transport mode (legacy SDK compatibility). | Bypasses legacy newline JSON path. |
-| `--framer-debug` | — | Verbose framing logs (header/body length, hex preview). | Sets / checks `MCP_FRAMER_DEBUG`. |
-| `--minimal-stdio` | — | Launch reduced feature set minimal stdio server (diagnostics). | Often forces `confirmed:true`. |
-| `--disable-self-destruct` | — | (Planned / may map to env) Disable internal PowerShell self-destruct timer. | Equivalent to `MCP_DISABLE_SELF_DESTRUCT=1` if implemented. |
-| `--enable-self-destruct` | — | Re-enable timer after prior disable. | Unsets `MCP_DISABLE_SELF_DESTRUCT`. |
-| `--quiet` | — | Suppress verbose startup banners. | Intended tie-in to `MCP_QUIET=1` (future). |
+| `-k, --key <key>` | -- | Sets authentication key used to require `key` param on initialize / tool calls. | Sets `MCP_AUTH_KEY` in-process. |
+| `--metrics-port <port>` | -- | Preferred starting port for metrics HTTP server (scans upward if busy). Default 9090. | Sets `METRICS_PORT`. |
+| `--no-metrics` | -- | Disables in-memory metrics registry & dashboard. | Forces `cfg.metrics.enable=false`. |
+| `--dump-config` | -- | Prints merged runtime configuration JSON then exits. | No server start. |
+| `--dry-run` | -- | Validates configuration & exits (health check for deployment). | No server start. |
+| `--framer-stdio` | -- | Start in framed Content-Length transport mode (legacy SDK compatibility). | Bypasses legacy newline JSON path. |
+| `--framer-debug` | -- | Verbose framing logs (header/body length, hex preview). | Sets / checks `MCP_FRAMER_DEBUG`. |
+| `--minimal-stdio` | -- | Launch reduced feature set minimal stdio server (diagnostics). | Often forces `confirmed:true`. |
+| `--disable-self-destruct` | -- | (Planned / may map to env) Disable internal PowerShell self-destruct timer. | Equivalent to `MCP_DISABLE_SELF_DESTRUCT=1` if implemented. |
+| `--enable-self-destruct` | -- | Re-enable timer after prior disable. | Unsets `MCP_DISABLE_SELF_DESTRUCT`. |
+| `--quiet` | -- | Suppress verbose startup banners. | Intended tie-in to `MCP_QUIET=1` (future). |
 
 Note: Some flags (`--minimal-stdio`, `--disable-self-destruct`, etc.) are referenced in docs / roadmap; if not yet parsed in `cli.ts` they are available via environment variables instead.
 

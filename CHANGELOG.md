@@ -26,14 +26,14 @@ Highlights:
 - Unified timeout parameter (`aiAgentTimeoutSec`); legacy aliases produce warnings (deprecation + long timeout guidance).
 - Metrics subsystem revamp (registry + HTTP server) with bootstrap events and aggregation tests; added partial-output timeout & overflow handling strategies (return/truncate/terminate) with structured fields.
 - Added minimal framed server for fast initialize/tools list tests.
-- Removed legacy VSCode adapter entry files (`vscode-server.ts`, `vscode-server-enterprise.ts`) – unified `server.ts` is now the only entry point.
+- Removed legacy VSCode adapter entry files (`vscode-server.ts`, `vscode-server-enterprise.ts`) - unified `server.ts` is now the only entry point.
 - Improved working directory policy enforcement and security audit logging.
 - Version bump to 1.3.0; production deploy script unchanged (now deploys framed-only build).
 
 Breaking Changes:
 
 - Legacy newline-delimited protocol removed; only Content-Length framed MCP supported.
-- Deprecated timeout parameter names (`aiAgentTimeout`, `timeout`) – still accepted but emit warnings; prefer `aiAgentTimeoutSec`.
+- Deprecated timeout parameter names (`aiAgentTimeout`, `timeout`) - still accepted but emit warnings; prefer `aiAgentTimeoutSec`.
 - Tool listing no longer includes any git operations; clients relying on them must invoke PowerShell commands directly (subject to classification & confirmed gating).
 
 Upgrade Notes:

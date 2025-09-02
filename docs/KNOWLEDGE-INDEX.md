@@ -1,8 +1,8 @@
-# 📚 Knowledge Index
+#  Knowledge Index
 
 > Key Learning: The `activate_<category>_tools` functions are the reliable method for MCP tool enablement in VS Code environments, especially for automated/agent workflows.
 
-> 🚨🚨🚨 ULTRA-CRITICAL ENFORCEMENT BANNER (DO NOT BYPASS) 🚨🚨🚨
+>  ULTRA-CRITICAL ENFORCEMENT BANNER (DO NOT BYPASS) 
 >
 > ABSOLUTE RULE: **DO NOT ISSUE RAW TERMINAL COMMANDS WHEN AN MCP TOOL CAN ACHIEVE THE OUTCOME. ALWAYS ROUTE THROUGH A REGISTERED MCP SERVER TOOL INSTEAD OF DIRECT TERMINAL.**
 >
@@ -14,15 +14,15 @@
 > - Guarantees threat & alias tracking signals reach dashboard + history endpoint.
 > - Enables reproducibility & deterministic enforcement (no invisible side-paths).
 >
-> MCP GATING CHECKLIST (ALL must be NO to even CONSIDER terminal) — evaluate across ALL registered MCP servers (aggregate tool surface):
+> MCP GATING CHECKLIST (ALL must be NO to even CONSIDER terminal) -- evaluate across ALL registered MCP servers (aggregate tool surface):
 >
 > 1. Exists specialized MCP tool (on any registered server: e.g., Git server tools, log-test, server-stats, ai-agent-test, GitHub/Issue tools, etc.)?
 > 2. Can generic `powershell-command` run the shell/PowerShell you were about to run? (Usually YES.)
-> 3. Would using terminal cause loss of audit/metrics/security classification? (If YES → BLOCK.)
-> 4. Is this routine repo hygiene (git ops) now covered by git-* tools? (If YES → use tools.)
-> 5. Has a similar prior terminal attempt been replaced by a tool this session? (If YES → use tool.)
+> 3. Would using terminal cause loss of audit/metrics/security classification? (If YES -> BLOCK.)
+> 4. Is this routine repo hygiene (git ops) now covered by git-* tools? (If YES -> use tools.)
+> 5. Has a similar prior terminal attempt been replaced by a tool this session? (If YES -> use tool.)
 >
-> If ANY answer = YES → Terminal usage is FORBIDDEN.
+> If ANY answer = YES -> Terminal usage is FORBIDDEN.
 >
 > MANDATORY TERMINAL EXCEPTION BLOCK (only if all above = NO):
 
@@ -35,7 +35,7 @@ Risk Mitigation: <steps to minimize risk>
 
 > Without this exact formatted block the attempt is INVALID and must be auto-replaced with an MCP tool plan.
 >
-> FINAL FALLBACK PRINCIPLE: When uncertain, ALWAYS default to MCP tool invocation. Ambiguity is treated as a BLOCK → choose MCP.
+> FINAL FALLBACK PRINCIPLE: When uncertain, ALWAYS default to MCP tool invocation. Ambiguity is treated as a BLOCK -> choose MCP.
 
 > Copilot / AI Agent Note: Procedural assistant behavior (how to choose tools, escalation sequence, prohibited behaviors) is defined in `COPILOT-INSTRUCTIONS.md`. This knowledge index only summarizes the universal rule above to avoid circular duplication.
 
@@ -47,7 +47,7 @@ Risk Mitigation: <steps to minimize risk>
 
 ## 1. Core Architecture Principles
 
-- **Deterministic Pipeline**: Authenticate → Rate Limit → Classify → (confirmed?) → Execute → Log → Stream Metrics.
+- **Deterministic Pipeline**: Authenticate -> Rate Limit -> Classify -> (confirmed?) -> Execute -> Log -> Stream Metrics.
 - **Explicit Trust Boundaries**: No execution until classification & (if needed) confirmed succeed.
 - **Fail Closed**: Block on ambiguity (UNKNOWN requires confirmed:true; blocked patterns never execute).
 - **Observability First**: Every decision pathway emits audit + metrics signals.
@@ -59,13 +59,13 @@ Risk Mitigation: <steps to minimize risk>
 |--------|-----------|-----------|
 | Pattern Tiers | SAFE / RISKY / DANGEROUS / CRITICAL / BLOCKED / UNKNOWN | Clear enforcement semantics. |
 | confirmed | Required only for RISKY + UNKNOWN | Minimizes friction while preserving guard rails. |
-| Blocking | DANGEROUS, CRITICAL, BLOCKED short‑circuit execution | Prevents side‑effects from high‑risk commands. |
-| Dynamic Overrides | Merge additionalSafe / additionalBlocked after suppressing unwanted built‑ins | Runtime flexibility. |
+| Blocking | DANGEROUS, CRITICAL, BLOCKED short-circuit execution | Prevents side-effects from high-risk commands. |
+| Dynamic Overrides | Merge additionalSafe / additionalBlocked after suppressing unwanted built-ins | Runtime flexibility. |
 | Threat Tracking | UNKNOWN frequency + alias correlation | Detect emerging malicious patterns. |
 
 ### Classification Heuristics
 
-- Regex-driven evaluation + alias/suspicious pre-check short‑circuits to CRITICAL when warranted.
+- Regex-driven evaluation + alias/suspicious pre-check short-circuits to CRITICAL when warranted.
 - Cache merged patterns (safe/risky/blocked) to avoid recomputation.
 - Provide granular reasons in `SecurityAssessment` for audit transparency.
 
@@ -73,8 +73,8 @@ Risk Mitigation: <steps to minimize risk>
 
 Recent Lessons (Commits culminating in 537c25b):
 
-1. **GitHub Mermaid Strictness**: Use JSON `init` blocks (`%%{init: {"theme":"dark", ...}}%%`). Single‑quoted or non‑JSON structures can intermittently fail.
-2. **Avoid Escaped Newlines**: Replace literal `\n` inside labels with either real newlines (flowchart) or simplify wording. `<br/>` works but can cause layout quirks—prefer concise labels.
+1. **GitHub Mermaid Strictness**: Use JSON `init` blocks (`%%{init: {"theme":"dark", ...}}%%`). Single-quoted or non-JSON structures can intermittently fail.
+2. **Avoid Escaped Newlines**: Replace literal `\n` inside labels with either real newlines (flowchart) or simplify wording. `<br/>` works but can cause layout quirks--prefer concise labels.
 3. **Simplify Node Labels**: Complex punctuation + brackets increase parsing failures; flatten text.
 4. **High-Contrast Class Diagrams**: Explicitly set `classTextColor`, `classTitleColor`, `classBackground`, `classBorderColor` to mitigate low contrast on dark theme.
 5. **DRY Opportunity**: Repeated theme blocks could be refactored by documenting a canonical snippet (manual reuse; Mermaid has no native include).
@@ -157,7 +157,7 @@ See `SESSION-LEARNINGS.md` for detailed transformation from path-based to proces
 | Date (UTC) | Incident | Root Cause | Remediation | Permanent Safeguards |
 |-----------|----------|------------|-------------|----------------------|
 | 2025-08-23 | Attempted raw terminal execution of simple test command despite available MCP `powershell-command` tool | Skipped MCP gating checklist; did not activate/inspect tool surface first; incorrect assumption of tool unavailability | Enforce immediate MCP tool surface activation check; emit direct `powershell-command` payload instead of terminal; only proceed to terminal with fully populated Terminal Exception block | Added "Tool Surface Activation First" step to safeguard list; classify any bypass attempt as policy violation; require logging of gate evaluation when denial occurs |
-| 2025-08-23 | Assistant produced unsolicited scripts & repeated clarifications instead of executing MCP tool payload requests (user intent: direct tool invocation) | Failure to adhere to ULTRA-CRITICAL MCP-first minimal-response rule; over-elaboration when execution bridge unavailable | Defined payload-only mode; removed creation of helper scripts unless explicitly requested | Pre-check gate before responding: (a) Is user asking for action? → supply single tools/call payload only; (b) No multi-option responses unless user says "options"; (c) No new artifacts without explicit verbs: add / create / implement |
+| 2025-08-23 | Assistant produced unsolicited scripts & repeated clarifications instead of executing MCP tool payload requests (user intent: direct tool invocation) | Failure to adhere to ULTRA-CRITICAL MCP-first minimal-response rule; over-elaboration when execution bridge unavailable | Defined payload-only mode; removed creation of helper scripts unless explicitly requested | Pre-check gate before responding: (a) Is user asking for action? -> supply single tools/call payload only; (b) No multi-option responses unless user says "options"; (c) No new artifacts without explicit verbs: add / create / implement |
 
 Guideline Reinforcement:
 

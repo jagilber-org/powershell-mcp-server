@@ -383,7 +383,7 @@ function Find-MCPLogFiles {
                     Where-Object { 
                         (Test-Path (Join-Path $_.FullName "logs")) -or
                         (Test-Path (Join-Path $_.FullName "dist\server.js")) -or
-                        (Test-Path (Join-Path $_.FullName "mcp-config.json")) -or
+                        (Test-Path (Join-Path $_.FullName "config/mcp-config.json")) -or
                         (Test-Path (Join-Path $_.FullName "package.json")) -and
                         (Get-Content (Join-Path $_.FullName "package.json") -ErrorAction SilentlyContinue | Select-String "mcp")
                     } |

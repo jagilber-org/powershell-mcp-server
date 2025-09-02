@@ -23,7 +23,7 @@ Legacy baseline (retained):
 |------------|---------|-------------------|-------|
 | terminationReason | Canonical termination state | terminationReason | timeout/adaptive/fast-exit |
 | Adaptive Timeout | Extend runtime on active output | adaptiveTimeout / progressAdaptive, adaptiveExtendWindowMs, adaptiveExtendStepMs, adaptiveMaxTotalSec | adaptive timeout test |
-| Hang Guard | Prevent early success misclassification | Forced loop command, duration ≥ 80% threshold | timeout hardening hang test |
+| Hang Guard | Prevent early success misclassification | Forced loop command, duration  80% threshold | timeout hardening hang test |
 | Fast Exit Control | Ensure quick commands not flagged as hang | Simple echo command baseline | fast-exit control test |
 | Shell Detection | Single synchronous deterministic resolver | `detectShell()` output: exe, source, tried[] | shellDetection precedence test |
 
@@ -86,7 +86,7 @@ Mutual exclusivity enforced at finish; integrity tests validate.
 
 1. Initialize base `configuredTimeoutMs`.
 2. Periodically compute remaining time.
-3. If remaining ≤ `extendWindowMs` AND recent activity within same window → extend by `extendStepMs`.
+3. If remaining  `extendWindowMs` AND recent activity within same window -> extend by `extendStepMs`.
 4. Never exceed `adaptiveMaxTotalSec` (hard ceiling); internal self-destruct timer aligned to maximum potential runtime.
 5. Record `adaptiveExtensions` count; set `adaptiveExtended=true` if any extension applied.
 
@@ -107,7 +107,7 @@ Strengths:
 Test Assertions:
 - `timedOut || exitCode===124`
 - `success === false`
-- Elapsed ≥ 0.8 * configuredTimeoutMs
+- Elapsed  0.8 * configuredTimeoutMs
 - `terminationReason === 'timeout'`
 
 ## 8. Test Inventory (Aug 2025)
@@ -146,7 +146,7 @@ Added terminationReason to audit & metrics publish event payload enabling future
 
 Short-term:
 - Termination reason distribution metrics
-- Optional cancellation token bridging (client abort → kill)
+- Optional cancellation token bridging (client abort -> kill)
 - terminationReasonDetail subcode (internalSelfDestruct vs watchdog vs escalate)
 - Warning if legacy powershell.exe selected (encourage pwsh)
 
@@ -164,13 +164,13 @@ Long-term:
 
 | Criterion | Status |
 |----------|--------|
-| terminationReason emitted for every execution | ✅ |
-| Hang test enforces duration & non-success | ✅ |
-| Adaptive test shows effectiveTimeout > configured | ✅ |
-| Fast-exit test confirms terminationReason=completed | ✅ |
-| Docs updated (README, ARCHITECTURE, HARDENING) | ✅ |
-| Compliance summary includes new fields | ✅ |
-| Deterministic shell detection logged + test | ✅ |
+| terminationReason emitted for every execution | * |
+| Hang test enforces duration & non-success | * |
+| Adaptive test shows effectiveTimeout > configured | * |
+| Fast-exit test confirms terminationReason=completed | * |
+| Docs updated (README, ARCHITECTURE, HARDENING) | * |
+| Compliance summary includes new fields | * |
+| Deterministic shell detection logged + test | * |
 
 ## 14. Rollback Plan
 

@@ -1,6 +1,6 @@
 /**
  * Unified configuration loader (Phase 1)
- * Layers: defaults <- JSON file (enterprise-config.json) <- env vars (MCP_*)
+ * Layers: defaults <- JSON file (config/enterprise-config.json) <- env vars (MCP_*)
  * CLI will be integrated in a later sub-phase.
  */
 import fs from 'fs';
@@ -24,13 +24,13 @@ const DEFAULTS: UnifiedConfig = {
 };
 
 export function loadUnifiedConfig(): UnifiedConfig {
-  const filePath = path.join(process.cwd(), 'enterprise-config.json');
+  const filePath = path.join(process.cwd(), 'config', 'enterprise-config.json');
   let fileConfig: any = {};
   if (fs.existsSync(filePath)) {
     try {
       fileConfig = JSON.parse(fs.readFileSync(filePath, 'utf8'));
     } catch (e) {
-      console.error('[CONFIG] Failed to parse enterprise-config.json:', e);
+      console.error('[CONFIG] Failed to parse config/enterprise-config.json:', e);
     }
   }
 

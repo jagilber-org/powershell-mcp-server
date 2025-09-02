@@ -75,6 +75,14 @@ export async function parsePowerShellSyntax(script: string, opts?: { timeoutMs?:
         const jsonLine = stdout.trim().split(/\r?\n/).filter(l=> l.startsWith('{') && l.endsWith('}')).pop() || stdout.trim();
         const parsed = JSON.parse(jsonLine);
         const base: PwshSyntaxResult = { ok: parsed.ok, issues: parsed.issues||[], parser:'powershell', durationMs: Date.now()-start, scriptLength: script.length };
+        // Post-parse structural balance check (catches certain unclosed braces the parser may treat as incomplete but non-error in batch parsing context)
+        if(base.ok){
+          const imbalance = detectStructuralImbalance(script);
+            if(!imbalance.ok){
+              base.ok = false;
+              base.issues.push({ message: imbalance.message || 'Structural imbalance detected', startLine: imbalance.line, startColumn: imbalance.column, endLine: imbalance.line, endColumn: imbalance.column, text: '' });
+            }
+        }
         if(process.env.PWSH_SYNTAX_ANALYZER==='1' && base.ok){
           runAnalyzer(script).then(an=>{ const merged = { ...base, analyzerIssues: an.issues, analyzerAvailable: an.available }; syntaxCache.set(hash, merged); trimCache(); resolve(merged); }).catch(()=>{ syntaxCache.set(hash, base); trimCache(); resolve(base); });
         } else { syntaxCache.set(hash, base); trimCache(); resolve(base); }
@@ -99,4 +107,28 @@ async function runAnalyzer(script: string): Promise<{ issues:any[]; available:bo
     child.on('close', ()=>{ clearTimeout(timeout); try { const line = out.trim().split(/\r?\n/).filter(l=> l.startsWith('{')).pop() || out.trim(); const parsed = JSON.parse(line); resolve({ issues: parsed.issues||[], available: !!parsed.available }); } catch { resolve({ issues:[], available:false }); } });
     child.on('error', ()=> resolve({ issues:[], available:false }) );
   });
+}
+
+// Lightweight structural imbalance detector for braces / quotes when parser reports ok but user expects mismatch detection
+function detectStructuralImbalance(script: string): { ok:boolean; message?:string; line:number; column:number }{
+  const openings: string[] = []; const pairs: Record<string,string>={ '(':')','{':'}','[':']' };
+  let inSingle=false, inDouble=false, inHere: string|false=false;
+  const lines = script.split(/\r?\n/);
+  for(let li=0; li<lines.length; li++){
+    const line = lines[li];
+    for(let ci=0; ci<line.length; ci++){
+      const ch=line[ci]; const prev=line[ci-1];
+      if(!inHere && !inSingle && ch==='"'){ if(!inDouble) inDouble=true; else if(prev!=='`') inDouble=false; }
+      else if(!inHere && !inDouble && ch==="'"){ if(!inSingle) inSingle=true; else if(prev!=='`') inSingle=false; }
+      if(inSingle||inDouble||inHere) continue;
+      if(pairs[ch]) openings.push(ch);
+      else if(Object.values(pairs).includes(ch)){
+        const last = openings.pop(); if(!last || pairs[last]!==ch){ return { ok:false, message:`Unmatched closing '${ch}'`, line: li+1, column: ci+1 }; }
+      }
+    }
+  }
+  if(openings.length>0){
+    return { ok:false, message:`Missing closing delimiter(s) for ${openings.join(',')}` , line: lines.length, column: (lines[lines.length-1]?.length||0)+1 };
+  }
+  return { ok:true, line:0, column:0 };
 }

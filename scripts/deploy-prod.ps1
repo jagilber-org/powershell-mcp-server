@@ -119,15 +119,15 @@ if(-not $DryRun){ New-Item -ItemType Directory -Path $staging | Out-Null }
 # Artifact selection
 $artifactList = @(
   'dist',
-  'package.json','package-lock.json','README.md','mcp-config.json','enterprise-config.json',
-  'learned-safe.json',
+  'package.json','package-lock.json','README.md','config',
+  'data/learned-safe.json',
   'instructions','docs'
   # add other runtime-needed assets here
 )
 
-# Ensure learned-safe.json exists so verification script passes (create minimal placeholder if absent)
-if(-not (Test-Path 'learned-safe.json')){
-  Write-Warn 'learned-safe.json missing; creating placeholder.'
+# Ensure data/learned-safe.json exists so verification script passes (create minimal placeholder if absent)
+if(-not (Test-Path 'data/learned-safe.json')){
+  Write-Warn 'data/learned-safe.json missing; creating placeholder.'
   '{"version":1,"approved":[]}' | Out-File -Encoding utf8 learned-safe.json
 }
 

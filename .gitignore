@@ -6,10 +6,15 @@ yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
 
-# Compiled output - ignore most but allow enterprise server
+# Compiled output
 dist/*
-build/
 out/
+
+# Temporary files and build artifacts
+temp/
+*.tmp
+*.temp
+.cache/
 
 # TypeScript
 *.tsbuildinfo
@@ -21,11 +26,25 @@ pids
 *.seed
 *.pid.lock
 
+# Logs
+logs/*.log
+logs/*.ndjson
+*.log
+trace.log
+
 # Coverage directory used by tools like istanbul
 coverage/
 *.lcov
 coverage.xml
 testResults.xml
+
+# Data files (should be backed up separately)
+data/learned-safe.json
+data/learnCandidates.jsonl
+data/api-metrics.json
+
+# Deployment artifacts
+deploy/*.tgz
 
 # nyc test coverage
 .nyc_output

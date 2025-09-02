@@ -1,6 +1,42 @@
-﻿# PowerShell MCP Server (Enterprise Hardening / Minimal Core Aug 2025)
+# PowerShell MCP Server (Enterprise Hardening / Minimal Core ## Project Structure
 
-## Quick Start
+```text
+|-- .github/          # GitHub workflows, issue templates, Copilot instructi####**Topics:***Topics:** security, tools, admin, examples, compliance
+
+## Security Model
+
+Levels: SAFE -> RISKY -> DANGEROUS (reserved) -> CRITICAL -> BLOCKED -> UNKNOWN
+
+| Level | Requires confirmed? | Executed? | Example | Category Sample |ity, tools, admin, examples, compliance
+
+## Security Model
+
+Levels: SAFE -> RISKY -> DANGEROUS (reserved) -> CRITICAL -> BLOCKED -> UNKNOWN
+
+| Level | Requires confirmed? | Executed? | Example | Category Sample |ty Model
+
+Levels: SAFE ->## Unknown Command Learning
+
+UNKNOWN -> normalize -> queue -> review -> approve -> SAFE cache (`learned-safe.json`). Approved patterns immediately influence classification.
+
+## Tests (Jest)Y -> DANGEROUS (reserved) -> CRITICAL -> BLOCKED -> UNKNOWN
+
+| Level | Requires confirmed? | Executed? | Example | Category Sample |rity Model
+
+Levels: SAFE -> RISKY -> DANGEROUS (reserved) -> CRITICAL -> BLOCKED ->UNKNOWN -> normalize -> queue -> review -> approve -> SAFE cache (`learned-safe.json`). Approved patterns immediately influence classification.UNKNOWN
+|-- bin/             # Executable scripts and legacy entry points  
+|-- build/           # Build scripts and automation tools
+|-- config/          # Configuration files (enterprise, Jest, MCP)
+|-- data/            # Runtime data (learning, metrics, knowledge index)
+|-- deploy/          # Deployment artifacts and release packages
+|-- docs/            # Project documentation
+|-- logs/            # Runtime audit and diagnostic logs
+|-- scripts/         # Development and maintenance scripts
+|-- src/             # TypeScript source code
+|-- temp/            # Temporary files and build artifacts
+|-- tests/           # Test suites and fixtures
+`-- tools/           # Development utilities and helper scripts
+```uick Start
 
 ```powershell
 npm install
@@ -58,6 +94,24 @@ The `admin` tool provides access to administrative functions through a hierarchi
 3. `run-powershell` accepts either `command` or `script` parameter (equivalent)
 4. Working directory enforcement (when enabled) restricts execution to `allowedWriteRoots`
 5. All administrative functions accessed through unified `admin` tool
+
+## Project Structure
+
+```text
+|-- .github/          # GitHub workflows, issue templates, Copilot instructions
+|-- bin/             # Executable scripts and legacy entry points  
+|-- build/           # Build scripts and automation tools
+|-- config/          # Configuration files (enterprise, Jest, MCP)
+|-- data/            # Runtime data (learning, metrics, knowledge index)
+|-- deploy/          # Deployment artifacts and release packages
+|-- docs/            # Project documentation
+|-- logs/            # Runtime audit and diagnostic logs
+|-- scripts/         # Development and maintenance scripts
+|-- src/             # TypeScript source code
+|-- temp/            # Temporary files and build artifacts
+|-- tests/           # Test suites and fixtures
+`-- tools/           # Development utilities and helper scripts
+```
 
 ### MCP SDK Compliance
 
@@ -138,7 +192,7 @@ This server fully complies with the Model Context Protocol specification:
 
 ## Security Model
 
-Levels: SAFE â†’ RISKY â†’ DANGEROUS (reserved) â†’ CRITICAL â†’ BLOCKED â†’ UNKNOWN
+Levels: SAFE +' RISKY +' DANGEROUS (reserved) +' CRITICAL +' BLOCKED +' UNKNOWN
 
 | Level | Requires confirmed? | Executed? | Example | Category Sample |
 |-------|---------------------|-----------|---------|-----------------|
@@ -150,17 +204,17 @@ Levels: SAFE â†’ RISKY â†’ DANGEROUS (reserved) â†’ CRITICAL â�
 
 ## First Call Execution Behavior
 
-**✅ Commands that execute immediately (no `confirmed` needed):**
+*** Commands that execute immediately (no `confirmed` needed):**
 
 - **SAFE commands**: Pre-classified patterns like `Get-ChildItem`, `dir`, `Write-Output`
 - **Learned SAFE commands**: Previously unknown commands that were approved via learning system
 
-**❌ Commands that require `confirmed: true` on first call:**
+**! Commands that require `confirmed: true` on first call:**
 
 - **RISKY commands**: Pre-classified as potentially disruptive (e.g., `Stop-Service`, `Remove-Item`)
 - **UNKNOWN commands**: Any command not matching SAFE, RISKY, CRITICAL, or BLOCKED patterns
 
-**🚫 Commands that never execute:**
+**X Commands that never execute:**
 
 - **BLOCKED commands**: Security threats like `Invoke-Expression`
 - **CRITICAL commands**: Destructive operations like `Format-Volume`
@@ -180,7 +234,7 @@ Alias & OS classification:
 
 PowerShell Core preference: auto-detects `pwsh.exe` and falls back to `powershell.exe`. Override with `ENTERPRISE_CONFIG.powershell.executable`.
 
-## Configuration (excerpt `enterprise-config.json` / minimal core `config.ts` defaults)
+## Configuration (excerpt `config/enterprise-config.json` / minimal core `config.ts` defaults)
 
 ```jsonc
 {
@@ -263,7 +317,7 @@ General steps:
 2. Apply selected strategy.
 3. Response flags `overflow:true`, `truncated:true` plus strategy metadata.
 
-Execution response (core fields – augmented Aug 2025):
+Execution response (core fields - augmented Aug 2025):
  
 ```jsonc
 {
@@ -276,7 +330,7 @@ Execution response (core fields – augmented Aug 2025):
   "adaptiveExtensions": 0,
   "adaptiveExtended": false,
   "adaptiveMaxTotalMs": 90000,
-  "duration_ms": 1234,                          // high‑res rounded; min 1ms enforced for real execs
+  "duration_ms": 1234,                          // high-res rounded; min 1ms enforced for real execs
   "stdout": "preview",
   "stderr": "",
   "overflow": false,
@@ -305,7 +359,7 @@ Mitigation tips for large output: narrow queries, use `Select-Object -First N`, 
 
 ## Timeouts & Resilience
 
-External timeout enforced (default 90s). Internal self-destruct (exit 124) can be disabled with `MCP_DISABLE_SELF_DESTRUCT=1`. Adaptive mode (enable via `progressAdaptive:true`) opportunistically extends the external timeout when recent output activity is detected and remaining time ≤ `adaptiveExtendWindowMs`, bounded by `adaptiveMaxTotalSec`. Fields `effectiveTimeoutMs`, `adaptiveExtensions`, and `adaptiveExtended` reflect extensions. `terminationReason` unifies completion states (no need to infer from exit code 124). Real execution durations use high‑resolution timing and are coerced to ≥1ms; blocked or unconfirmed attempts record as 0ms but are excluded from latency averages/percentiles.
+External timeout enforced (default 90s). Internal self-destruct (exit 124) can be disabled with `MCP_DISABLE_SELF_DESTRUCT=1`. Adaptive mode (enable via `progressAdaptive:true`) opportunistically extends the external timeout when recent output activity is detected and remaining time <= `adaptiveExtendWindowMs`, bounded by `adaptiveMaxTotalSec`. Fields `effectiveTimeoutMs`, `adaptiveExtensions`, and `adaptiveExtended` reflect extensions. `terminationReason` unifies completion states (no need to infer from exit code 124). Real execution durations use high-resolution timing and are coerced to >=1ms; blocked or unconfirmed attempts record as 0ms but are excluded from latency averages/percentiles.
 
 ### CLI Flags
 
@@ -385,14 +439,14 @@ Reset behavior: invoking any future explicit reset endpoint (planned) or process
 Latency semantics:
 
 - Zero-duration rows (blocked / confirmed-required) are NOT added to latency aggregates.
-- Real executions: high-res `duration_ms` (rounded) ≥1ms stored.
+- Real executions: high-res `duration_ms` (rounded) >=1ms stored.
 - Percentile (p95) uses ceil-based index over sorted non-zero durations (avoids downward bias with small N).
 
 Per-invocation row columns already list raw `PS CPU(s)` and `WS(MB)` for each run-powershell execution when metrics are enabled.
 
 ## Unknown Command Learning
 
-UNKNOWN â†’ normalize â†’ queue â†’ review â†’ approve â†’ SAFE cache (`learned-safe.json`). Approved patterns immediately influence classification.
+UNKNOWN +' normalize +' queue +' review +' approve +' SAFE cache (`learned-safe.json`). Approved patterns immediately influence classification.
 
 ## Tests (Jest)
 
@@ -469,7 +523,7 @@ Adaptive knobs (optional):
 
 | Field | Default | Purpose |
 |-------|---------|---------|
-| adaptiveExtendWindowMs | 2000 | If remaining time ≤ window & recent activity, consider extend |
+| adaptiveExtendWindowMs | 2000 | If remaining time <= window & recent activity, consider extend |
 | adaptiveExtendStepMs | 5000 | Extension amount per step |
 | adaptiveMaxTotalSec | min(base*3,180) | Hard cap horizon |
 
@@ -484,7 +538,7 @@ Environment variables (quick reference):
 | MCP_DISABLE_ATTEMPT_PUBLISH=1 | Suppress early attempt publishing (blocked / confirmed-required) |
 | MCP_OVERFLOW_STRATEGY=truncate | (Example) produce truncated strategy behavior |
 
-Long timeouts (≥60s) emit a responsiveness warning; durations <1ms are promoted to 1ms to avoid misleading 0ms displays.
+Long timeouts (>=60s) emit a responsiveness warning; durations <1ms are promoted to 1ms to avoid misleading 0ms displays.
 
 ## Syntax Check Enhancements (Sept 2025)
 
