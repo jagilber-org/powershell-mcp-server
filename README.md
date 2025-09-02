@@ -512,3 +512,21 @@ Example response snippet:
 
 Analyzer results (when available) add `analyzerIssues` array entries with `RuleName`, `Severity`, `Line`, `Column`, `Message`.
 
+### Analyzer Requirements
+
+The analyzer pass does NOT auto-install dependencies. To enable `analyzerAvailable: true` you must:
+
+1. Install the module for the same user / scope the server runs under:
+   - `pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Scope CurrentUser -Force"`
+   - (Optional) pin version: `Install-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser`
+2. Restart the server with `PWSH_SYNTAX_ANALYZER=1` in the environment.
+3. Ensure the server actually uses `pwsh` (or install for `powershell.exe` if legacy host chosen).
+
+The server never performs network installs automatically (security / reproducibility). If the module is missing, times out (>4s first invocation), or parse fails, `analyzerAvailable` remains `false` and `analyzerIssues` is omitted or empty.
+
+Troubleshooting quick check:
+
+`pwsh -NoProfile -Command "Get-Module -ListAvailable PSScriptAnalyzer | Select Name,Version,ModuleBase"`
+
+If nothing returns, installation did not succeed for that profile / scope.
+

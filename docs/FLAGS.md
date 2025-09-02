@@ -51,6 +51,8 @@ Note: Some flags (`--minimal-stdio`, `--disable-self-destruct`, etc.) are refere
 | `PWSH_SYNTAX_FORCE_FALLBACK` | Force legacy delimiter fallback parser for all syntax checks (diagnostics/perf baselining). | `0` | `pwshSyntax.ts` |
 | `PWSH_SYNTAX_ANALYZER` | Enable optional PSScriptAnalyzer pass (surfaces `analyzerIssues` & `analyzerAvailable`). | `0` | `pwshSyntax.ts` |
 
+> Note: `PWSH_SYNTAX_ANALYZER=1` only surfaces analyzer results if `PSScriptAnalyzer` is already installed and loads within 4s. The server does not auto-install the module.
+
 `cacheHit` field appears in `structuredContent` when a script hash lookup returns cached parse results.
 
 ### Derived / Internal Counters (exposed via `/api/metrics`)
