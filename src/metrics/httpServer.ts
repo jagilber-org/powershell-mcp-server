@@ -14,7 +14,16 @@ import { IncomingMessage, ServerResponse } from 'http';
 import { metricsRegistry } from './registry.js';
 import { EventEmitter } from 'events';
 import * as os from 'os';
-import { aggregateCandidates, queueCandidates, listQueuedCandidates, approveQueuedCandidates, removeFromQueue } from '../learning.js';
+// Lazy-load learning module functions on demand to avoid import cost during initial MCP handshake path.
+// They are only used when learning-related HTTP endpoints are hit.
+type LearningModule = typeof import('../learning.js');
+let _learningMod: LearningModule | null = null;
+async function getLearning(){
+  if(!_learningMod){
+    _learningMod = await import('../learning.js');
+  }
+  return _learningMod;
+}
 import { ENTERPRISE_CONFIG } from '../core/config.js';
 
 export interface MetricsHttpOptions {
@@ -47,6 +56,8 @@ export class MetricsHttpServer {
   private server?: http.Server;
   private opts: MetricsHttpOptions;
   private started = false;
+  // Record server start timestamp (used for cache-busting dash.js and diagnostics)
+  private readonly serverStart = Date.now();
   private emitter = new EventEmitter();
   private eventId = 0;
   private heartbeatIntervalMs = 15000;
@@ -71,8 +82,8 @@ export class MetricsHttpServer {
   private psSampleIntervalMs = 2500;
   // Historical data for graphs
   // Store CPU percent and event loop lag (ms) together for combined graph
-  private cpuHistory: Array<{timestamp: number, value: number, lag: number}> = [];
-  private memHistory: Array<{timestamp: number, rss: number, heap: number}> = [];
+  private cpuHistory: Array<{timestamp: number, value: number, lag: number, psCpuPct?: number}> = [];
+  private memHistory: Array<{timestamp: number, rss: number, heap: number, psWSMB?: number}> = [];
   private historyLimit = 60; // Keep last 60 samples (2 minutes at 2s intervals)
 
   constructor(opts: MetricsHttpOptions) {
@@ -109,7 +120,10 @@ export class MetricsHttpServer {
           try {
             const mem = process.memoryUsage();
             const wsMB = +(mem.rss/1024/1024).toFixed(2);
-            metricsRegistry.capturePsSample(process.uptime(), wsMB);
+            // Use cumulative CPU seconds for this process (user+system microseconds /1e6)
+            const cpuUsage = process.cpuUsage();
+            const cpuCumulativeSec = (cpuUsage.user + cpuUsage.system)/1e6; // microseconds -> seconds
+            metricsRegistry.capturePsSample(cpuCumulativeSec, wsMB);
             if(this.debugEnabled){ console.error(`[METRICS][BASELINE_HTTP] uptimeSec=${process.uptime().toFixed(2)} wsMB=${wsMB}`); }
           } catch{}
         }
@@ -267,6 +281,12 @@ export class MetricsHttpServer {
       this.writeJson(res, { status: 'ok' });
       return;
     }
+  if (path === '/favicon.ico') {
+      // Silence browser favicon 404 noise; return empty response (clients cache via max-age)
+      res.writeHead(204, { 'Cache-Control': 'public, max-age=86400' });
+      res.end();
+      return;
+    }
   if (path === '/readyz') {
       this.writeJson(res, { status: this.started ? 'ready' : 'starting' });
       return;
@@ -386,7 +406,15 @@ export class MetricsHttpServer {
       return;
     }
     // Basic landing page placeholder
-    if (path === '/' || path.startsWith('/dashboard')) {
+    // Serve extracted dashboard client script (moved out of giant template to avoid inline syntax issues)
+    if (path.startsWith('/dash.js')) {
+      const debug = this.isDebug(url);
+      const js = this.buildDashboardClientScript(debug);
+      res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(js);
+      return;
+    }
+  if (path === '/' || path.startsWith('/dashboard')) {
       const debug = this.isDebug(url);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8" />
@@ -434,17 +462,22 @@ export class MetricsHttpServer {
   #filters{display:flex;flex-wrap:wrap;gap:.6rem;margin-bottom:.6rem}
   #filters label{display:flex;align-items:center;gap:.25rem;font-size:.62rem;padding:.25rem .45rem;border:1px solid var(--border);border-radius:6px;background:var(--panel-alt);cursor:pointer;user-select:none}
   #filters input{margin:0}
-  #statusBar{display:flex;gap:.75rem;align-items:center;font-size:.65rem;margin-top:.4rem;font-family:var(--mono);opacity:.8}
-  .hb-ok{color:var(--safe)} .hb-warn{color:var(--risky)} .hb-stale{color:var(--danger)}
-  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
-  button{background:var(--accent);color:#fff;border:none;padding:.45rem .75rem;font-size:.65rem;border-radius:6px;cursor:pointer;font-weight:600;letter-spacing:.5px}button:hover{filter:brightness(1.1)}
-  #controls{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.6rem}
-  #empty{opacity:.6;font-size:.65rem;padding:1rem;text-align:center}
-  canvas{display:block;width:100%;height:100%}
-  @media (min-width:1000px){main{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}}
-  ::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-track{background:#12161c}::-webkit-scrollbar-thumb{background:#303b46;border-radius:8px}::-webkit-scrollbar-thumb:hover{background:#3d4955}
-</style>
-</head><body>
+  button{background:#1f2630;border:1px solid var(--border);color:var(--text);font-size:.6rem;padding:.4rem .7rem;border-radius:6px;cursor:pointer;line-height:1.1;font-weight:500;letter-spacing:.5px;transition:background .15s,border-color .15s}
+  button:hover{background:#27303a;border-color:#3a4652}
+  #controls button#clearBtn{background:#374151}
+  #controls button#clearBtn:hover{background:#415062}
+  #controls button#emit{background:#6366f1;color:#fff;border-color:#6366f1}
+  #controls button#emit:hover{background:#5458e3}
+  #statusBar button{font-size:.55rem;padding:.35rem .55rem}
+  .graphs-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem;margin-top:1rem}
+  @media (max-width:820px){.graphs-row{grid-template-columns:1fr}}
+  /* Graph container adjustments */
+  .graph-frame{position:relative;height:140px;border:1px solid #2c3640;background:#0d1116;overflow:hidden;border-radius:6px;}
+  .graph-frame canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  /* Button interaction refinements */
+  button:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
+  button:active{transform:translateY(1px);}
+</style></head><body>
 <header>
   <h1>PowerShell MCP Dashboard ${debug?'<span class="pill debug">DEBUG</span>':''}</h1>
   <span class="pill" id="portInfo">Port: ${this.opts.port}</span>
@@ -461,50 +494,48 @@ export class MetricsHttpServer {
     <section class="card"><h3>SAFE</h3><div class="metric" id="m_safe">0</div></section>
     <section class="card"><h3>RISKY</h3><div class="metric" id="m_risky">0</div></section>
     <section class="card"><h3>BLOCKED</h3><div class="metric" id="m_blocked">0</div></section>
-  <section class="card"><h3>confirmed PENDING</h3><div class="metric" id="m_confirm">0</div></section>
-  <section class="card"><h3>TIMEOUTS</h3><div class="metric" id="m_timeouts">0</div></section>
+    <section class="card"><h3>confirmed PENDING</h3><div class="metric" id="m_confirm">0</div></section>
+    <section class="card"><h3>TIMEOUTS</h3><div class="metric" id="m_timeouts">0</div></section>
     <section class="card"><h3>AVG ms</h3><div class="metric" id="m_avg">0</div></section>
     <section class="card"><h3>P95 ms</h3><div class="metric" id="m_p95">0</div></section>
     <section class="card"><h3>CPU%</h3><div class="metric" id="m_cpu">0</div></section>
     <section class="card"><h3>RSS MB</h3><div class="metric" id="m_rss">0</div></section>
     <section class="card"><h3>HEAP MB</h3><div class="metric" id="m_heap">0</div></section>
     <section class="card"><h3>LOOP LAG</h3><div class="metric" id="m_lag">0</div></section>
-  <section class="card" title="Average PowerShell process CPU seconds across samples (approx; sentinel/fallback)"><h3>PS CPU SEC</h3><div class="metric" id="m_pscpu">0</div></section>
-  <section class="card" title="Average PowerShell Working Set MB across samples"><h3>PS WS MB</h3><div class="metric" id="m_psws">0</div></section>
-  <section class="card" title="Number of PowerShell process samples captured"><h3>PS SAMPLES</h3><div class="metric" id="m_pssamples">0</div></section>
-    <section class="card grid-full" id="cpuGraphCard">
+    <section class="card" title="Average PowerShell process CPU seconds across samples"><h3>PS CPU SEC</h3><div class="metric" id="m_pscpu">0</div></section>
+    <section class="card" title="Average PowerShell Working Set MB across samples"><h3>PS WS MB</h3><div class="metric" id="m_psws">0</div></section>
+    <section class="card" title="Number of PowerShell process samples captured"><h3>PS SAMPLES</h3><div class="metric" id="m_pssamples">0</div></section>
+  </div>
+  <div id="graphsRow" class="graphs-row">
+    <section class="card" id="cpuGraphCard">
       <h3>CPU % (Last 2 minutes)</h3>
-      <div id="cpuGraphContainer" style="position:relative;height:120px;border:1px solid #333;background:#111">
-        <canvas id="cpuGraph" style="width:100%;height:100%"></canvas>
-      </div>
+      <div class="graph-frame"><canvas id="cpuGraph"></canvas></div>
     </section>
-    <section class="card grid-full" id="memGraphCard">
+    <section class="card" id="memGraphCard">
       <h3>Memory (MB - Last 2 minutes)</h3>
-      <div id="memGraphContainer" style="position:relative;height:120px;border:1px solid #333;background:#111">
-        <canvas id="memGraph" style="width:100%;height:100%"></canvas>
-      </div>
+      <div class="graph-frame"><canvas id="memGraph"></canvas></div>
     </section>
   </div>
   <section class="card" id="eventsPanel">
-      <div id="controls">
-        <div id="filters"></div>
-        <button id="clearBtn" title="Clear visible events">Clear</button>
-        ${debug?'<button id="emit">Emit Synthetic</button>':''}
-      </div>
-      <div id="eventTableWrap">
-  <table id="eventTable"><thead><tr><th style="width:46px">ID</th><th style="width:78px">Tool</th><th style="width:68px">Level</th><th style="width:70px">Dur</th><th style="width:60px">Code</th><th style="width:55px">OK</th><th style="width:82px">Time</th><th>Details / Preview (ps: cpuSec/wsMB)</th></tr></thead><tbody></tbody></table>
-        <div id="empty">No events yet.</div>
-      </div>
-      <div id="statusBar">
-        <span>Last Event: <span id="lastEvtAge">--</span></span>
-        <span>Replay Applied: <span id="replayCount">0</span></span>
-        <span>Default Timeout: ${(ENTERPRISE_CONFIG.limits?.defaultTimeoutMs || 90000)/1000}s</span>
-        <span>WD Enf: ${ENTERPRISE_CONFIG.security?.enforceWorkingDirectory? 'ON':'OFF'}</span>
-        <span style="flex:1"></span>
-        <button id="learnBtn" title="Queue selected UNKNOWN row for review" style="background:#6366f1">Queue Selected</button>
-        <span id="learnMsg" style="font-size:.6rem;opacity:.75"></span>
-        <button id="showQueue" style="background:#374151">Queue Panel</button>
-      </div>
+    <div id="controls">
+      <div id="filters"></div>
+      <button id="clearBtn" title="Clear visible events">Clear</button>
+      ${debug?'<button id="emit">Emit Synthetic</button>':''}
+    </div>
+    <div id="eventTableWrap">
+      <table id="eventTable"><thead><tr><th style="width:46px">ID</th><th style="width:78px">Tool</th><th style="width:68px">Level</th><th style="width:70px">Dur</th><th style="width:60px">Code</th><th style="width:55px">OK</th><th style="width:82px">Time</th><th>Details / Preview (ps: cpuSec/wsMB)</th></tr></thead><tbody></tbody></table>
+      <div id="empty" style="opacity:.6;font-size:.65rem;padding:1rem;text-align:center">No events yet.</div>
+    </div>
+    <div id="statusBar">
+      <span>Last Event: <span id="lastEvtAge">--</span></span>
+      <span>Replay Applied: <span id="replayCount">0</span></span>
+      <span>Default Timeout: ${(ENTERPRISE_CONFIG.limits?.defaultTimeoutMs || 90000)/1000}s</span>
+      <span>WD Enf: ${ENTERPRISE_CONFIG.security?.enforceWorkingDirectory? 'ON':'OFF'}</span>
+      <span style="flex:1"></span>
+      <button id="learnBtn" title="Queue selected UNKNOWN row" style="background:#6366f1">Queue Selected</button>
+      <span id="learnMsg" style="font-size:.6rem;opacity:.75"></span>
+      <button id="showQueue" style="background:#374151">Queue Panel</button>
+    </div>
   </section>
   <section class="card" id="queuePanel" style="display:none;max-height:260px;overflow:auto">
     <h3 style="margin-top:0">Learn Queue</h3>
@@ -517,364 +548,23 @@ export class MetricsHttpServer {
     <table style="width:100%;border-collapse:collapse;font-size:.62rem"><thead><tr><th></th><th>Normalized</th><th>Queued</th><th>Times</th><th>Last</th></tr></thead><tbody id="queueBody"></tbody></table>
   </section>
 </main>
-<script>
-(()=>{
-  // --- Runtime instrumentation & error overlay (helps diagnose no-update issues) ---
-  const overlayId = 'jsErrorOverlay';
-  function ensureOverlay(){ let ov=document.getElementById(overlayId); if(!ov){ ov=document.createElement('div'); ov.id=overlayId; ov.style.cssText='position:fixed;top:0;left:0;right:0;background:#7f1d1d;color:#fff;font:12px monospace;z-index:9999;padding:4px 8px;display:none;white-space:pre-wrap;max-height:33vh;overflow:auto'; document.body.appendChild(ov);} return ov; }
-  window.addEventListener('error', e=>{ const ov=ensureOverlay(); ov.style.display='block'; ov.textContent='JS ERROR: '+e.message+'\n'+(e.filename||'')+':'+e.lineno+'\n'+(e.error&&e.error.stack?e.error.stack:''); });
-  window.addEventListener('unhandledrejection', e=>{ const ov=ensureOverlay(); ov.style.display='block'; ov.textContent='UNHANDLED REJECTION: '+(e.reason && e.reason.message || e.reason); });
-  let lastMetricsTs = 0; window.__LAST_METRICS_TS = 0;
-  setInterval(()=>{ const now=Date.now(); if(lastMetricsTs && (now - lastMetricsTs) > 15000){ const el=document.getElementById('hbState'); if(el){ el.textContent='HB STALE'; el.className='pill hb-stale'; } }
-    if(!lastMetricsTs){ /* first 5s no metrics fetched? show hint */ const ov=document.getElementById(overlayId); if(!ov && now > 7000){ const o=ensureOverlay(); o.style.display='block'; o.textContent='Metrics fetch not yet succeeded ( >7s ). Check network / CORS. '; }
-  }}, 4000);
-  console.log('[DASH] bootstrap script executing at', new Date().toISOString());
-  const debug = ${debug? 'true':'false'};
-  const filtersEl = document.getElementById('filters');
-  const tableBody = document.querySelector('#eventTable tbody');
-  const emptyEl = document.getElementById('empty');
-  const hbState = document.getElementById('hbState');
-  const lastEvtAge = document.getElementById('lastEvtAge');
-  const replayCountEl = document.getElementById('replayCount');
-  const uptimeEl = document.getElementById('uptime');
-  const learnBtn = document.getElementById('learnBtn');
-  const learnMsg = document.getElementById('learnMsg');
-  const queuePanel = document.getElementById('queuePanel');
-  const showQueueBtn = document.getElementById('showQueue');
-  const queueBody = document.getElementById('queueBody');
-  const queueMsg = document.getElementById('queueMsg');
-  const refreshQueueBtn = document.getElementById('refreshQueue');
-  const approveSelectedBtn = document.getElementById('approveSelected');
-  const removeSelectedBtn = document.getElementById('removeSelected');
-  let selectedCandidate = null; // normalized
-  let selectedRow = null;
-  const metricsIds = { total:'m_total', safe:'m_safe', risky:'m_risky', blocked:'m_blocked', confirmed:'m_confirm', timeouts:'m_timeouts', avg:'m_avg', p95:'m_p95', cpu:'m_cpu', rss:'m_rss', heap:'m_heap', lag:'m_lag', pscpu:'m_pscpu', psws:'m_psws', pssamples:'m_pssamples'};
-  const levelOrder = ['SAFE','RISKY','DANGEROUS','CRITICAL','BLOCKED','UNKNOWN'];
-  const activeLevels = new Set(levelOrder);
-  let lastEventTs = Date.now();
-  let lastHeartbeat = Date.now();
-  let replayApplied=0;
-  let cpuChart = null;
-  let memChart = null;
-  function fmtTime(iso){return iso.split('T')[1].replace('Z','');}
-  function updateAge(){ const age=Date.now()-lastEventTs; lastEvtAge.textContent = age+'ms'; const hbAge = Date.now()-lastHeartbeat; hbState.textContent = 'HB '+hbAge+'ms'; hbState.className='pill '+(hbAge<17000?'hb-ok':hbAge<30000?'hb-warn':'hb-stale'); }
-  setInterval(updateAge,1000);
-  // Filters UI
-  levelOrder.forEach(l=>{ const id='f_'+l; const lab=document.createElement('label'); lab.innerHTML='<input type="checkbox" id="'+id+'" checked /> '+l; filtersEl.appendChild(lab); lab.querySelector('input').addEventListener('change',e=>{ if(e.target.checked) activeLevels.add(l); else activeLevels.delete(l); Array.from(tableBody.querySelectorAll('tr')).forEach(tr=>{ if(!activeLevels.has(tr.dataset.level)) tr.style.display='none'; else tr.style.display=''; }); }); });
-  // Clear
-  document.getElementById('clearBtn').onclick=()=>{ tableBody.innerHTML=''; emptyEl.style.display='block'; };
-  function addRow(ev){ 
-    if(ev.level==='HEARTBEAT') return; 
-    emptyEl.style.display='none'; 
-  const tr=document.createElement('tr'); 
-    tr.dataset.level=ev.level; 
-    tr.className='level-'+ev.level; 
-  if(ev.candidateNorm) tr.dataset.candidate=ev.candidateNorm;
-    
-    // Check if this was a confirmed command
-    const preview=(ev.preview||'').replace(/</g,'&lt;'); 
-    // Inline ps process metrics if present (from tool execution)
-    let psInline='';
-  const pm = ev.psProcessMetrics; // browser JS (removed TS assertion)
-    if(pm && (pm.CpuSec!==undefined || pm.WS!==undefined)){
-      const c = pm.CpuSec!==undefined ? pm.CpuSec : '?';
-      const w = pm.WS!==undefined ? pm.WS : '?';
-  psInline = '<span style="opacity:.6;font-size:.6rem"> [ps '+c+'/'+w+']</span>';
-    }
-    const isConfirmed = ev.confirmed === true;
-    if (isConfirmed) {
-      tr.classList.add('confirmed');
-    }
-    
-    if(!activeLevels.has(ev.level)) tr.style.display='none'; 
-    
-    const markers = [];
-  if (ev.blocked) markers.push('<span style="color:#ff5f56;font-weight:600">BLOCKED</span>');
-  if (ev.truncated) markers.push('<span style="color:#ffa500">TRUNC</span>');
-  if (ev.timedOut) markers.push('<span style="color:#ff00ff">TIMEOUT</span>');
-    if (isConfirmed) markers.push('<span style="background:#ffd700;color:#111;padding:2px 4px;border-radius:4px;font-size:.55rem;font-weight:600;letter-spacing:.5px">CONFIRMED</span>');
-    tr.innerHTML='<td>'+ev.id+'</td>'+
-      '<td>'+(ev.toolName||'')+'</td>'+
-      '<td class="level">'+ev.level+'</td>'+
-      '<td>'+ev.durationMs+'ms</td>'+
-      '<td>'+(ev.exitCode===undefined||ev.exitCode===null?'':ev.exitCode)+'</td>'+
-      '<td>'+(ev.success===undefined?'':(ev.success?'✔':'✖'))+'</td>'+
-      '<td>'+fmtTime(ev.timestamp)+'</td>'+
-  '<td>'+ (markers.length?markers.join(' ')+' ':'') + (preview?preview:'') + psInline +'</td>';
-    
-    // Row click selection for UNKNOWN learning
-    tr.addEventListener('click', (e)=>{
-      if(!tr.dataset.candidate) return; // only unknown
-      e.stopPropagation();
-      if(selectedRow && selectedRow!==tr) selectedRow.classList.remove('learn-selected');
-      selectedCandidate = tr.dataset.candidate;
-      tr.classList.add('learn-selected');
-      selectedRow = tr;
-      learnMsg.textContent='Selected '+selectedCandidate;
-      // Keep message until another action
-    });
-    tableBody.appendChild(tr); 
-    
-    // Auto-scroll to bottom
-    const tableWrap = document.getElementById('eventTableWrap');
-    if (tableWrap) {
-      tableWrap.scrollTop = tableWrap.scrollHeight;
-    }
-    
-    if(tableBody.children.length>1000) tableBody.removeChild(tableBody.firstChild); 
-  }
-  async function refreshMetrics(){
-    try{
-      const r= await fetch('/api/metrics'); if(!r.ok) return; const m= await r.json();
-      const seenMissing = [];
-      const setMetric=(id,val)=>{ const el=document.getElementById(id); if(el) el.textContent=String(val); else seenMissing.push(id); };
-      setMetric(metricsIds.total, m.totalCommands);
-      setMetric(metricsIds.safe, m.safeCommands);
-      setMetric(metricsIds.risky, m.riskyCommands);
-      setMetric(metricsIds.blocked, m.blockedCommands);
-      setMetric(metricsIds.avg, m.averageDurationMs);
-  if('confirmedRequired' in m) setMetric(metricsIds.confirmed, m.confirmedRequired);
-      setMetric(metricsIds.p95, m.p95DurationMs);
-      if('timeouts' in m) setMetric(metricsIds.timeouts, m.timeouts);
-      const p=m.performance||{};
-      if('cpuPercent' in p) setMetric(metricsIds.cpu, p.cpuPercent.toFixed(1));
-      if('rssMB' in p) setMetric(metricsIds.rss, p.rssMB.toFixed(0));
-      if('heapUsedMB' in p) setMetric(metricsIds.heap, p.heapUsedMB.toFixed(0));
-      if('eventLoopLagP95Ms' in p) setMetric(metricsIds.lag, p.eventLoopLagP95Ms.toFixed(1));
-      if(uptimeEl) uptimeEl.textContent='Uptime: '+Math.round((Date.now()-Date.parse(m.lastReset))/1000)+'s';
-
-      // PowerShell process metrics (aggregated) when enabled
-      if('psSamples' in m){
-        const psSamples = m.psSamples || 0;
-        const psCpu = typeof m.psCpuSecAvg === 'number' ? m.psCpuSecAvg : 0;
-        const psWS = typeof m.psWSMBAvg === 'number' ? m.psWSMBAvg : 0;
-        setMetric(metricsIds.pssamples, psSamples);
-        setMetric(metricsIds.pscpu, psCpu.toFixed(2));
-        setMetric(metricsIds.psws, psWS.toFixed(1));
-      }
-      // Update graphs with historical data
-  if (m.cpuHistory && m.cpuHistory.length > 0) updateCpuGraph(m.cpuHistory);
-  if (m.memHistory && m.memHistory.length > 0) updateMemGraph(m.memHistory);
-  lastMetricsTs = Date.now(); window.__LAST_METRICS_TS = lastMetricsTs;
-  if(seenMissing.length && !window.__mWarned){ const ov=document.getElementById(overlayId); if(ov){ ov.style.display='block'; ov.textContent+='\nMissing metric elements: '+seenMissing.join(', '); } }
-      if(seenMissing.length && !window.__mWarned){ console.warn('Missing metric elements:', seenMissing); window.__mWarned=true; }
-    }catch(e){ /* swallow to avoid breaking UI */ }
-  }
-
-  // Simple graph drawing functions
-  function updateCpuGraph(data) {
-    const canvas = document.getElementById('cpuGraph');
-    const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
-    
-    if (!data || data.length === 0) return;
-    
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Find max value for scaling (consider both cpu percent and lag ms). Avoid very low scale.
-    const maxCpu = Math.max(...data.map(d => d.value), 0);
-    const maxLag = Math.max(...data.map(d => (d.lag ?? 0)), 0);
-    const maxValue = Math.max(10, maxCpu, maxLag);
-    const padding = 10;
-    const graphWidth = canvas.width - 2 * padding;
-    const graphHeight = canvas.height - 2 * padding;
-    
-    // Draw grid lines
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 0.5;
-    for (let i = 0; i <= 5; i++) {
-      const y = padding + (i * graphHeight / 5);
-      ctx.beginPath();
-      ctx.moveTo(padding, y);
-      ctx.lineTo(canvas.width - padding, y);
-      ctx.stroke();
-    }
-    
-    // Draw CPU line
-    ctx.strokeStyle = '#00ff00';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    data.forEach((point, index) => {
-      const x = padding + (index * graphWidth / (data.length - 1));
-      const y = canvas.height - padding - (point.value * graphHeight / maxValue);
-      if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-
-    // Draw Lag line (magenta)
-    ctx.strokeStyle = '#ff00ff';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    data.forEach((point, index) => {
-      const lagVal = point.lag ?? 0;
-      const x = padding + (index * graphWidth / (data.length - 1));
-      const y = canvas.height - padding - (lagVal * graphHeight / maxValue);
-      if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-
-    // Legend & current values
-    if (data.length > 0) {
-      const last = data[data.length - 1];
-      ctx.font = '10px monospace';
-      ctx.fillStyle = '#00ff00';
-      ctx.fillText('CPU: ' + last.value.toFixed(1) + '%', padding + 2, padding + 12);
-      ctx.fillStyle = '#ff00ff';
-      ctx.fillText('Lag: ' + (last.lag ?? 0).toFixed(1) + 'ms', padding + 2, padding + 24);
-      ctx.fillStyle = '#888';
-      ctx.fillText('Max Axis: ' + maxValue.toFixed(1), padding + 2, padding + 36);
-    }
-  }
-  
-  function updateMemGraph(data) {
-    const canvas = document.getElementById('memGraph');
-    const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
-    
-    if (!data || data.length === 0) return;
-    
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Find max values for scaling
-    const maxRss = Math.max(...data.map(d => d.rss));
-    const maxHeap = Math.max(...data.map(d => d.heap));
-    const maxValue = Math.max(maxRss, maxHeap);
-    
-    const padding = 10;
-    const graphWidth = canvas.width - 2 * padding;
-    const graphHeight = canvas.height - 2 * padding;
-    
-    // Draw grid lines
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 0.5;
-    for (let i = 0; i <= 5; i++) {
-      const y = padding + (i * graphHeight / 5);
-      ctx.beginPath();
-      ctx.moveTo(padding, y);
-      ctx.lineTo(canvas.width - padding, y);
-      ctx.stroke();
-    }
-    
-    // Draw RSS line (blue)
-    ctx.strokeStyle = '#0088ff';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    
-    data.forEach((point, index) => {
-      const x = padding + (index * graphWidth / (data.length - 1));
-      const y = canvas.height - padding - (point.rss * graphHeight / maxValue);
-      
-      if (index === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    });
-    
-    ctx.stroke();
-    
-    // Draw Heap line (orange)
-    ctx.strokeStyle = '#ff8800';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    
-    data.forEach((point, index) => {
-      const x = padding + (index * graphWidth / (data.length - 1));
-      const y = canvas.height - padding - (point.heap * graphHeight / maxValue);
-      
-      if (index === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    });
-    
-    ctx.stroke();
-    
-    // Draw legend
-    if (data.length > 0) {
-      const lastRss = data[data.length - 1].rss;
-      const lastHeap = data[data.length - 1].heap;
-      
-      ctx.fillStyle = '#0088ff';
-      ctx.font = '10px monospace';
-      ctx.fillText('RSS: ' + lastRss.toFixed(1) + 'MB', padding + 2, padding + 12);
-      
-      ctx.fillStyle = '#ff8800';
-      ctx.fillText('Heap: ' + lastHeap.toFixed(1) + 'MB', padding + 2, padding + 24);
-      
-      ctx.fillStyle = '#888';
-      ctx.fillText('Max: ' + maxValue.toFixed(1) + 'MB', padding + 2, padding + 36);
-    }
-  }
-  setInterval(refreshMetrics,5000); refreshMetrics();
-  const es = new EventSource('/events'+(debug?'?replay=50':''));
-  const handleEvent = e => { try{ const d=JSON.parse(e.data); if(d.level==='HEARTBEAT'){ lastHeartbeat=Date.now(); return; } lastEventTs=Date.now(); addRow(d); }catch(err){ console.error('Bad event', err); } };
-  // Support both default and custom event names
-  es.onmessage = handleEvent;            // if server sends default events
-  es.addEventListener('execution', handleEvent); // current server uses 'event: execution'
-  es.addEventListener('open',()=>{ lastEventTs=Date.now(); });
-  es.onerror = () => { hbState.textContent='SSE ERROR'; hbState.className='pill hb-stale'; };
-  // Polling fallback if no events received within 10s or SSE errors
-  let sseFallbackStarted=false; let lastSeq=0;
-  function startPollingFallback(){
-    if(sseFallbackStarted) return; sseFallbackStarted=true; console.warn('[DASH] Starting polling fallback');
-    const poll= async ()=>{
-      try{
-        const r= await fetch('/api/events/replay?since='+lastSeq+'&limit=200');
-        if(!r.ok){ throw new Error('bad status '+r.status); }
-        const j= await r.json();
-        if(Array.isArray(j.events)){
-          j.events.forEach(ev=>{ lastSeq = Math.max(lastSeq, ev.seq||0); if(ev.level==='HEARTBEAT'){ lastHeartbeat=Date.now(); return; } addRow(ev); lastEventTs=Date.now(); });
-        }
-        if(typeof j.latest==='number') lastSeq = Math.max(lastSeq, j.latest);
-      }catch(err){ console.error('[DASH][POLL_ERR]', err); }
-      setTimeout(poll, 5000);
-    };
-    poll();
-  }
-  setTimeout(()=>{ if(!window.__LAST_METRICS_TS){ startPollingFallback(); } }, 12000);
-  es.addEventListener('error', ()=> startPollingFallback());
-  // Count replayed by observing first N ids quickly
-  setTimeout(()=>{ replayCountEl.textContent = tableBody.children.length; },1000);
-  if(debug){ document.getElementById('emit').onclick=()=>{ fetch('/api/debug/emit?debug=true&level=SAFE&durationMs='+(Math.random()*60|0)).then(r=>r.json()).then(j=>{ addRow(j.synthetic); }); }; }
-
-  function renderQueue(items){
-    queueBody.innerHTML='';
-    if(!items || !items.length){ queueBody.innerHTML='<tr><td colspan=5 style="opacity:.6">Empty</td></tr>'; return; }
-    items.forEach(it=>{
-      const tr=document.createElement('tr');
-      tr.innerHTML='<td><input type="checkbox" data-norm="'+it.normalized+'" /></td>'+
-        '<td style="font-family:monospace">'+it.normalized+'</td>'+
-        '<td>'+(it.added||'').replace('T',' ').split('.')[0]+'</td>'+
-        '<td style="text-align:right">'+(it.timesQueued||1)+'</td>'+
-        '<td>'+(it.lastQueued||'').replace('T',' ').split('.')[0]+'</td>';
-      queueBody.appendChild(tr);
-    });
-  }
-  async function loadQueue(){ try{ const r=await fetch('/api/learn-queue'); if(!r.ok) return; const j=await r.json(); renderQueue(j.queued||[]);}catch{} }
-  if(showQueueBtn){ showQueueBtn.addEventListener('click', ()=>{ queuePanel.style.display = queuePanel.style.display==='none'?'block':'none'; if(queuePanel.style.display==='block') loadQueue(); }); }
-  if(refreshQueueBtn){ refreshQueueBtn.addEventListener('click', loadQueue); }
-  if(approveSelectedBtn){ approveSelectedBtn.addEventListener('click', async ()=>{ const norms = Array.from(queueBody.querySelectorAll('input[type=checkbox]:checked')).map(cb=>cb.getAttribute('data-norm')); if(!norms.length){ queueMsg.textContent='Select entries'; setTimeout(()=>queueMsg.textContent='',2500); return; } queueMsg.textContent='Approving…'; try{ const r=await fetch('/api/learn-queue/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({normalized:norms})}); const j=await r.json(); if(r.ok){ queueMsg.textContent='Promoted '+j.promoted; loadQueue(); } else { queueMsg.textContent='Error '+(j.error||r.status); } }catch{ queueMsg.textContent='Network error'; } setTimeout(()=>queueMsg.textContent='',4000); }); }
-  if(removeSelectedBtn){ removeSelectedBtn.addEventListener('click', async ()=>{ const norms = Array.from(queueBody.querySelectorAll('input[type=checkbox]:checked')).map(cb=>cb.getAttribute('data-norm')); if(!norms.length){ queueMsg.textContent='Select entries'; setTimeout(()=>queueMsg.textContent='',2500); return; } queueMsg.textContent='Removing…'; try{ const r=await fetch('/api/learn-queue/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({normalized:norms})}); const j=await r.json(); if(r.ok){ queueMsg.textContent='Removed '+j.removed; loadQueue(); } else { queueMsg.textContent='Error '+(j.error||r.status); } }catch{ queueMsg.textContent='Network error'; } setTimeout(()=>queueMsg.textContent='',4000); }); }
-  if(learnBtn){ learnBtn.addEventListener('click', async ()=>{ if(!selectedCandidate){ learnMsg.textContent='Select an UNKNOWN row first'; setTimeout(()=>{ if(learnMsg.textContent.startsWith('Select')) learnMsg.textContent=''; },3000); return; } const normalized=selectedCandidate; learnBtn.disabled=true; learnBtn.textContent='Queuing…'; learnMsg.textContent=''; try{ const r=await fetch('/api/learn-candidate?normalized='+encodeURIComponent(normalized), {method:'POST'}); const j=await r.json(); if(r.ok){ learnMsg.textContent='Queued: '+(j.normalized||normalized); loadQueue(); } else { learnMsg.textContent='Error: '+(j.error||r.status); } } catch { learnMsg.textContent='Network error'; } finally { learnBtn.disabled=false; learnBtn.textContent='Queue Selected'; setTimeout(()=>{ if(learnMsg.textContent.startsWith('Queued')) learnMsg.textContent=''; },4000); } }); }
-})();
-</script>
+<script>(()=>{const oid='dashEarlyErrOv';function get(){let d=document.getElementById(oid);if(!d){d=document.createElement('div');d.id=oid;d.style.cssText='position:fixed;top:0;left:0;right:0;background:#7f1d1d;color:#fff;font:11px monospace;z-index:10000;padding:4px 6px;display:none;white-space:pre-wrap;max-height:45vh;overflow:auto;cursor:pointer';d.title='Early error overlay (click to hide)';d.addEventListener('click',()=>{d.style.display='none';});document.body.appendChild(d);}return d;}function append(msg){const o=get();o.style.display='block';o.textContent+=(o.textContent?'\n':'')+msg;}window.addEventListener('error',e=>{append('['+new Date().toISOString()+'] JS ERROR: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'')+ (e.colno?':'+e.colno:''));});window.addEventListener('unhandledrejection',e=>{let r=e.reason;let msg;try{if(r&&typeof r==='object'){msg=r.stack||r.message||JSON.stringify(r);}else{msg=String(r);} }catch{msg=String(r);}append('['+new Date().toISOString()+'] PROMISE REJECTION: '+msg);});const origErr=console.error;console.error=function(...a){try{append('[console.error] '+a.map(x=>{if(typeof x==='string')return x;try{return JSON.stringify(x);}catch{return String(x);} }).join(' '));}catch{}return origErr.apply(console,a);};document.addEventListener('DOMContentLoaded',()=>append('['+new Date().toISOString()+'] DOMContentLoaded (early overlay active)'));})();</script>
+<script src="/dash.js?v=${this.serverStart}&t=${Date.now()}${debug?'&debug=true':''}" defer></script>
 </body></html>`);
       return;
     }
     if (path === '/api/unknown-candidates') {
-      try {
-        const list = aggregateCandidates(50);
-        this.writeJson(res, list);
-      } catch (e:any) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'aggregation_failed', message: e?.message }));
-      }
+      // Lazy load learning module each request (cached internally by module system)
+      (async()=>{
+        try {
+          const lm = await getLearning();
+          const list = lm.aggregateCandidates(50);
+          this.writeJson(res, list);
+        } catch (e:any) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'aggregation_failed', message: e?.message }));
+        }
+      })();
       return;
     }
     if (path.startsWith('/api/learn-candidate')) {
@@ -885,20 +575,23 @@ export class MetricsHttpServer {
         res.end(JSON.stringify({ error: 'missing_normalized' }));
         return;
       }
-      try {
-        const queued = queueCandidates([norm], 'dashboard');
-        console.error('[LEARN] Queued normalized candidate via dashboard:', norm, queued);
-        this.writeJson(res, { ok: true, normalized: norm, queued: true, added: queued.added, skipped: queued.skipped, total: queued.total });
-      } catch (e:any) {
-        console.error('[LEARN] Queue failed for', norm, e?.message || e);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'queue_failed', message: e?.message || String(e) }));
-      }
+      (async()=>{
+        try {
+          const lm = await getLearning();
+          const queued = lm.queueCandidates([norm], 'dashboard');
+          console.error('[LEARN] Queued normalized candidate via dashboard:', norm, queued);
+          this.writeJson(res, { ok: true, normalized: norm, queued: true, added: queued.added, skipped: queued.skipped, total: queued.total });
+        } catch (e:any) {
+          console.error('[LEARN] Queue failed for', norm, e?.message || e);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'queue_failed', message: e?.message || String(e) }));
+        }
+      })();
       return;
     }
-    if (path === '/api/learn-queue') { try { this.writeJson(res, { queued: listQueuedCandidates() }); } catch(e:any){ res.writeHead(500,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({ error:'queue_list_failed', message:e?.message })); } return; }
-    if (path === '/api/learn-queue/approve' && req.method==='POST') { let body=''; req.on('data',d=> body+=d); req.on('end', ()=>{ try { const j=JSON.parse(body||'{}'); if(!Array.isArray(j.normalized)){ res.writeHead(400,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'normalized_required'})); return;} const r=approveQueuedCandidates(j.normalized,'dashboard'); this.writeJson(res,r); } catch(e:any){ res.writeHead(500,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'approve_failed', message:e?.message })); } }); return; }
-    if (path === '/api/learn-queue/remove' && req.method==='POST') { let body=''; req.on('data',d=> body+=d); req.on('end', ()=>{ try { const j=JSON.parse(body||'{}'); if(!Array.isArray(j.normalized)){ res.writeHead(400,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'normalized_required'})); return;} const r=removeFromQueue(j.normalized); this.writeJson(res,r); } catch(e:any){ res.writeHead(500,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'remove_failed', message:e?.message })); } }); return; }
+  if (path === '/api/learn-queue') { (async()=>{ try { const lm = await getLearning(); this.writeJson(res, { queued: lm.listQueuedCandidates() }); } catch(e:any){ res.writeHead(500,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({ error:'queue_list_failed', message:e?.message })); } })(); return; }
+  if (path === '/api/learn-queue/approve' && req.method==='POST') { let body=''; req.on('data',d=> body+=d); req.on('end', ()=>{ (async()=>{ try { const j=JSON.parse(body||'{}'); if(!Array.isArray(j.normalized)){ res.writeHead(400,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'normalized_required'})); return;} const lm = await getLearning(); const r=lm.approveQueuedCandidates(j.normalized,'dashboard'); this.writeJson(res,r); } catch(e:any){ res.writeHead(500,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'approve_failed', message:e?.message })); } })(); }); return; }
+  if (path === '/api/learn-queue/remove' && req.method==='POST') { let body=''; req.on('data',d=> body+=d); req.on('end', ()=>{ (async()=>{ try { const j=JSON.parse(body||'{}'); if(!Array.isArray(j.normalized)){ res.writeHead(400,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'normalized_required'})); return;} const lm = await getLearning(); const r=lm.removeFromQueue(j.normalized); this.writeJson(res,r); } catch(e:any){ res.writeHead(500,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'remove_failed', message:e?.message })); } })(); }); return; }
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'not found' }));
   }
@@ -944,7 +637,7 @@ export class MetricsHttpServer {
     if (this.heartbeatTimer) return;
     this.heartbeatTimer = setInterval(() => {
       const hb: ExecutionEventPayload = {
-        id: 'heartbeat',
+    id: 'heartbeat', // Emit heartbeat event
         level: 'HEARTBEAT',
         durationMs: 0,
         blocked: false,
@@ -963,7 +656,10 @@ export class MetricsHttpServer {
     const idx = url.indexOf('?');
     if (idx === -1) return {};
     const q = url.substring(idx+1);
-    return Object.fromEntries(q.split('&').map(kv=>{const [k,v='']=kv.split('=');return [decodeURIComponent(k), decodeURIComponent(v)];}));
+        return Object.fromEntries(q.split('&').map(kv => {
+          const [k, v = ''] = kv.split('=');
+          return [decodeURIComponent(k), decodeURIComponent(v)];
+        }));
   }
 
   private isDebug(url: string): boolean {
@@ -983,6 +679,59 @@ export class MetricsHttpServer {
       scanMaxOffset: this.opts.scanMaxOffset,
       autoDisableOnFailure: this.opts.autoDisableOnFailure
     };
+  }
+
+  /** Build the dashboard client JS (simplified reimplementation after corruption fix). */
+  private _dashCache?: { debug:boolean; script:string }; // retained but currently unused (cache disabled)
+  private buildDashboardClientScript(debug: boolean): string {
+    // Cache disabled to avoid stale/broken script persisting across hot deployments.
+    const dbg = debug ? 'true':'false';
+    const lines: string[] = [];
+  lines.push('(()=>{');
+  lines.push("console.log('[DASH] init building script');");
+    lines.push('const DEBUG='+dbg+';');
+    // Basic error overlay
+    lines.push("const ovId='dashOv';function overlay(){let d=document.getElementById(ovId);if(!d){d=document.createElement('div');d.id=ovId;d.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:#7f1d1d;color:#fff;font:11px monospace;padding:4px 6px;display:none;max-height:40vh;overflow:auto;white-space:pre-wrap';document.body.appendChild(d);}return d;}");
+    lines.push("window.addEventListener('error',e=>{const o=overlay();o.style.display='block';o.textContent='JS ERROR: '+e.message;});");
+    lines.push("window.addEventListener('unhandledrejection',e=>{const o=overlay();o.style.display='block';o.textContent='UNHANDLED REJECTION: '+(e.reason&&e.reason.message||e.reason);});");
+    // Elements
+    lines.push("const tableBody=document.querySelector('#eventTable tbody');const emptyEl=document.getElementById('empty');const hbState=document.getElementById('hbState');const lastEvtAge=document.getElementById('lastEvtAge');const uptimeEl=document.getElementById('uptime');const portInfo=document.getElementById('portInfo');");
+    // Metrics mapping
+    lines.push("const metricsIds={total:'m_total',safe:'m_safe',risky:'m_risky',blocked:'m_blocked',confirmed:'m_confirm',timeouts:'m_timeouts',avg:'m_avg',p95:'m_p95',cpu:'m_cpu',rss:'m_rss',heap:'m_heap',lag:'m_lag',pscpu:'m_pscpu',psws:'m_psws',pssamples:'m_pssamples'};");
+    lines.push('let lastEventTs=Date.now();let lastHeartbeat=Date.now();let lastMetricsTs=0;');
+    // Age updater
+    lines.push("setInterval(()=>{const now=Date.now();lastEvtAge.textContent=(now-lastEventTs)+'ms';const hbAge=now-lastHeartbeat;hbState.textContent='HB '+hbAge+'ms';hbState.className='pill '+(hbAge<17000?'hb-ok':hbAge<30000?'hb-warn':'hb-stale');if(lastMetricsTs){const age=now-lastMetricsTs;if(portInfo) portInfo.textContent='Port '+(location.port||'')+' • '+age+'ms';}},1000);");
+    // Filters
+  // Filters (avoid innerHTML + TS-only syntax so produced JS is valid)
+  lines.push(`const levelOrder=['SAFE','RISKY','DANGEROUS','CRITICAL','BLOCKED','UNKNOWN'];const activeLevels=new Set(levelOrder);const filtersEl=document.getElementById('filters');levelOrder.forEach(l=>{const id='f_'+l;const lab=document.createElement('label');const input=document.createElement('input');input.type='checkbox';input.id=id;input.checked=true;lab.appendChild(input);lab.appendChild(document.createTextNode(' '+l));filtersEl.appendChild(lab);input.addEventListener('change',e=>{const t=e.target; if(t && t.checked) activeLevels.add(l); else activeLevels.delete(l);Array.from(tableBody.querySelectorAll('tr')).forEach(tr=>{const lvl=tr.dataset.level;tr.style.display=activeLevels.has(lvl)?'':'none';});});});`);
+  // Clear button
+  lines.push("document.getElementById('clearBtn').onclick=()=>{tableBody.innerHTML='';emptyEl.style.display='block';};");
+  // Selection toggle (addRow already sets click handler later; here helper for external ops)
+  lines.push("function getSelectedUnknown(){return Array.from(document.querySelectorAll('#eventTable tbody tr.learn-selected')).filter(r=>r.dataset.level==='UNKNOWN');}");
+    // Row add
+    lines.push("function fmtTime(iso){return iso.split('T')[1].replace('Z','');}");
+  lines.push(`function addRow(ev){if(ev.level==='HEARTBEAT')return;emptyEl.style.display='none';const tr=document.createElement('tr');tr.dataset.level=ev.level;tr.className='level-'+ev.level;const preview=(ev.preview||'').replace(/</g,'&lt;');tr.innerHTML='<td>'+ev.id+'</td><td>'+(ev.toolName||'')+'</td><td class="level">'+ev.level+'</td><td>'+ev.durationMs+'ms</td><td>'+(ev.exitCode==null?'':ev.exitCode)+'</td><td>'+(ev.success==null?'':(ev.success?'✔':'✖'))+'</td><td>'+fmtTime(ev.timestamp)+'</td><td>'+(preview||'')+'</td>';tr.addEventListener('click',()=>{tr.classList.toggle('learn-selected');});if(!activeLevels.has(ev.level))tr.style.display='none';tableBody.appendChild(tr);const wrap=document.getElementById('eventTableWrap');if(wrap)wrap.scrollTop=wrap.scrollHeight;if(tableBody.children.length>1000)tableBody.removeChild(tableBody.firstChild);}`);
+  // Metrics fetch + simple graphs
+  lines.push("let psWarned=false;async function refreshMetrics(){try{const r=await fetch('/api/metrics');if(!r.ok)return;const m=await r.json();const setMetric=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=String(val);};setMetric(metricsIds.total,m.totalCommands);setMetric(metricsIds.safe,m.safeCommands);setMetric(metricsIds.risky,m.riskyCommands);setMetric(metricsIds.blocked,m.blockedCommands);if('confirmedRequired'in m)setMetric(metricsIds.confirmed,m.confirmedRequired);if('timeouts'in m)setMetric(metricsIds.timeouts,m.timeouts);setMetric(metricsIds.avg,m.averageDurationMs);setMetric(metricsIds.p95,m.p95DurationMs);const p=m.performance||{};if(p.cpuPercent!=null)setMetric(metricsIds.cpu,p.cpuPercent.toFixed(1));if(p.rssMB!=null)setMetric(metricsIds.rss,p.rssMB.toFixed(0));if(p.heapUsedMB!=null)setMetric(metricsIds.heap,p.heapUsedMB.toFixed(0));if(p.eventLoopLagP95Ms!=null)setMetric(metricsIds.lag,p.eventLoopLagP95Ms.toFixed(1));if('psSamples'in m){setMetric(metricsIds.pssamples,m.psSamples||0);if(m.psCpuSecAvg!=null)setMetric(metricsIds.pscpu,(m.psCpuSecAvg||0).toFixed(2));if(m.psWSMBAvg!=null)setMetric(metricsIds.psws,(m.psWSMBAvg||0).toFixed(1));if((m.psSamples||0)===0 && !psWarned){const cpuEl=document.getElementById('m_pscpu');if(cpuEl){const note=document.createElement('div');note.style.cssText='font-size:.55rem;opacity:.6;margin-top:.3rem';note.textContent='(PS metrics disabled env)';cpuEl.parentElement.appendChild(note);psWarned=true;}}}lastMetricsTs=Date.now();if(uptimeEl)uptimeEl.textContent='Uptime: '+Math.round((Date.now()-Date.parse(m.lastReset))/1000)+'s';drawSimpleGraphs(m);}catch(e){if(DEBUG)console.error('[DASH][METRICS_ERR]',e);} }");
+  lines.push("function drawSimpleGraphs(m){try{const cpu=document.getElementById('cpuGraph');const mem=document.getElementById('memGraph');if(!cpu||!mem)return;const cpuHist=m.cpuHistory||[];const memHist=m.memHistory||[];const cpuCtx=cpu.getContext('2d');const memCtx=mem.getContext('2d');const dpr=window.devicePixelRatio||1;const W=cpu.clientWidth||cpu.parentElement.clientWidth||300;const H=cpu.clientHeight||120;cpu.width=W*dpr;cpu.height=H*dpr;cpuCtx.setTransform(dpr,0,0,dpr,0,0);cpuCtx.clearRect(0,0,W,H);cpuCtx.fillStyle='#111';cpuCtx.fillRect(0,0,W,H);cpuCtx.lineWidth=1.4;const cpuMaxVal=Math.max(1,...cpuHist.map(p=>p.value||0));const cpuScaleMax=cpuMaxVal<20?Math.min(100,Math.max(10,Math.ceil(cpuMaxVal*1.2))):100;cpuCtx.strokeStyle='#3b82f6';cpuCtx.beginPath();cpuHist.forEach((p,i)=>{const x=(i/Math.max(1,cpuHist.length-1))*W;const y=H-((p.value||0)/cpuScaleMax)*H;if(i===0)cpuCtx.moveTo(x,y);else cpuCtx.lineTo(x,y);});cpuCtx.stroke();cpuCtx.strokeStyle='#f59e0b';cpuCtx.beginPath();const lagMax=Math.max(1,Math.max(...cpuHist.map(p=>p.lag||0),50));cpuHist.forEach((p,i)=>{const x=(i/Math.max(1,cpuHist.length-1))*W;const y=H-((p.lag||0)/lagMax)*H;if(i===0)cpuCtx.moveTo(x,y);else cpuCtx.lineTo(x,y);});cpuCtx.stroke();const havePsSamples=m.psSamples>0;const havePsCpuLine=cpuHist.some(p=>typeof p.psCpuPct==='number');if(DEBUG && havePsSamples){console.log('[DASH][PS_CPU] psSamples',m.psSamples,'haveLine',havePsCpuLine,'histLen',cpuHist.length);}if(havePsSamples){cpuCtx.strokeStyle='#a855f7';cpuCtx.beginPath();let first=true;if(havePsCpuLine){cpuHist.forEach((p,i)=>{if(typeof p.psCpuPct!=='number')return;const x=(i/Math.max(1,cpuHist.length-1))*W;const y=H-(Math.min(100,p.psCpuPct)/cpuScaleMax)*H;if(first){cpuCtx.moveTo(x,y);first=false;}else cpuCtx.lineTo(x,y);});}else{const agg=(m.psCpuSecAvg||0);const estPct=Math.min(100,(agg/(m.psSamples||1))*40);const y=H-(estPct/cpuScaleMax)*H;cpuCtx.moveTo(0,y);cpuCtx.lineTo(W,y);}cpuCtx.stroke();}cpuCtx.fillStyle='rgba(0,0,0,0.55)';const legendH=havePsSamples?56:42;cpuCtx.fillRect(4,4,205,legendH);cpuCtx.font='10px monospace';cpuCtx.fillStyle='#fff';cpuCtx.fillText('CPU% (blue)'+(cpuScaleMax!==100?' s:'+cpuScaleMax:''),8,14);cpuCtx.fillStyle='#f59e0b';cpuCtx.fillText('Lag ms (amber)',8,26);if(havePsSamples){cpuCtx.fillStyle='#a855f7';cpuCtx.fillText('PS CPU (violet)',8,38);}const MW=mem.clientWidth||mem.parentElement.clientWidth||300;const MH=mem.clientHeight||120;mem.width=MW*dpr;mem.height=MH*dpr;memCtx.setTransform(dpr,0,0,dpr,0,0);memCtx.clearRect(0,0,MW,MH);memCtx.fillStyle='#111';memCtx.fillRect(0,0,MW,MH);memCtx.lineWidth=1.4;const rssVals=memHist.map(p=>p.rss||0);const heapVals=memHist.map(p=>p.heap||0);const allVals=rssVals.concat(heapVals);const rssMin=Math.min(...allVals,0);const rssMax=Math.max(...allVals,1);const range=Math.max(1,rssMax-rssMin);const useDynamic=range < 10;const normY=(v)=>MH-((v-(useDynamic?rssMin:0))/(useDynamic?range:rssMax))*MH;memCtx.strokeStyle='#10b981';memCtx.beginPath();memHist.forEach((p,i)=>{const x=(i/Math.max(1,memHist.length-1))*MW;const y=normY(p.rss||0);if(i===0)memCtx.moveTo(x,y);else memCtx.lineTo(x,y);});memCtx.stroke();memCtx.strokeStyle='#6366f1';memCtx.beginPath();memHist.forEach((p,i)=>{const x=(i/Math.max(1,memHist.length-1))*MW;const y=normY(p.heap||0);if(i===0)memCtx.moveTo(x,y);else memCtx.lineTo(x,y);});memCtx.stroke();const havePsWSLine=memHist.some(p=>typeof p.psWSMB==='number');if(DEBUG && havePsSamples){console.log('[DASH][PS_WS] psSamples',m.psSamples,'haveLine',havePsWSLine,'histLen',memHist.length);}if(havePsSamples){memCtx.strokeStyle='#f472b6';memCtx.beginPath();let first=true;if(havePsWSLine){memHist.forEach((p,i)=>{if(typeof p.psWSMB!=='number')return;const x=(i/Math.max(1,memHist.length-1))*MW;const y=normY(p.psWSMB);if(first){memCtx.moveTo(x,y);first=false;}else memCtx.lineTo(x,y);});}else{const v=(m.psWSMBAvg||0);const y=normY(v);memCtx.moveTo(0,y);memCtx.lineTo(MW,y);}memCtx.stroke();}memCtx.fillStyle='rgba(0,0,0,0.55)';const mLegendH=havePsSamples?68:54;memCtx.fillRect(4,4,215,mLegendH);memCtx.font='10px monospace';memCtx.fillStyle='#10b981';memCtx.fillText('RSS MB (green)'+(useDynamic?' dyn':''),8,14);memCtx.fillStyle='#6366f1';memCtx.fillText('Heap MB (indigo)',8,26);if(m.psSamples===0){memCtx.fillStyle='#999';memCtx.fillText('PS metrics disabled',8,38);}else{memCtx.fillStyle='#f472b6';memCtx.fillText('PS WS (pink)',8,38);} }catch(ex){if(DEBUG)console.error('[DASH][GRAPH_ERR]',ex);} } ");
+  lines.push('setInterval(refreshMetrics,5000); setTimeout(refreshMetrics,500);');
+  // Queue / learning simple UI wiring (placeholder impl)
+  lines.push("(function(){const lb=document.getElementById('learnBtn');const lm=document.getElementById('learnMsg');if(lb){lb.addEventListener('click',()=>{const sel=getSelectedUnknown();if(!sel.length){if(lm){lm.textContent='No UNKNOWN selected';setTimeout(()=>lm.textContent='',1800);}return;}if(lm){lm.textContent='Queued '+sel.length+' (demo)';setTimeout(()=>lm.textContent='',2200);}sel.forEach(r=>r.classList.remove('learn-selected'));});}const showQ=document.getElementById('showQueue');const qp=document.getElementById('queuePanel');if(showQ&&qp){showQ.addEventListener('click',()=>{qp.style.display=qp.style.display==='none'?'block':'none';});}const refreshQ=document.getElementById('refreshQueue');const qb=document.getElementById('queueBody');if(refreshQ&&qb){refreshQ.addEventListener('click',async()=>{try{refreshQ.disabled=true;const r=await fetch('/api/unknown-candidates?debug=true');if(r.ok){const list=await r.json();qb.innerHTML='';(list||[]).forEach(c=>{const tr=document.createElement('tr');tr.innerHTML=\"<td><input type=\\\"checkbox\\\"></td><td>\"+(c.normalized||'')+\"</td><td>\"+(c.count||1)+\"</td><td>\"+(c.times||1)+\"</td><td>\"+(c.last||'')+\"</td>\";qb.appendChild(tr);});}}catch(ex){ if(DEBUG) console.error('[DASH][QUEUE_REFRESH_ERR]',ex);}finally{refreshQ.disabled=false;}});} })();");
+  // Emit synthetic button (debug mode only)
+    lines.push("if(DEBUG){try{const eb=document.getElementById('emit');if(eb){eb.addEventListener('click',async()=>{try{eb.disabled=true;eb.textContent='Emitting...';const r=await fetch('/api/debug/emit?debug=true&level=SAFE&durationMs=5');if(r.ok){const js=await r.json();if(js.synthetic){addRow(js.synthetic);} } }catch(ex){if(DEBUG)console.error('[DASH][EMIT_ERR]',ex);}finally{eb.disabled=false;eb.textContent='Emit Synthetic';}});} }catch(ex){if(DEBUG)console.error('[DASH][EMIT_INIT_ERR]',ex);} }");
+  // SSE
+    lines.push("const es=new EventSource('/events'+(DEBUG?'?replay=50':''));");
+    lines.push("const handleEvent=e=>{try{const d=JSON.parse(e.data);if(d.level==='HEARTBEAT'){lastHeartbeat=Date.now();return;}lastEventTs=Date.now();addRow(d);}catch(err){if(DEBUG)console.error('Bad event',err);}};es.addEventListener('execution',handleEvent);es.onmessage=handleEvent;es.addEventListener('open',()=>{lastEventTs=Date.now();hbState.textContent='SSE OK';hbState.className='pill hb-ok';});es.addEventListener('error',()=>{hbState.textContent='SSE ERR';hbState.className='pill hb-stale';});");
+    // Poll fallback if no metrics after 6s
+    lines.push("setTimeout(()=>{if(!lastMetricsTs){console.warn('[DASH] metrics delayed >6s');refreshMetrics();}},6000);");
+    lines.push("document.getElementById('replayCount').textContent=tableBody.children.length.toString();");
+    lines.push("if(DEBUG)console.log('[DASH] script loaded debug='+DEBUG);})();");
+  // Removed duplicate extra '})();' which caused a syntax error (unmatched closing) and blocked dashboard script execution.
+  const scriptRaw = lines.join('');
+  // Avoid aggressive whitespace collapsing which previously obscured syntax issues; serve raw (readable) script.
+  // If explicit prod minification desired later, reintroduce guarded replace.
+  const script = scriptRaw; // (debug || process.env.METRICS_MINIFY_DASH==='1') ? scriptRaw.replace(/\s+/g,' ') : scriptRaw;
+  return script;
   }
 
   private startPerfSampler(): void {
@@ -1015,10 +764,22 @@ export class MetricsHttpServer {
           samples: this.lagSamples.length
         };
 
-        // Update historical data for graphs
+        // Update historical data for graphs (augment with PS metrics when available)
         const now = Date.now();
-  this.cpuHistory.push({ timestamp: now, value: +cpuPercent.toFixed(2), lag: +lagP95.toFixed(2) });
-        this.memHistory.push({ timestamp: now, rss: +rssMB.toFixed(1), heap: +heapUsedMB.toFixed(1) });
+        let psCpuPct: number | undefined; let psWSMB: number | undefined;
+        try {
+          const snap: any = metricsRegistry.snapshot(false);
+          if(typeof snap.psWSMBAvg === 'number' && snap.psSamples>0){ psWSMB = +snap.psWSMBAvg; }
+          if(typeof (snap as any).psCpuSecLast === 'number' && snap.psSamples>0){
+            const intervalSec = this.psSampleIntervalMs/1000;
+            if(intervalSec>0){ psCpuPct = +(((snap as any).psCpuSecLast/ intervalSec)*100).toFixed(2); }
+          } else if(typeof snap.psCpuSecAvg === 'number' && snap.psSamples>0){
+            const intervalSec = this.psSampleIntervalMs/1000;
+            if(intervalSec>0){ psCpuPct = +((snap.psCpuSecAvg/ intervalSec)*100).toFixed(2); }
+          }
+        } catch {}
+        this.cpuHistory.push({ timestamp: now, value: +cpuPercent.toFixed(2), lag: +lagP95.toFixed(2), psCpuPct });
+        this.memHistory.push({ timestamp: now, rss: +rssMB.toFixed(1), heap: +heapUsedMB.toFixed(1), psWSMB });
 
         // Keep only recent history (last 60 samples = 2 minutes at 2s intervals)
         if (this.cpuHistory.length > this.historyLimit) {
@@ -1077,10 +838,11 @@ export class MetricsHttpServer {
     if(this.psSampleTimer || process.env.MCP_CAPTURE_PS_METRICS !== '1') return;
     const capture = () => {
       try {
-        const mem = process.memoryUsage();
-        const wsMB = +(mem.rss/1024/1024).toFixed(2);
-        const cpuSec = process.uptime();
-        try { (metricsRegistry as any).capturePsSample(cpuSec, wsMB); } catch {}
+  const mem = process.memoryUsage();
+  const wsMB = +(mem.rss/1024/1024).toFixed(2);
+  const cpuUsage = process.cpuUsage();
+  const cpuCumulativeSec = (cpuUsage.user + cpuUsage.system)/1e6;
+  try { (metricsRegistry as any).capturePsSample(cpuCumulativeSec, wsMB); } catch {}
       } catch {}
       this.psSampleTimer = setTimeout(capture, this.psSampleIntervalMs).unref();
     };

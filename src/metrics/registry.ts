@@ -32,6 +32,7 @@ export interface MetricsSnapshot {
   psSamples?: number;
   psCpuSecAvg?: number;
   psWSMBAvg?: number;
+  psCpuSecLast?: number; // last sampled CPU seconds delta
 }
 
 export class MetricsRegistry {
@@ -66,6 +67,7 @@ export class MetricsRegistry {
   private psCpuTotal = 0; // cumulative CPU seconds
   private psWSMBTotal = 0; // cumulative working set MB
   private psSamples = 0;
+  private psCpuLast = 0; // last sample cpu seconds delta
 
   record(rec: ExecutionRecord): void {
     this.counts.TOTAL++;
@@ -108,6 +110,7 @@ export class MetricsRegistry {
   this.history = [];
   this.seq = 0;
   this.psCpuTotal = 0; this.psWSMBTotal = 0; this.psSamples = 0;
+  this.psCpuLast = 0;
   Object.keys(this.attemptCounters).forEach(k => this.attemptCounters[k] = 0);
   }
 
@@ -148,6 +151,7 @@ export class MetricsRegistry {
       snap.psSamples = this.psSamples;
       snap.psCpuSecAvg = +(this.psCpuTotal / this.psSamples).toFixed(3);
       snap.psWSMBAvg = +(this.psWSMBTotal / this.psSamples).toFixed(2);
+  snap.psCpuSecLast = +this.psCpuLast.toFixed(3);
     }
     if (resetAfter) this.reset();
     return snap;
@@ -164,9 +168,20 @@ export class MetricsRegistry {
     return [...this.history];
   }
 
-  /** Capture a PowerShell process metric sample (CPU seconds, Working Set MB) */
-  capturePsSample(cpuSec:number, wsMB:number){
-    this.psCpuTotal += cpuSec;
+  /** Capture a PowerShell process metric sample.
+   * cpuCumulativeSec: total process CPU seconds (wall independent) at sample time.
+   * wsMB: working set MB.
+   * We convert to delta seconds for averaging; last delta stored in psCpuLast.
+   */
+  private _lastCpuCumulative?: number;
+  capturePsSample(cpuCumulativeSec:number, wsMB:number){
+    let delta = 0;
+    if(typeof this._lastCpuCumulative === 'number'){
+      delta = Math.max(0, cpuCumulativeSec - this._lastCpuCumulative);
+    }
+    this._lastCpuCumulative = cpuCumulativeSec;
+    this.psCpuLast = delta;
+    this.psCpuTotal += delta;
     this.psWSMBTotal += wsMB;
     this.psSamples += 1;
   }

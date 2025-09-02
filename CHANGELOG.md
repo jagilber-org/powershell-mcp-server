@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.3.2 - 2025-09-01
+
+Stability & Observability:
+
+- Correct PowerShell CPU metric sampling (delta seconds via cumulative cpuUsage) exposing psCpuSecLast & accurate psCpuPct line.
+- Dashboard always shows PS legend when samples > 0 and falls back to horizontal line if per-sample missing.
+- Added debug logging hooks (literal tags: `[DASH][PS_CPU]` / `[DASH][PS_WS]`) for diagnostics.
+- Adaptive timeout telemetry improvements (effective vs configured alignment; adaptive log retained).
+- Minor deployment health check manifest logic (future: manifest healthCheck property refactor).
+
+Next (not yet implemented): externalized dash bundle, version stamp header, CSP tightening.
+
 ## v1.3.0 - 2025-09-01
 
 Focus: Security hardening, protocol simplification, deterministic schemas, adaptive execution metrics.

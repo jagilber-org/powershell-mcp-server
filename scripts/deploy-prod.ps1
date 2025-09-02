@@ -52,7 +52,12 @@ param(
   [switch]$IncludeDev,
   [switch]$NoBackup,
   [switch]$DryRun,
-  [switch]$VerboseHashes
+  [switch]$VerboseHashes,
+  [switch]$NoPreserveLearned,
+  [switch]$HealthCheck,
+  [int]$HealthPort = 9105,
+  [int]$HealthTimeoutSec = 15,
+  [ValidateSet('server','mcpServer')] [string]$Entrypoint = 'server'
 )
 
 Set-StrictMode -Version Latest
@@ -84,6 +89,11 @@ function Get-GitMeta {
 }
 $gitMeta = Get-GitMeta
 
+# Preserve existing learned-safe.json (path captured before any sync) unless user disables
+$existingLearnedPath = Join-Path $Destination 'learned-safe.json'
+$restoreLearned = (Test-Path $existingLearnedPath) -and (-not $NoPreserveLearned)
+if($restoreLearned){ Write-Info 'Will restore existing learned-safe.json after sync (use -NoPreserveLearned to disable).' }
+
 Write-Info "Repo root: $repoRoot"
 Write-Info "Destination: $Destination"
 if($gitMeta.'rev-parse HEAD'){ Write-Info "Commit: $($gitMeta.'rev-parse HEAD')" }
@@ -110,9 +120,16 @@ if(-not $DryRun){ New-Item -ItemType Directory -Path $staging | Out-Null }
 $artifactList = @(
   'dist',
   'package.json','package-lock.json','README.md','mcp-config.json','enterprise-config.json',
+  'learned-safe.json',
   'instructions','docs'
   # add other runtime-needed assets here
 )
+
+# Ensure learned-safe.json exists so verification script passes (create minimal placeholder if absent)
+if(-not (Test-Path 'learned-safe.json')){
+  Write-Warn 'learned-safe.json missing; creating placeholder.'
+  '{"version":1,"approved":[]}' | Out-File -Encoding utf8 learned-safe.json
+}
 
 foreach($item in $artifactList){
   if(Test-Path $item){
@@ -203,4 +220,46 @@ if(-not $DryRun){
   $manifest | ConvertTo-Json -Depth 4 | Write-Host
 }
 
-Write-Info 'Next: Start server with `node dist/index.js` (or enterprise/server variant).'
+if(-not $DryRun -and $restoreLearned){
+  try {
+    $destLearned = Join-Path $Destination 'learned-safe.json'
+    if(Test-Path $existingLearnedPath){
+      Copy-Item $existingLearnedPath $destLearned -Force
+      Write-Info 'Restored previous learned-safe.json (preserving learning data).'
+    }
+  } catch {
+    Write-Warn "Failed to restore learned-safe.json: $_"
+  }
+}
+
+# Optional post-deploy health check (basic HTTP probes)
+$healthOk = $false
+if($HealthCheck -and -not $DryRun){
+  Write-Info "Performing health check on port $HealthPort ..."
+  $deadline = (Get-Date).AddSeconds($HealthTimeoutSec)
+  $dashOk = $false; $metricsOk = $false
+  while((Get-Date) -lt $deadline -and (-not ($dashOk -and $metricsOk))){
+    try { $r = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$HealthPort/dash.js" -TimeoutSec 3 -ErrorAction Stop; if($r.StatusCode -eq 200 -and $r.Content.Length -gt 500){ $dashOk = $true } } catch {}
+    try { $m = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$HealthPort/api/metrics" -TimeoutSec 3 -ErrorAction Stop; if($m.StatusCode -eq 200 -and $m.Content.Length -gt 50){ $metricsOk = $true } } catch {}
+    if(-not ($dashOk -and $metricsOk)){ Start-Sleep -Milliseconds 400 }
+  }
+  if($dashOk -and $metricsOk){ Write-Info 'Health check passed (dash.js + /api/metrics reachable).'; $healthOk = $true } else { Write-Warn 'Health check failed or timed out.' }
+}
+
+if(-not $DryRun){
+  # Append health result into manifest if it already exists
+  $manifestPath = Join-Path $Destination 'deploy-manifest.json'
+  if(Test-Path $manifestPath){
+    try {
+      $manifestJson = Get-Content $manifestPath -Raw | ConvertFrom-Json
+      $manifestJson.healthCheck = @{ enabled = [bool]$HealthCheck; ok = [bool]$healthOk; port = $HealthPort }
+      $manifestJson | ConvertTo-Json -Depth 8 | Out-File -Encoding UTF8 $manifestPath
+      Write-Info 'Updated manifest with healthCheck results.'
+    } catch { Write-Warn "Failed to update manifest healthCheck: $_" }
+  }
+}
+
+if($Entrypoint -eq 'server') { $startCmd = 'node dist/server.js' } else { $startCmd = 'node dist/mcpServer.js' }
+Write-Info ("Start command suggestion: $startCmd")
+Write-Info 'Set METRICS_PORT before starting if you need a non-default port.'
+Write-Info 'Deployment script finished.'
