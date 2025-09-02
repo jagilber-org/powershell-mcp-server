@@ -27,13 +27,12 @@ flowchart LR
     C --> METRICS[Metrics Registry]
         C --> PROMPTS[Prompt Retrieval]
         C --> CONFIG[Enterprise Config Loader]
-    C --> GITTOOLS[Git Tool Surface]
     end
 
     EXEC --> PS[PowerShell Host]
     SEC --> PATTERNS[Pattern Sets + Dynamic Overrides]
     METRICS --> HTTP[(HTTP / SSE Server)]
-    GITTOOLS --> EXEC
+    %% (Removed outdated Git Tool Surface node – git commands are handled through Security Classifier + PowerShell Executor, no dedicated git tools exposed)
     HTTP --> DASH[Browser Dashboard]
     LOG --> FILES[(Log Files + NDJSON)]
     THREAT --> METRICS
