@@ -66,6 +66,20 @@ export class MetricsHttpServer {
   private replayLimit = 200; // cap buffer size
   private seqCounter = 0; // monotonic event sequence (SSE + polling fallback)
   private debugEnabled = process.env.METRICS_DEBUG === 'true';
+  // Separate flag controlling verbose dashboard client logging (front-end). Allows server debug without noisy UI.
+  private dashDebugEnabled = (process.env.METRICS_DASH_DEBUG === '1' || process.env.METRICS_DASH_DEBUG === 'true');
+  // Cache package version (lazy loaded) for /version and dashboard banner.
+  private cachedVersion: string | undefined;
+  private getVersion(): string {
+    if(this.cachedVersion) return this.cachedVersion;
+    try {
+      // Read package.json relative to process.cwd(); robust even after packaging (dist parallel to package.json)
+      const txt = require('fs').readFileSync(require('path').join(process.cwd(),'package.json'),'utf8');
+      const j = JSON.parse(txt);
+      this.cachedVersion = j.version || '0.0.0';
+    } catch { this.cachedVersion = '0.0.0'; }
+  return this.cachedVersion!;
+  }
   // Performance sampling
   private perfTimer?: NodeJS.Timeout;
   private perfSampleIntervalMs = 2000;
@@ -315,6 +329,12 @@ export class MetricsHttpServer {
       this.writeJson(res, response);
       return;
     }
+    if (path === '/version') {
+      // Lightweight version + uptime endpoint for automation & dashboards.
+      const body = { version: this.getVersion(), uptimeSeconds: Math.round((Date.now()-this.serverStart)/1000), startedAt: new Date(this.serverStart).toISOString() };
+      this.writeJson(res, body);
+      return;
+    }
   if (path.startsWith('/api/events/replay')) {
       // Polling fallback endpoint: /api/events/replay?since=<seq>&limit=100
       const q = this.parseQuery(url);
@@ -415,7 +435,8 @@ export class MetricsHttpServer {
       return;
     }
   if (path === '/' || path.startsWith('/dashboard')) {
-      const debug = this.isDebug(url);
+      const debug = this.isDebug(url) || this.dashDebugEnabled;
+      const ver = this.getVersion();
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8" />
 <title>PowerShell MCP Dashboard</title>
@@ -479,13 +500,14 @@ export class MetricsHttpServer {
   button:active{transform:translateY(1px);}
 </style></head><body>
 <header>
-  <h1>PowerShell MCP Dashboard ${debug?'<span class="pill debug">DEBUG</span>':''}</h1>
+  <h1>PowerShell MCP Dashboard <span class="pill">v${ver}</span> ${debug?'<span class="pill debug">DEBUG</span>':''}</h1>
   <span class="pill" id="portInfo">Port: ${this.opts.port}</span>
   <span class="pill" id="hbState">HB: --</span>
   <span class="pill" id="uptime">Uptime: --</span>
   <span style="flex:1"></span>
   <a class="pill" href="/metrics" target="_blank">Prometheus</a>
   <a class="pill" href="/api/metrics" target="_blank">/api/metrics</a>
+  <a class="pill" href="/version" target="_blank">/version</a>
   ${debug?'<a class="pill" href="/api/debug?debug=true" target="_blank">Debug JSON</a>':''}
 </header>
 <main>
@@ -688,8 +710,9 @@ export class MetricsHttpServer {
     const dbg = debug ? 'true':'false';
     const lines: string[] = [];
   lines.push('(()=>{');
-  lines.push("console.log('[DASH] init building script');");
-    lines.push('const DEBUG='+dbg+';');
+  lines.push('const DEBUG='+dbg+';');
+  lines.push("if(DEBUG) console.log('[DASH] init building script');");
+    // DEBUG const inserted earlier
     // Basic error overlay
     lines.push("const ovId='dashOv';function overlay(){let d=document.getElementById(ovId);if(!d){d=document.createElement('div');d.id=ovId;d.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:#7f1d1d;color:#fff;font:11px monospace;padding:4px 6px;display:none;max-height:40vh;overflow:auto;white-space:pre-wrap';document.body.appendChild(d);}return d;}");
     lines.push("window.addEventListener('error',e=>{const o=overlay();o.style.display='block';o.textContent='JS ERROR: '+e.message;});");
@@ -725,7 +748,7 @@ export class MetricsHttpServer {
     // Poll fallback if no metrics after 6s
     lines.push("setTimeout(()=>{if(!lastMetricsTs){console.warn('[DASH] metrics delayed >6s');refreshMetrics();}},6000);");
     lines.push("document.getElementById('replayCount').textContent=tableBody.children.length.toString();");
-    lines.push("if(DEBUG)console.log('[DASH] script loaded debug='+DEBUG);})();");
+  lines.push("if(DEBUG)console.log('[DASH] script loaded debug='+DEBUG);})();");
   // Removed duplicate extra '})();' which caused a syntax error (unmatched closing) and blocked dashboard script execution.
   const scriptRaw = lines.join('');
   // Avoid aggressive whitespace collapsing which previously obscured syntax issues; serve raw (readable) script.
