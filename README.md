@@ -1,586 +1,199 @@
-# PowerShell MCP Server (Enterprise Hardening / Minimal Core ## Project Structure
+# PowerShell MCP Server
+
+Enterprise-ready Model Context Protocol (MCP) server exposing secure, policy-aware PowerShell automation and supporting tooling (syntax analysis, metrics, audit, deployment helpers). Designed for AI agent integration, reproducible observability, and progressive hardening.
+
+## ✨ Key Features
+
+- Hierarchical security levels: SAFE -> RISKY -> DANGEROUS (reserved) -> CRITICAL -> BLOCKED -> UNKNOWN (learning path)
+- Command safety classification + confirmation gating (`confirmed: true`)
+- PowerShell syntax parsing + optional PSScriptAnalyzer integration (cached)
+- Adaptive execution timeouts, output chunking & overflow safeguards
+- Structured audit logging (text + NDJSON) & pattern learning pipeline
+- Unified configuration layering (defaults -> config file -> env -> CLI)
+- Deployment script with backups & manifest (`scripts/deploy-prod.ps1`)
+- TypeScript codebase with Jest test suite
+
+## 📁 Project Structure
 
 ```text
-|-- .github/          # GitHub workflows, issue templates, Copilot instructi####**Topics:***Topics:** security, tools, admin, examples, compliance
+.github/                 GitHub workflows, issue templates, Copilot instructions
+bin/                     Built entry points / packaged artifacts
+build/                   Build scripts
+config/                  Config files (enterprise-config, jest, mcp)
+data/                    Data assets (knowledge index, learned patterns)
+deploy/                  Deployment helpers
+docs/                    Extended documentation & design notes
+logs/                    Runtime / audit logs (gitignored)
+scripts/                 PowerShell operational & monitoring scripts
+src/                     TypeScript source (server, tools, security)
+tests/                   Jest tests
+tools/                   Auxiliary analysis scripts
+```
 
-## Security Model
+## 🚀 Quick Start
 
-Levels: SAFE -> RISKY -> DANGEROUS (reserved) -> CRITICAL -> BLOCKED -> UNKNOWN
-
-| Level | Requires confirmed? | Executed? | Example | Category Sample |ity, tools, admin, examples, compliance
-
-## Security Model
-
-Levels: SAFE -> RISKY -> DANGEROUS (reserved) -> CRITICAL -> BLOCKED -> UNKNOWN
-
-| Level | Requires confirmed? | Executed? | Example | Category Sample |ty Model
-
-Levels: SAFE ->## Unknown Command Learning
-
-UNKNOWN -> normalize -> queue -> review -> approve -> SAFE cache (`learned-safe.json`). Approved patterns immediately influence classification.
-
-## Tests (Jest)Y -> DANGEROUS (reserved) -> CRITICAL -> BLOCKED -> UNKNOWN
-
-| Level | Requires confirmed? | Executed? | Example | Category Sample |rity Model
-
-Levels: SAFE -> RISKY -> DANGEROUS (reserved) -> CRITICAL -> BLOCKED ->UNKNOWN -> normalize -> queue -> review -> approve -> SAFE cache (`learned-safe.json`). Approved patterns immediately influence classification.UNKNOWN
-|-- bin/             # Executable scripts and legacy entry points  
-|-- build/           # Build scripts and automation tools
-|-- config/          # Configuration files (enterprise, Jest, MCP)
-|-- data/            # Runtime data (learning, metrics, knowledge index)
-|-- deploy/          # Deployment artifacts and release packages
-|-- docs/            # Project documentation
-|-- logs/            # Runtime audit and diagnostic logs
-|-- scripts/         # Development and maintenance scripts
-|-- src/             # TypeScript source code
-|-- temp/            # Temporary files and build artifacts
-|-- tests/           # Test suites and fixtures
-`-- tools/           # Development utilities and helper scripts
-```uick Start
-
-```powershell
+```bash
 npm install
 npm run build
-npm run start:enterprise
+npm start            # Starts MCP server
 ```
 
-> Removal: Legacy entry files `vscode-server-enterprise.ts` / `vscode-server.ts` have now been removed. Update any scripts that referenced `dist/vscode-server-enterprise.js` or `dist/vscode-server.js` to use `dist/server.js` (preferred) or `dist/index.js`.
+Optional auth key:
 
-Optional auth:
-
-```powershell
-$env:MCP_AUTH_KEY = "your-strong-key"
-npm run start:enterprise
+```bash
+set MCP_AUTH_KEY="your-strong-key"   # Windows (PowerShell: $env:MCP_AUTH_KEY="your-strong-key")
+npm start
 ```
 
-## Available Tools (Core MCP Interface)
+CLI examples (after build):
 
-| Tool | Purpose | Key Arguments |
-|------|---------|---------------|
-| `run-powershell` | Execute PowerShell command/script (security classified) | `command`, `workingDirectory`, `timeoutSeconds`, `confirmed` |
-| `admin` | Administrative operations (server stats, policy, learning) | `action`, `target`, additional params |
-| `syntax-check` | Validate PowerShell syntax without execution | `script`, `filePath` |
-| `help` | Get help and discover tool capabilities | `topic` |
+```bash
+node dist/cli.js --dump-config
+node dist/cli.js --no-metrics --dry-run
+```
 
-### Tool Tree Structure
+## ⚙ Configuration Layers
 
-The `admin` tool provides access to administrative functions through a hierarchical structure:
+Order of precedence (low -> high):
 
-#### `admin` Tool Actions:
-- **`action: "server"`** - Server metrics and health
-  - `target: "stats"` - Get server statistics
-  - `target: "health"` - Get health status  
-  - `target: "memory"` - Get memory usage (optional `gc: true`)
+1. Internal defaults (`src/config.ts`)
+2. `config/enterprise-config.json`
+3. Environment variables
+4. CLI flags (`dist/cli.js`)
 
-- **`action: "security"`** - Security and policy management
-  - `target: "working-directory"` - Get/set working directory policy
-  - `target: "threat-analysis"` - Get threat tracking statistics
-  - `target: "classification"` - Test command classification
+Supported (Phase 1) keys:
 
-- **`action: "learning"`** - Command learning system
-  - `target: "list"` - List learning candidates
-  - `target: "queue"` - Queue commands for approval
-  - `target: "approve"` - Approve queued commands
-  - `target: "remove"` - Remove from queue
+| Domain   | Key          | Env Var                   | CLI Flag        | Description                                     |
+|----------|--------------|---------------------------|-----------------|-------------------------------------------------|
+| metrics  | enable       | MCP_METRICS_ENABLE=true   | --no-metrics    | Toggle in-memory metrics collection             |
+| security | enforceAuth  | MCP_ENFORCE_AUTH=true     | (future flag)   | Require auth key for tool calls when enabled    |
 
-- **`action: "audit"`** - Audit and logging
-  - `target: "emit-log"` - Create audit log entry
-  - `target: "prompts"` - Access agent prompts library
+Auth key (when `enforceAuth` true): set `MCP_AUTH_KEY`.
 
-### Core Requirements
+## 🛠 Core Tools (Representative)
 
-1. `RISKY` & `UNKNOWN` commands require `confirmed: true` parameter
-2. `syntax-check` supports both inline `script` and `filePath` for file-based validation  
-3. `run-powershell` accepts either `command` or `script` parameter (equivalent)
-4. Working directory enforcement (when enabled) restricts execution to `allowedWriteRoots`
-5. All administrative functions accessed through unified `admin` tool
+| Tool                   | Purpose                              | Notes                                                       |
+|------------------------|--------------------------------------|-------------------------------------------------------------|
+| run-powershell         | Execute PowerShell                   | Classified; needs `confirmed:true` if RISKY/UNKNOWN          |
+| powershell-syntax-check| Parse & (optional) analyze script    | Native parser + optional analyzer via env                   |
+| server-stats           | Metrics / threat snapshot            | Read-only                                                   |
+| audit / admin (future) | Administrative introspection         | Gated                                                       |
 
-## Project Structure
+### Classification Flow
 
 ```text
-|-- .github/          # GitHub workflows, issue templates, Copilot instructions
-|-- bin/             # Executable scripts and legacy entry points  
-|-- build/           # Build scripts and automation tools
-|-- config/          # Configuration files (enterprise, Jest, MCP)
-|-- data/            # Runtime data (learning, metrics, knowledge index)
-|-- deploy/          # Deployment artifacts and release packages
-|-- docs/            # Project documentation
-|-- logs/            # Runtime audit and diagnostic logs
-|-- scripts/         # Development and maintenance scripts
-|-- src/             # TypeScript source code
-|-- temp/            # Temporary files and build artifacts
-|-- tests/           # Test suites and fixtures
-`-- tools/           # Development utilities and helper scripts
+UNKNOWN -> normalize -> queue -> review -> approve -> SAFE cache
+  ^                                                      |
+  +------------------- pattern learning -----------------+
 ```
 
-### MCP SDK Compliance
+- BLOCKED patterns never execute
+- RISKY requires explicit confirmation
+- SAFE executes immediately
 
-This server fully complies with the Model Context Protocol specification:
+## ⏱ Execution Controls
 
-- Uses official `@modelcontextprotocol/sdk` with proper JSON-RPC 2.0 implementation
-- All tool schemas defined using Zod for type safety and validation  
-- Proper error handling using `McpError` and `ErrorCode` constants
-- Structured logging and audit trails for all operations
-- Transport-agnostic design supporting stdio and future transports
+- External timeout + internal self-destruct timer (exit code 124)
+- Adaptive extension (progress based): fields `effectiveTimeoutMs`, `adaptiveExtensions`
+- Output chunking & truncation (total byte & line caps)
+- Overflow strategies: terminate vs truncate vs return
 
-## Tool Schemas & Usage
+## 🔐 Security Levels
 
-### `run-powershell` Schema
+| Level     | Confirmation | Executes | Typical Category                  |
+|-----------|--------------|----------|-----------------------------------|
+| SAFE      | No           | Yes      | Read-only, benign                  |
+| RISKY     | Yes          | Yes      | File edits, writes, moderate risk |
+| DANGEROUS | (reserved)   | No       | Destructive ops (future policy)   |
+| CRITICAL  | Always blocked | No     | High-risk patterns                |
+| BLOCKED   | N/A          | No       | Policy denied                     |
+| UNKNOWN   | Yes          | Yes      | New / unclassified                |
 
-```json
-{
-  "command": "string (optional)", 
-  "script": "string (optional)",
-  "workingDirectory": "string (optional)",
-  "timeoutSeconds": "number (1-600, optional)",
-  "confirmed": "boolean (optional)",
-  "progressAdaptive": "boolean (optional)",
-  "adaptiveExtendWindowMs": "number (optional)",
-  "adaptiveExtendStepMs": "number (optional)", 
-  "adaptiveMaxTotalSec": "number (optional)"
-}
+Every invocation emits audit + metrics with safety level & duration.
+
+## 🧪 Testing
+
+```bash
+npm run test:jest       # Build + run Jest
+npm run build:only      # TypeScript compile only
 ```
 
-**Requirements:** Either `command` or `script` must be provided. RISKY/UNKNOWN commands require `confirmed: true`.
+Selective metrics / pattern tests live under `tests/jest/`.
 
-### `admin` Schema
-
-```json
-{
-  "action": "server|security|learning|audit",
-  "target": "string",
-  "verbose": "boolean (optional)",
-  "gc": "boolean (optional)",
-  "enabled": "boolean (optional)",
-  "allowedWriteRoots": "string[] (optional)",
-  "limit": "number (optional)",
-  "minCount": "number (optional)", 
-  "normalized": "string[] (optional)",
-  "message": "string (optional)",
-  "category": "string (optional)",
-  "format": "markdown|json (optional)"
-}
-```
-
-**Examples:**
-
-- Server stats: `{"action": "server", "target": "stats"}`
-- Memory usage: `{"action": "server", "target": "memory", "gc": true}`
-- Working directory policy: `{"action": "security", "target": "working-directory"}`
-- Learning queue: `{"action": "learning", "target": "list", "limit": 10}`
-
-### `syntax-check` Schema
-
-```json
-{
-  "script": "string (optional)",
-  "filePath": "string (optional)"  
-}
-```
-
-**Requirements:** Either `script` or `filePath` must be provided.
-
-### `help` Schema
-
-```json
-{
-  "topic": "string (optional)"
-}
-```
-
-**Topics:** security, tools, admin, examples, compliance
-
-## Security Model
-
-Levels: SAFE +' RISKY +' DANGEROUS (reserved) +' CRITICAL +' BLOCKED +' UNKNOWN
-
-| Level | Requires confirmed? | Executed? | Example | Category Sample |
-|-------|---------------------|-----------|---------|-----------------|
-| SAFE | No | Yes | `Get-ChildItem` | INFORMATION_GATHERING |
-| RISKY | Yes | Yes | `Stop-Service` | SERVICE_MANAGEMENT |
-| CRITICAL | N/A | No | `Format-Volume` | DISK_DESTRUCTIVE |
-| BLOCKED | N/A | No | `Invoke-Expression` | SECURITY_THREAT |
-| UNKNOWN | Yes | Yes | `custom-tool --x` | UNKNOWN_COMMAND |
-
-## First Call Execution Behavior
-
-*** Commands that execute immediately (no `confirmed` needed):**
-
-- **SAFE commands**: Pre-classified patterns like `Get-ChildItem`, `dir`, `Write-Output`
-- **Learned SAFE commands**: Previously unknown commands that were approved via learning system
-
-**! Commands that require `confirmed: true` on first call:**
-
-- **RISKY commands**: Pre-classified as potentially disruptive (e.g., `Stop-Service`, `Remove-Item`)
-- **UNKNOWN commands**: Any command not matching SAFE, RISKY, CRITICAL, or BLOCKED patterns
-
-**X Commands that never execute:**
-
-- **BLOCKED commands**: Security threats like `Invoke-Expression`
-- **CRITICAL commands**: Destructive operations like `Format-Volume`
-
-**Key Point**: Once an UNKNOWN command is learned and approved, it becomes SAFE and will execute without `confirmed` on subsequent calls.
-
-Alias & OS classification:
- 
-| Category | Examples |
-|----------|----------|
-| OS_READONLY | `dir`, `whoami`, `echo`, `Get-Process` |
-| OS_MUTATION | `copy`, `move`, `New-Item`, `Set-Content` |
-| OS_DESTRUCTIVE (blocked) | `del /s /q`, `rd /s /q`, `format`, `shutdown` |
-| SERVICE_MANAGEMENT | `Stop-Service`, `Start-Service`, `Restart-Service` |
-| REGISTRY_OPERATION | `Set-ItemProperty`, `New-Item -Path HK*`, `Remove-ItemProperty` |
-| NETWORK_OPERATION | `Invoke-WebRequest`, `Invoke-RestMethod`, `curl`, `wget` |
-
-PowerShell Core preference: auto-detects `pwsh.exe` and falls back to `powershell.exe`. Override with `ENTERPRISE_CONFIG.powershell.executable`.
-
-## Configuration (excerpt `config/enterprise-config.json` / minimal core `config.ts` defaults)
-
-```jsonc
-{
-  "security": {
-    "allowedWriteRoots": ["${TEMP}", "./sandbox"],
-    "enforceWorkingDirectory": false,
-    "additionalSafe": [],
-    "additionalBlocked": [],
-    "suppressPatterns": []
-  },
-  "rateLimit": { "enabled": true, "intervalMs": 5000, "maxRequests": 8, "burst": 12 },
-  "limits": { "maxOutputKB": 128, "maxLines": 1000, "defaultTimeoutMs": 90000, "maxPromptBytes": 50000 },
-  "logging": { "structuredAudit": true, "truncateIndicator": "<TRUNCATED>", "maxLogMessageChars": 2000 }
-}
-```
-
-## Writing Commands
-
-Request:
- 
-```json
-{ "jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run-powershell","arguments":{"command":"Get-Date"}} }
-```
-
-Script file execution:
- 
-```json
-{ "jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"run-powershellscript","arguments":{"scriptFile":"scripts/sample.ps1","confirmed":true}} }
-```
-
-Add `"confirmed": true` for RISKY / UNKNOWN.
-
-## Working Directory Policy
-
-Argument: `workingDirectory` (optional string)
-
-Behavior:
-
-1. If omitted: process inherits the server's own current directory.
-2. If provided: server resolves it via `fs.realpathSync` (canonical path; follows symlinks) and launches PowerShell with that as `cwd`.
-3. If `security.enforceWorkingDirectory` = true: the resolved path MUST start with one of `security.allowedWriteRoots` (after variable expansion like `${TEMP}`). Otherwise the request is rejected with InvalidRequest.
-4. If enforcement = false: any existing directory is accepted (still canonicalized); failures to resolve produce an error.
-
-Security Rationale:
-
-- Prevents directory escape / traversal when restricting file mutations to a sandbox.
-- Symlink canonicalization blocks bypass via junctions / reparse points.
-
-Error Modes:
-
-| Condition | Error |
-|-----------|-------|
-| Directory does not exist | `Working directory not found` |
-| Outside allowed roots (enforced) | `Working directory outside allowed roots` |
-
-Response Field:
-
-`workingDirectory` echoes the canonical path actually used (or is absent if none specified).
-
-Notes:
-
-- This parameter extends typical MCP tool arguments (not part of base protocol spec); clients MAY omit it safely.
-- Allowed roots support `${TEMP}` token expansion and relative paths (resolved against server start directory).
-
-## Output Truncation & Chunking
-
-Chunk size: `limits.chunkKB` (default 64KB). Cumulative cap: `limits.maxOutputKB`. Lines cap: `limits.maxLines`.
-
-Overflow flow (strategies):
-
-| Env `MCP_OVERFLOW_STRATEGY` | Behavior | Process Handling | Response Extras |
-|-----------------------------|----------|------------------|-----------------|
-| (unset) or `return` | Default: immediate client feedback with partial data | Stop listeners, respond immediately (synthetic exitCode 137), then SIGTERM/SIGKILL in background | `overflow:true`, `truncated:true`, `overflowStrategy:"return"`, `reason:"output_overflow"`, `exitCode:137` |
-| `terminate` | Aggressive stop | SIGTERM then (if `limits.hardKillOnOverflow`) SIGKILL after short delay | `overflow:true`, `truncated:true`, `overflowStrategy:"terminate"` |
-| `truncate` | Passive: stop reading further output; allow natural completion or timeout | Removes data listeners; process continues | `overflow:true`, `truncated:true`, `overflowStrategy:"truncate"` |
-
-General steps:
-
-1. Collect chunks until caps exceeded.
-2. Apply selected strategy.
-3. Response flags `overflow:true`, `truncated:true` plus strategy metadata.
-
-Execution response (core fields - augmented Aug 2025):
- 
-```jsonc
-{
-  "success": true,
-  "exitCode": 0,
-  "timedOut": false,
-  "terminationReason": "completed",            // completed | timeout | killed | output_overflow
-  "configuredTimeoutMs": 90000,
-  "effectiveTimeoutMs": 90000,                  // > configured if adaptive extensions applied
-  "adaptiveExtensions": 0,
-  "adaptiveExtended": false,
-  "adaptiveMaxTotalMs": 90000,
-  "duration_ms": 1234,                          // high-res rounded; min 1ms enforced for real execs
-  "stdout": "preview",
-  "stderr": "",
-  "overflow": false,
-  "overflowStrategy": "return",                // return | truncate | terminate
-  "truncated": false,
-  "totalBytes": 5120,
-  "warnings": [],                               // deprecation & long-timeout notices
-  "originalTimeoutSeconds": 90,
-  "internalSelfDestruct": false,                // true if internal 124 exit
-  "watchdogTriggered": false,
-  "killEscalated": false,
-  "killTreeAttempted": false,
-  "securityAssessment": {
-    "level": "SAFE",
-    "category": "INFORMATION_GATHERING",
-    "reason": "Safe pattern: ^Get-",
-    "blocked": false,
-    "requiresPrompt": false
-  }
-}
-```
-
-`timedOut: true` pairs with exit code 124 (internal self-destruct) or null (watchdog) and increments TIMEOUTS metric.
-
-Mitigation tips for large output: narrow queries, use `Select-Object -First N`, filter early, or paginate across multiple calls.
-
-## Timeouts & Resilience
-
-External timeout enforced (default 90s). Internal self-destruct (exit 124) can be disabled with `MCP_DISABLE_SELF_DESTRUCT=1`. Adaptive mode (enable via `progressAdaptive:true`) opportunistically extends the external timeout when recent output activity is detected and remaining time <= `adaptiveExtendWindowMs`, bounded by `adaptiveMaxTotalSec`. Fields `effectiveTimeoutMs`, `adaptiveExtensions`, and `adaptiveExtended` reflect extensions. `terminationReason` unifies completion states (no need to infer from exit code 124). Real execution durations use high-resolution timing and are coerced to >=1ms; blocked or unconfirmed attempts record as 0ms but are excluded from latency averages/percentiles.
-
-### CLI Flags
-
-| Flag | Effect | Env Equivalent |
-|------|--------|----------------|
-| `--disable-self-destruct` | Disables injected PowerShell self-destruct timer | `MCP_DISABLE_SELF_DESTRUCT=1` |
-| `--enable-self-destruct` | Re-enables timer if previously disabled | (unset `MCP_DISABLE_SELF_DESTRUCT`) |
-| `--quiet` | Suppresses verbose startup banners | `MCP_QUIET=1` |
-| `--minimal-stdio` | Launch experimental minimal JSON-RPC framer (diagnostic) | Forces `MCP_FRAMER_DEBUG=1` |
-| `--framer-debug` | Enable verbose framing logs in normal mode | `MCP_FRAMER_DEBUG=1` |
-| `--framer-stdio` | Enterprise server over custom framer (bypasses SDK transport) | Optional `MCP_FRAMER_DEBUG=1` |
-
-Minimal stdio mode:
-
-Use when diagnosing client initialize hangs or suspected framing bugs. Provides:
-
-1. Raw RX/TX framing logs (header/body lengths, hex preview of first bytes)
-2. Reduced surface (only initialize, tools/list, run-powershell)
-3. Forced confirmed bypass (always runs with confirmed=true) for quicker iteration
-
-Not production hardened: no size caps, auth, or metrics integration. Exit this mode before performance or security testing.
-
-Framer stdio mode:
-
-- Full enterprise tool surface, custom framing (diagnostics / isolation of SDK transport issues)
-- Uses same security & tool dispatcher, omits SDK StdioServerTransport
-- Prefer this over minimal for reproducing initialize issues with complete feature set
-
-Alpha Cleanup Notes:
-
-- Legacy MCP_INIT_DEBUG initialize sniffer removed; rely on --minimal-stdio / --framer-stdio plus --framer-debug for byte-level framing logs.
-- Duplicate framing instrumentation consolidated under MCP_FRAMER_DEBUG.
-- Future: unify tool schema list to eliminate maintenance duplication between framer and SDK paths.
-
-## Monitoring
-
-`./Simple-LogMonitor.ps1 -Follow` for rolling logs (when structured logging enabled). Metrics dashboard hosted by embedded HTTP server (URL logged on startup).
-
-### Metrics Dashboard (Expanded)
-
-Top counters now include (when feature flag `limits.capturePsProcessMetrics` or env `MCP_CAPTURE_PS_METRICS=1` is active and at least one PowerShell invocation has completed):
-
-- PS CPU AVG(s): Mean cumulative CPU seconds consumed per invocation (from in-process PowerShell host).
-- PS CPU P95(s): 95th percentile CPU seconds across invocations since last reset.
-- PS WS AVG(MB): Mean Working Set (resident) size in megabytes captured at invocation end.
-- PS WS P95(MB): 95th percentile Working Set MB.
-- PS Samples: Number of invocations contributing to the aggregates.
-
-These cards remain hidden until at least one sample arrives to avoid clutter when the feature is disabled.
-
-JSON snapshot (`/api/metrics`) fields:
-
-```jsonc
-{
-  "psSamples": 17,
-  "psCpuSecAvg": 0.42,
-  "psCpuSecP95": 0.88,
-  "psWSMBAvg": 92.1,
-  "psWSMBP95": 110.5
-}
-```
-
-Attempt / execution split (appears when any attempts recorded):
-
-```jsonc
-{
-  "attemptCommands": 5,                 // total blocked + confirmed-required attempts
-  "attemptConfirmedRequired": 4,      // attempts needing confirmed (RISKY/UNKNOWN)
-  "executionCommands": 12,               // real executions with duration > 0
-  "confirmedExecutions": 8,              // executions of RISKY/UNKNOWN with confirmed:true
-  "confirmedConversion": 0.667        // confirmedExecutions / attemptConfirmedRequired
-}
-```
-
-Reset behavior: invoking any future explicit reset endpoint (planned) or process restart clears aggregates. Presently they persist for lifetime of server.
-
-Latency semantics:
-
-- Zero-duration rows (blocked / confirmed-required) are NOT added to latency aggregates.
-- Real executions: high-res `duration_ms` (rounded) >=1ms stored.
-- Percentile (p95) uses ceil-based index over sorted non-zero durations (avoids downward bias with small N).
-
-Per-invocation row columns already list raw `PS CPU(s)` and `WS(MB)` for each run-powershell execution when metrics are enabled.
-
-## Unknown Command Learning
-
-UNKNOWN +' normalize +' queue +' review +' approve +' SAFE cache (`learned-safe.json`). Approved patterns immediately influence classification.
-
-## Tests (Jest)
-
-Run: `npm run test:jest`
-
-Coverage highlights: parity (tool surface), run-powershell behaviors (timeout, truncation), server-stats shape, working directory policy, syntax check, help topics, learning queue, classification expansions (git/gh, OS, alias), self-destruct timeout.
-
-### PowerShell Process Metrics Aggregation (Feature Flag)
-
-Enable via env `MCP_CAPTURE_PS_METRICS=1` (or config `limits.capturePsProcessMetrics: true`). Aggregated fields: `psSamples`, `psCpuSecAvg`, `psCpuSecP95`, `psWSMBAvg`, `psWSMBP95`.
-
-Test `ps-metrics-aggregation.test.js/ts` ensures these appear (dynamic metrics port detection). If failing, confirmed the metrics server port (logs show `HTTP server listening on http://127.0.0.1:<port>`).
-
-Run it (ensure a fresh build so `dist/` contains latest instrumentation):
+## 📦 Deployment (Windows Example)
 
 ```powershell
-npm run build
-$env:MCP_CAPTURE_PS_METRICS = '1'
-$env:METRICS_DEBUG = '1'
-npm run test:jest -- -t "aggregates ps metrics"
+pwsh ./scripts/deploy-prod.ps1 -Destination C:\mcp\powershell-mcp-server
 ```
 
-If it fails locally but succeeds in CI (or vice versa), suspect a stale `dist/` directory or an alternate server entrypoint excluding the instrumentation. Rebuild and re-run.
+Common options:
 
-## Roadmap (Excerpt)
+- `-SkipTests` skip jest
+- `-IncludeDev` include devDependencies
+- `-NoBackup` skip timestamp backup
+- `-DryRun` preview only
+- `-NoPreserveLearned` do not restore existing `learned-safe.json`
 
-- Phase 2 (done): dynamic overrides, metrics, rate limiting.
-- Phase 3: cancellation, pluggable policies, signing, dynamic learned pattern integration.
-- Phase 4: log rotation, redaction, self-test tool, per-category metrics (VCS_*, OS_*), dashboard timeout charts.
+Produces `deploy-manifest.json` with commit, hashes, timestamped backup.
 
-## Periodic Operational Checks
+## 🔍 Syntax Checking (Programmatic)
 
-Daily baseline, weekly metrics trend review, post-hardening test bursts, monthly metrics archive pruning.
-
-## Git Hooks
-
-Enable pre-commit:
- 
-```powershell
-git config core.hooksPath .githooks
+```ts
+import { parsePowerShellSyntax } from './src/tools/pwshSyntax.js';
+const result = await parsePowerShellSyntax('Write-Output "Hi"');
+console.log(result.ok, result.issues);
 ```
 
-Disable:
- 
-```powershell
-git config --unset core.hooksPath
-```
+Enable analyzer: `PWSH_SYNTAX_ANALYZER=1`.
 
-## Contributing
+## 🧩 CLI Flags
 
-```powershell
-npm run compliance:check
-npm run build
-```
+| Flag                 | Description                                |
+|----------------------|--------------------------------------------|
+| `--no-metrics`       | Disable metrics collection                  |
+| `--key <key>`        | Set auth key (overrides MCP_AUTH_KEY)       |
+| `--metrics-port <n>` | (Future) metrics server starting port       |
+| `--dump-config`      | Print merged configuration & exit           |
+| `--dry-run`          | Validate config then exit (no start)        |
 
-## License
+## 🔄 Learning & Normalization
 
-Proprietary (internal hardening branch).
+Unknown commands append to `learnCandidates.jsonl`. Approved patterns populate SAFE cache (future auto-promotion pipeline). Early phases rely on manual curation.
 
-### Timeout & Adaptive Hardening (Aug 2025)
+## 🧾 Logging & Audit
 
-Core fields: configuredTimeoutMs, effectiveTimeoutMs, originalTimeoutSeconds, warnings[], terminationReason, timedOut, internalSelfDestruct, watchdogTriggered, killEscalated, killTreeAttempted, adaptiveExtensions, adaptiveExtended, adaptiveMaxTotalMs.
+- Structured audit logs written to `logs/` (date rotated)
+- NDJSON stream for ingestion
+- Metrics registry (internal); future: HTTP exposition (Prometheus style)
 
-Parameter guidance:
+## 🛡 Hardening Roadmap (Excerpt)
 
-| Canonical | Deprecated / Alias | Notes |
-|-----------|--------------------|-------|
-| aiAgentTimeoutSec | aiAgentTimeout | Emits deprecation warning |
-| aiAgentTimeoutSec | timeout / timeoutSeconds | `timeout` deprecated; `timeoutSeconds` accepted with advisory |
+1. Expand classification signatures
+2. Configurable allow/deny per category
+3. Sandboxed file roots & network egress gating
+4. Per-level rate limiting / quotas
+5. Multi-tenant auth & per-key usage metrics
 
-Adaptive enable flags: `progressAdaptive:true` (preferred) or legacy `adaptiveTimeout:true`.
+See `docs/HARDENING-DESIGN.md` for details.
 
-Adaptive knobs (optional):
+## 🤝 Contributing
 
-| Field | Default | Purpose |
-|-------|---------|---------|
-| adaptiveExtendWindowMs | 2000 | If remaining time <= window & recent activity, consider extend |
-| adaptiveExtendStepMs | 5000 | Extension amount per step |
-| adaptiveMaxTotalSec | min(base*3,180) | Hard cap horizon |
+1. Fork & branch (`feat/<name>`)
+2. `npm install && npm run build`
+3. Add / update tests
+4. Ensure hooks pass
+5. Open PR with concise summary & risk notes
 
-Environment variables (quick reference):
+Refer to `CONTRIBUTING.md` & `CODE_OF_CONDUCT.md`.
 
-| Env | Effect |
-|-----|--------|
-| MCP_DISABLE_SELF_DESTRUCT=1 | Disable internal early exit timer |
-| MCP_CAPTURE_PS_METRICS=1 | Enable per-invocation CPU / WS sampling |
-| MCP_OVERFLOW_STRATEGY=return\|truncate\|terminate | Select overflow handling mode |
-| METRICS_DEBUG=true | Verbose metrics instrumentation logging |
-| MCP_DISABLE_ATTEMPT_PUBLISH=1 | Suppress early attempt publishing (blocked / confirmed-required) |
-| MCP_OVERFLOW_STRATEGY=truncate | (Example) produce truncated strategy behavior |
+## 📄 License
 
-Long timeouts (>=60s) emit a responsiveness warning; durations <1ms are promoted to 1ms to avoid misleading 0ms displays.
+See `LICENSE`.
 
-## Syntax Check Enhancements (Sept 2025)
+## 📬 Support / Questions
 
-The `syntax-check` tool now provides:
+Open a GitHub Issue (choose a template) or read `docs/TROUBLESHOOTING.md`.
 
-- Real PowerShell parser validation (fallback legacy delimiter balancer retained for forced mode)
-- LRU cache (100 entries) keyed by SHA-256 of script content (`cacheHit: true` when served from cache)
-- Optional style/static analysis via `PSScriptAnalyzer` when available and `PWSH_SYNTAX_ANALYZER=1`
-- Environment flags:
-  - `PWSH_SYNTAX_FORCE_FALLBACK=1` forces legacy fallback parser
-  - `PWSH_SYNTAX_ANALYZER=1` enables analyzer pass (`analyzerIssues`, `analyzerAvailable`)
-
-Example response snippet:
-
-```jsonc
-{
-  "ok": true,
-  "issues": [],
-  "parser": "powershell",
-  "scriptLength": 128,
-  "cacheHit": true,
-  "analyzerAvailable": false
-}
-```
-
-Analyzer results (when available) add `analyzerIssues` array entries with `RuleName`, `Severity`, `Line`, `Column`, `Message`.
-
-### Analyzer Requirements
-
-The analyzer pass does NOT auto-install dependencies. To enable `analyzerAvailable: true` you must:
-
-1. Install the module for the same user / scope the server runs under:
-   - `pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Scope CurrentUser -Force"`
-   - (Optional) pin version: `Install-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser`
-2. Restart the server with `PWSH_SYNTAX_ANALYZER=1` in the environment.
-3. Ensure the server actually uses `pwsh` (or install for `powershell.exe` if legacy host chosen).
-
-The server never performs network installs automatically (security / reproducibility). If the module is missing, times out (>4s first invocation), or parse fails, `analyzerAvailable` remains `false` and `analyzerIssues` is omitted or empty.
-
-Troubleshooting quick check:
-
-`pwsh -NoProfile -Command "Get-Module -ListAvailable PSScriptAnalyzer | Select Name,Version,ModuleBase"`
-
-If nothing returns, installation did not succeed for that profile / scope.
+---
+**Status:** Phase 1 foundation. Interfaces & configuration may evolve (semantic versioning respected for published releases).
 
