@@ -147,11 +147,13 @@ export class MetricsRegistry {
   (snap as any).confirmedConversion = +conv.toFixed(3);
       }
     }
-    if(this.psSamples>0){
-      snap.psSamples = this.psSamples;
-      snap.psCpuSecAvg = +(this.psCpuTotal / this.psSamples).toFixed(3);
-      snap.psWSMBAvg = +(this.psWSMBTotal / this.psSamples).toFixed(2);
-  snap.psCpuSecLast = +this.psCpuLast.toFixed(3);
+    // Always surface psSamples (even if 0) to eliminate gating races in tests / UI.
+    // Only compute averages when at least one sample captured.
+    (snap as any).psSamples = this.psSamples;
+    if(this.psSamples > 0){
+      (snap as any).psCpuSecAvg = +(this.psCpuTotal / this.psSamples).toFixed(3);
+      (snap as any).psWSMBAvg = +(this.psWSMBTotal / this.psSamples).toFixed(2);
+      (snap as any).psCpuSecLast = +this.psCpuLast.toFixed(3);
     }
     if (resetAfter) this.reset();
     return snap;

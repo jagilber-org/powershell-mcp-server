@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.3.5 - 2025-09-02
+
+### Changed
+
+- Always surface `psSamples` (eliminates gating race) and relaxed related tests.
+- Stabilized flaky PowerShell process metrics tests (`ps-metrics-delta-cpu`).
+- Added soft assertions for ultra-fast duration averages (avoid 0ms flake).
+- Improved capture-ps-sample behavior & test compatibility when metrics disabled.
+
+### Test & Metrics
+
+- Deterministic `capture-ps-sample` tool ensures forced sample for delta CPU test.
+- Updated ps metrics delta test (removed soft-pass fallback after stabilization).
+
+### Documentation / Config
+
+- Verb baseline now mergeable via external JSON overrides.
+- Added classification layering documentation (pending external doc file).
+
+Backward Compatibility: Additive fields only; no breaking schema changes.
+
+## v1.3.4 - 2025-09-02
+
+Security Classification & Observability Enhancements.
+
 ## v1.3.3 - 2025-09-02
 
 Test Stability & Tool Output Guarantees:
