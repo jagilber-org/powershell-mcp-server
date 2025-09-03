@@ -540,6 +540,7 @@ export class MetricsHttpServer {
   header{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;gap:1rem;align-items:center;flex-wrap:wrap}
   h1{font-size:1.15rem;margin:0;font-weight:600;letter-spacing:.5px}
   .pill{padding:.25rem .6rem;border-radius:999px;font-size:.65rem;font-weight:600;letter-spacing:.5px;background:var(--panel-alt);border:1px solid var(--border)}
+  .pill .subpill{display:inline-block;margin-left:.35rem;padding:.15rem .45rem;border-radius:8px;background:#11161d;border:1px solid #232e38;font-size:.55rem;font-weight:500;letter-spacing:.5px;position:relative;top:-1px}
   .debug{background:linear-gradient(90deg,#6366f1,#8b5cf6);color:#fff}
   html,body{height:100%;}
   body{display:flex;flex-direction:column;}
@@ -567,6 +568,14 @@ export class MetricsHttpServer {
   tr.confirmed td{transition:background .3s}
   tr.requires{background:linear-gradient(90deg,rgba(255,140,0,.18),rgba(255,140,0,.04));border-left:4px solid #ff8c00}
   tr.requires td.level{color:#ff8c00 !important}
+  /* Timeout + truncated indicators */
+  tr.timedout{background:linear-gradient(90deg,rgba(220,38,38,.28),rgba(220,38,38,.05));border-left:4px solid #dc2626}
+  tr.timedout td.level{color:#dc2626 !important}
+  tr.truncated:not(.timedout){background:linear-gradient(90deg,rgba(107,114,128,.25),rgba(107,114,128,.06));border-left:4px dashed #6b7280}
+  .flag-badges{display:flex;gap:.25rem;flex-wrap:wrap}
+  .badge{display:inline-flex;align-items:center;gap:2px;font-size:.55rem;padding:2px 5px;border-radius:5px;border:1px solid #2d3540;background:#1e242c;font-family:var(--mono);line-height:1}
+  .badge-timeout{border-color:#dc2626;color:#dc2626;background:rgba(220,38,38,.08)}
+  .badge-trunc{border-color:#6b7280;color:#9ca3af;background:rgba(107,114,128,.15)}
   tr.learn-selected{outline:2px solid #6366f1; box-shadow:0 0 0 2px #6366f1 inset; position:relative;}
   tr.learn-selected:after{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(99,102,241,.15),rgba(99,102,241,0));}
   .bad{color:var(--danger)} .warn{color:var(--risky)} .good{color:var(--safe)}
@@ -641,6 +650,10 @@ export class MetricsHttpServer {
   <section class="card" id="eventsPanel">
     <div id="controls" style="display:flex;flex-wrap:wrap;align-items:center;gap:.4rem">
       <div id="filters" style="display:flex;gap:.35rem;flex-wrap:wrap"></div>
+    </div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.15rem 0 .4rem .1rem;font-size:.55rem;opacity:.8">
+      <span class="badge badge-timeout" title="Execution exceeded timeout">TIMEOUT</span>
+      <span class="badge badge-trunc" title="Output truncated / buffer overflow guarded">TRUNC</span>
     </div>
     <div id="eventTableWrap">
   <table id="eventTable"><thead><tr><th style="width:46px">ID</th><th style="width:78px">Tool</th><th style="width:68px">Level</th><th style="width:70px">Dur</th><th style="width:60px">Code</th><th style="width:55px">OK</th><th style="width:55px" title="Confirmation (✔ confirmed / ⚠ requires)" >Conf</th><th style="width:82px">Time</th><th>Details / Preview (ps: cpuSec/wsMB)</th></tr></thead><tbody></tbody></table>
@@ -829,7 +842,38 @@ export class MetricsHttpServer {
   lines.push("function getSelectedUnknown(){return Array.from(document.querySelectorAll('#eventTable tbody tr.learn-selected')).filter(r=>r.dataset.level==='UNKNOWN');}");
     // Row add
     lines.push("function fmtTime(iso){return iso.split('T')[1].replace('Z','');}");
-  lines.push(`function addRow(ev){if(ev.level==='HEARTBEAT')return;emptyEl.style.display='none';const tr=document.createElement('tr');tr.dataset.level=ev.level;tr.className='level-'+ev.level;let preview=(ev.preview||'').replace(/</g,'&lt;');if(preview.length>400)preview=preview.slice(0,397)+'…';let confCell='';if(ev.confirmed){confCell='✔';tr.classList.add('confirmed');}else if(ev.requiresPrompt){confCell='⚠';tr.classList.add('requires');}tr.innerHTML='<td>'+ev.id+'</td><td>'+(ev.toolName||'')+'</td><td class="level">'+ev.level+'</td><td>'+ev.durationMs+'ms</td><td>'+(ev.exitCode==null?'':ev.exitCode)+'</td><td>'+(ev.success==null?'':(ev.success?'✔':'✖'))+'</td><td>'+confCell+'</td><td>'+fmtTime(ev.timestamp)+'</td><td>'+(preview||'')+'</td>';tr.addEventListener('click',()=>{tr.classList.toggle('learn-selected');});if(!activeLevels.has(ev.level))tr.style.display='none';tableBody.appendChild(tr);const wrap=document.getElementById('eventTableWrap');if(wrap)wrap.scrollTop=wrap.scrollHeight;if(tableBody.children.length>1000)tableBody.removeChild(tableBody.firstChild);}`);
+  lines.push(`function addRow(ev){
+    if(ev.level==='HEARTBEAT')return;
+    emptyEl.style.display='none';
+    const tr=document.createElement('tr');
+    tr.dataset.level=ev.level;tr.className='level-'+ev.level;
+    let preview=(ev.preview||'').replace(/</g,'&lt;');
+    if(preview.length>400)preview=preview.slice(0,397)+'…';
+    let confCell='';
+    if(ev.confirmed){confCell='✔';tr.classList.add('confirmed');}
+    else if(ev.requiresPrompt){confCell='⚠';tr.classList.add('requires');}
+  // Flags (timeout / truncated)
+  const flags=[]; // textual badges container
+  const timeoutDetected = (ev.timedOut || ev.timedout || ev.terminationReason==='timeout' || (ev.exitCode===124 && (ev.internalSelfDestruct || ev.success===false)));
+  if(timeoutDetected){tr.classList.add('timedout');flags.push('<span class="badge badge-timeout" title="Execution exceeded timeout and was terminated">TIMEOUT</span>');}
+    if(ev.truncated || ev.overflow){tr.classList.add('truncated');flags.push('<span class="badge badge-trunc" title="Output truncated / buffer overflow controlled">TRUNC</span>');}
+    const flagHtml = flags.length?'<div class="flag-badges">'+flags.join('')+'</div>':'';
+    tr.innerHTML='<td>'+ev.id+'</td>'+
+      '<td>'+(ev.toolName||'')+'</td>'+
+      '<td class="level">'+ev.level+'</td>'+
+      '<td>'+ev.durationMs+'ms</td>'+
+      '<td>'+(ev.exitCode==null?'':ev.exitCode)+'</td>'+
+      '<td>'+(ev.success==null?'':(ev.success?'✔':'✖'))+'</td>'+
+      '<td>'+confCell+'</td>'+
+      '<td>'+fmtTime(ev.timestamp)+'</td>'+
+      '<td>'+(preview||'')+flagHtml+'</td>';
+    tr.addEventListener('click',()=>{tr.classList.toggle('learn-selected');});
+    if(!activeLevels.has(ev.level))tr.style.display='none';
+    tableBody.appendChild(tr);
+    const wrap=document.getElementById('eventTableWrap');
+    if(wrap)wrap.scrollTop=wrap.scrollHeight;
+    if(tableBody.children.length>1000)tableBody.removeChild(tableBody.firstChild);
+  }`);
   // Metrics fetch + simple graphs
   lines.push("let psWarned=false;async function refreshMetrics(){try{const r=await fetch('/api/metrics');if(!r.ok)return;const m=await r.json();const setMetric=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=String(val);};setMetric(metricsIds.total,m.totalCommands);setMetric(metricsIds.safe,m.safeCommands);setMetric(metricsIds.risky,m.riskyCommands);setMetric(metricsIds.blocked,m.blockedCommands);if('confirmedRequired'in m)setMetric(metricsIds.confirmed,m.confirmedRequired);if('timeouts'in m)setMetric(metricsIds.timeouts,m.timeouts);setMetric(metricsIds.avg,m.averageDurationMs);setMetric(metricsIds.p95,m.p95DurationMs);const p=m.performance||{};if(p.cpuPercent!=null)setMetric(metricsIds.cpu,p.cpuPercent.toFixed(1));if(p.rssMB!=null)setMetric(metricsIds.rss,p.rssMB.toFixed(0));if(p.heapUsedMB!=null)setMetric(metricsIds.heap,p.heapUsedMB.toFixed(0));if(p.eventLoopLagP95Ms!=null)setMetric(metricsIds.lag,p.eventLoopLagP95Ms.toFixed(1));if('psSamples'in m){setMetric(metricsIds.pssamples,m.psSamples||0);if(m.psCpuSecAvg!=null)setMetric(metricsIds.pscpu,(m.psCpuSecAvg||0).toFixed(2));if(m.psWSMBAvg!=null)setMetric(metricsIds.psws,(m.psWSMBAvg||0).toFixed(1));if((m.psSamples||0)===0 && !psWarned){const cpuEl=document.getElementById('m_pscpu');if(cpuEl){const note=document.createElement('div');note.style.cssText='font-size:.55rem;opacity:.6;margin-top:.3rem';note.textContent='(PS metrics disabled env)';cpuEl.parentElement.appendChild(note);psWarned=true;}}}lastMetricsTs=Date.now();if(uptimeEl)uptimeEl.textContent='Uptime: '+Math.round((Date.now()-Date.parse(m.lastReset))/1000)+'s';drawSimpleGraphs(m);}catch(e){if(DEBUG)console.error('[DASH][METRICS_ERR]',e);} }");
   lines.push("function drawSimpleGraphs(m){try{const cpu=document.getElementById('cpuGraph');const mem=document.getElementById('memGraph');if(!cpu||!mem)return;const cpuHist=m.cpuHistory||[];const memHist=m.memHistory||[];const cpuCtx=cpu.getContext('2d');const memCtx=mem.getContext('2d');const dpr=window.devicePixelRatio||1;const W=cpu.clientWidth||cpu.parentElement.clientWidth||300;const H=cpu.clientHeight||120;cpu.width=W*dpr;cpu.height=H*dpr;cpuCtx.setTransform(dpr,0,0,dpr,0,0);cpuCtx.clearRect(0,0,W,H);cpuCtx.fillStyle='#0f1318';cpuCtx.fillRect(0,0,W,H);cpuCtx.lineWidth=1.3;const cpuMaxVal=Math.max(1,...cpuHist.map(p=>p.value||0));const cpuScaleMax=cpuMaxVal<20?Math.min(100,Math.max(10,Math.ceil(cpuMaxVal*1.2))):100;cpuCtx.strokeStyle='#3b82f6';cpuCtx.beginPath();cpuHist.forEach((p,i)=>{const x=(i/Math.max(1,cpuHist.length-1))*W;const y=H-((p.value||0)/cpuScaleMax)*H;if(i===0)cpuCtx.moveTo(x,y);else cpuCtx.lineTo(x,y);});cpuCtx.stroke();cpuCtx.strokeStyle='#f59e0b';cpuCtx.beginPath();const lagMax=Math.max(1,Math.max(...cpuHist.map(p=>p.lag||0),50));cpuHist.forEach((p,i)=>{const x=(i/Math.max(1,cpuHist.length-1))*W;const y=H-((p.lag||0)/lagMax)*H;if(i===0)cpuCtx.moveTo(x,y);else cpuCtx.lineTo(x,y);});cpuCtx.stroke();const havePsSamples=m.psSamples>0;const havePsCpuLine=cpuHist.some(p=>typeof p.psCpuPct==='number');if(havePsSamples){cpuCtx.strokeStyle='#a855f7';cpuCtx.beginPath();let first=true;if(havePsCpuLine){cpuHist.forEach((p,i)=>{if(typeof p.psCpuPct!=='number')return;const x=(i/Math.max(1,cpuHist.length-1))*W;const y=H-(Math.min(100,p.psCpuPct)/cpuScaleMax)*H;if(first){cpuCtx.moveTo(x,y);first=false;}else cpuCtx.lineTo(x,y);});}else{const agg=(m.psCpuSecAvg||0);const estPct=Math.min(100,(agg/(m.psSamples||1))*40);const y=H-(estPct/cpuScaleMax)*H;cpuCtx.moveTo(0,y);cpuCtx.lineTo(W,y);}cpuCtx.stroke();}/* Legend */cpuCtx.font='10px monospace';const cpuLegendLines=havePsSamples?['CPU'+(cpuScaleMax!==100?' s:'+cpuScaleMax:''),'Lag','PS CPU']:['CPU'+(cpuScaleMax!==100?' s:'+cpuScaleMax:''),'Lag'];let cpuLegendW=0;cpuLegendLines.forEach(t=>{const w=cpuCtx.measureText(t).width;if(w>cpuLegendW)cpuLegendW=w;});cpuLegendW+=14;const cpuLegendH=cpuLegendLines.length*12+8;cpuCtx.fillStyle='rgba(0,0,0,0.35)';cpuCtx.fillRect(4,4,cpuLegendW,cpuLegendH);let yOff=14;cpuCtx.fillStyle='#3b82f6';cpuCtx.fillText(cpuLegendLines[0],8,yOff);yOff+=12;cpuCtx.fillStyle='#f59e0b';cpuCtx.fillText(cpuLegendLines[1],8,yOff);if(havePsSamples){yOff+=12;cpuCtx.fillStyle='#a855f7';cpuCtx.fillText('PS CPU',8,yOff);}/* Memory */const MW=mem.clientWidth||mem.parentElement.clientWidth||300;const MH=mem.clientHeight||120;mem.width=MW*dpr;mem.height=MH*dpr;memCtx.setTransform(dpr,0,0,dpr,0,0);memCtx.clearRect(0,0,MW,MH);memCtx.fillStyle='#0f1318';memCtx.fillRect(0,0,MW,MH);memCtx.lineWidth=1.3;const rssVals=memHist.map(p=>p.rss||0);const heapVals=memHist.map(p=>p.heap||0);const allVals=rssVals.concat(heapVals);const rssMin=Math.min(...allVals,0);const rssMax=Math.max(...allVals,1);const range=Math.max(1,rssMax-rssMin);const useDynamic=range<10;const normY=v=>MH-((v-(useDynamic?rssMin:0))/(useDynamic?range:rssMax))*MH;memCtx.strokeStyle='#10b981';memCtx.beginPath();memHist.forEach((p,i)=>{const x=(i/Math.max(1,memHist.length-1))*MW;const y=normY(p.rss||0);if(i===0)memCtx.moveTo(x,y);else memCtx.lineTo(x,y);});memCtx.stroke();memCtx.strokeStyle='#6366f1';memCtx.beginPath();memHist.forEach((p,i)=>{const x=(i/Math.max(1,memHist.length-1))*MW;const y=normY(p.heap||0);if(i===0)memCtx.moveTo(x,y);else memCtx.lineTo(x,y);});memCtx.stroke();const havePsWSLine=memHist.some(p=>typeof p.psWSMB==='number');if(havePsSamples){memCtx.strokeStyle='#f472b6';memCtx.beginPath();let first=true;if(havePsWSLine){memHist.forEach((p,i)=>{if(typeof p.psWSMB!=='number')return;const x=(i/Math.max(1,memHist.length-1))*MW;const y=normY(p.psWSMB);if(first){memCtx.moveTo(x,y);first=false;}else memCtx.lineTo(x,y);});}else{const v=(m.psWSMBAvg||0);const y=normY(v);memCtx.moveTo(0,y);memCtx.lineTo(MW,y);}memCtx.stroke();}memCtx.font='10px monospace';const memLegendLines=havePsSamples?['RSS'+(useDynamic?' dyn':''),'Heap',m.psSamples===0?'PS off':'PS WS']:['RSS'+(useDynamic?' dyn':''),'Heap'];let memLegendW=0;memLegendLines.forEach(t=>{const w=memCtx.measureText(t).width;if(w>memLegendW)memLegendW=w;});memLegendW+=14;const memLegendH=memLegendLines.length*12+8;memCtx.fillStyle='rgba(0,0,0,0.35)';memCtx.fillRect(4,4,memLegendW,memLegendH);let my=14;memCtx.fillStyle='#10b981';memCtx.fillText(memLegendLines[0],8,my);my+=12;memCtx.fillStyle='#6366f1';memCtx.fillText('Heap',8,my);if(havePsSamples){my+=12;memCtx.fillStyle=(m.psSamples===0?'#999':'#f472b6');memCtx.fillText(memLegendLines[memLegendLines.length-1],8,my);} }catch(ex){if(DEBUG)console.error('[DASH][GRAPH_ERR]',ex);} } ");
