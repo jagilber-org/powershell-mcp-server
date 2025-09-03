@@ -10,6 +10,13 @@ function assess(level:SecurityLevel, opts:Partial<SecurityAssessment>):SecurityA
 // Core classification used by standalone tool (simplified) – server has richer logic.
 export function classifyCommandSafety(command:string): SecurityAssessment {
   const c = command.trim();
+  // Expanded safe coverage (feedback: too many UNKNOWN for benign Get-* commands)
+  if(/^get-date\b/i.test(c)) return assess('SAFE',{ category:'INFORMATION_GATHERING', reason:'Get-Date', patterns:['Get-Date'] });
+  if(/^get-process\b/i.test(c)) return assess('SAFE',{ category:'INFORMATION_GATHERING', reason:'Get-Process', patterns:['Get-Process'] });
+  if(/^get-service\b/i.test(c)) return assess('SAFE',{ category:'INFORMATION_GATHERING', reason:'Get-Service', patterns:['Get-Service'] });
+  if(/^get-childitem\b|^get-item\b/i.test(c)) return assess('SAFE',{ category:'INFORMATION_GATHERING', reason:'File system listing', patterns:['Get-ChildItem','Get-Item'] });
+  if(/^get-content\b/i.test(c)) return assess('SAFE',{ category:'INFORMATION_GATHERING', reason:'Get-Content', patterns:['Get-Content'] });
+  if(/^get-command\b|^get-module\b|^get-alias\b|^get-variable\b|^get-location\b|^get-history\b/i.test(c)) return assess('SAFE',{ category:'INFORMATION_GATHERING', reason:'Metadata inspection', patterns:['Get-*'] });
   if(/^dir\b|^ls\b|get-childitem/i.test(c)) return assess('SAFE',{ category:'INFORMATION_GATHERING', reason:'Directory listing', patterns:['dir|ls'] });
   if(/^write-output\b/i.test(c)) return assess('SAFE',{ category:'INFORMATION_GATHERING', reason:'Write-Output' });
   // Disk / volume destructive operations (feedback gap #1)

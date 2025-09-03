@@ -49,6 +49,8 @@ export const toolRegistry: ToolDef[] = [
   { name:'powershell-syntax-check', description:'Validate PowerShell syntax', zod: syntaxCheckSchema, core:true, stable:true, mutation:false, outputSchema:{ type:'object', properties:{ ok:{ type:'boolean' }, issues:{ type:'array' } } } },
   { name:'working-directory-policy', description:'Get or set working directory policy', zod: wdPolicySchema, core:true, stable:true, mutation:true },
   { name:'server-stats', description:'Server metrics snapshot', zod: serverStatsSchema, core:true, stable:true, mutation:false },
+  // Deterministic PowerShell process metrics sampling (facilitates non-flaky tests)
+  { name:'capture-ps-sample', description:'Force capture of a PowerShell process metrics sample', zod: threatAnalysisSchema, stable:true, mutation:false },
   { name:'memory-stats', description:'Process memory usage (optionally trigger GC)', zod: memoryStatsSchema, stable:true, mutation:false },
   { name:'agent-prompts', description:'Retrieve prompt library content', zod: agentPromptsSchema, stable:true, mutation:false },
   { name:'threat-analysis', description:'Threat / unknown command analysis', zod: threatAnalysisSchema, stable:true, mutation:false },

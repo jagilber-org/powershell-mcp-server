@@ -39,7 +39,8 @@ export function publishExecutionAttempt(opts: PublishOptions){
       confirmed: opts.confirmed,
       timedOut: opts.timedOut,
       candidateNorm: opts.candidateNorm,
-      toolName: opts.toolName
+  toolName: opts.toolName,
+  requiresPrompt: opts.requiresPrompt
     };
   metricsHttpServer.publishExecution(ev);
   // Record all events (attempts + executions). Execution vs attempt split handled inside registry.

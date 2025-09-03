@@ -14,6 +14,16 @@ import { IncomingMessage, ServerResponse } from 'http';
 import { metricsRegistry } from './registry.js';
 import { EventEmitter } from 'events';
 import * as os from 'os';
+// ESM compatibility helpers (Node ESM lacks __dirname / require in strict scenarios)
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+import * as pathForDir from 'path';
+// Use existing global require if present (CJS), otherwise create one for ESM
+// @ts-ignore
+const _esmRequire: NodeRequire = (typeof require === 'function') ? require : createRequire(import.meta.url);
+// __dirname shim for ESM
+// @ts-ignore
+const _moduleDir: string = (typeof __dirname !== 'undefined') ? __dirname : pathForDir.dirname(fileURLToPath(import.meta.url));
 // Lazy-load learning module functions on demand to avoid import cost during initial MCP handshake path.
 // They are only used when learning-related HTTP endpoints are hit.
 type LearningModule = typeof import('../learning.js');
@@ -47,6 +57,7 @@ export interface ExecutionEventPayload {
   exitCode?: number | null;
   success?: boolean;
   confirmed?: boolean;     // whether this was a confirmed command
+  requiresPrompt?: boolean; // whether confirmation was required (pending or satisfied)
   timedOut?: boolean;      // whether the execution timed out
   candidateNorm?: string;  // normalized UNKNOWN candidate (learning)
   toolName?: string;       // originating tool name (for non-powershell tool activity logging)
@@ -72,13 +83,75 @@ export class MetricsHttpServer {
   private cachedVersion: string | undefined;
   private getVersion(): string {
     if(this.cachedVersion) return this.cachedVersion;
+    const fs = _esmRequire('fs');
+    const p  = _esmRequire('path');
+    const diagnostics: string[] = [];
+    const set = (v: string, reason: string) => { this.cachedVersion = v; diagnostics.push(reason+':'+v); };
     try {
-      // Read package.json relative to process.cwd(); robust even after packaging (dist parallel to package.json)
-      const txt = require('fs').readFileSync(require('path').join(process.cwd(),'package.json'),'utf8');
-      const j = JSON.parse(txt);
-      this.cachedVersion = j.version || '0.0.0';
-    } catch { this.cachedVersion = '0.0.0'; }
+      const pkgPath = p.join(process.cwd(),'package.json');
+      if(fs.existsSync(pkgPath)){
+        const j = JSON.parse(fs.readFileSync(pkgPath,'utf8'));
+        if(j.version){ set(j.version,'cwd'); }
+      }
+    } catch { /* ignore */ }
+    if(!this.cachedVersion){
+      const altCandidates = [
+        p.join(_moduleDir, '../package.json'),
+        p.join(_moduleDir, '../../package.json'),
+        p.join(_moduleDir, '../../../package.json')
+      ];
+      for(const alt of altCandidates){
+        try { if(fs.existsSync(alt)){ const j2 = JSON.parse(fs.readFileSync(alt,'utf8')); if(j2.version){ set(j2.version,'relative'); break; } } } catch { }
+      }
+    }
+    if(!this.cachedVersion){
+      // Ascend up to 5 parent dirs
+      let cur: string | undefined = _moduleDir;
+      for(let i=0;i<5 && cur;i++){
+        const candidate = p.join(cur,'package.json');
+        try { if(fs.existsSync(candidate)){ const pj = JSON.parse(fs.readFileSync(candidate,'utf8')); if(pj.version){ set(pj.version,'ascend'); break; } } } catch { }
+        const nextDir: string = p.dirname(cur); if(nextDir===cur) break; cur = nextDir;
+      }
+    }
+    if(!this.cachedVersion){
+      const envVer = process.env.PACKAGE_VERSION || process.env.npm_package_version; if(envVer){ set(envVer,'env'); }
+    }
+    if(!this.cachedVersion){
+      try {
+        const manifestPaths = [
+          p.join(process.cwd(),'deploy-manifest.json'),
+          p.join(_moduleDir,'../../deploy-manifest.json'),
+          p.join(_moduleDir,'../../../deploy-manifest.json')
+        ];
+        for(const mp of manifestPaths){
+          try { if(fs.existsSync(mp)){ const m = JSON.parse(fs.readFileSync(mp,'utf8')); if(m.version){ set(m.version,'manifest'); break; } } } catch { }
+        }
+      } catch { }
+    }
+    if(!this.cachedVersion){
+      set('0.0.0+build.'+ new Date().toISOString().replace(/[-:T.Z]/g,'').slice(0,12),'fallback');
+    }
+    if(this.debugEnabled){ console.error('[METRICS][VERSION_RESOLVE]', diagnostics.join(' -> ')); }
   return this.cachedVersion!;
+  }
+  private getBuildId(): string {
+    // Try git commit short hash (if available via env or nearby git metadata file), else manifest commit, else timestamp
+    try {
+      const envCommit = process.env.GIT_COMMIT || process.env.COMMIT_SHA || process.env.BUILD_SOURCEVERSION;
+      if(envCommit){ return envCommit.substring(0,7); }
+    } catch {}
+    try {
+      const fs = _esmRequire('fs'); const p = _esmRequire('path');
+      const manifestPaths = [
+        p.join(process.cwd(),'deploy-manifest.json'),
+        p.join(_moduleDir,'../../deploy-manifest.json'),
+        p.join(_moduleDir,'../../../deploy-manifest.json')
+      ];
+      for(const mp of manifestPaths){
+        try { if(fs.existsSync(mp)){ const m = JSON.parse(fs.readFileSync(mp,'utf8')); if(m.commit){ return String(m.commit).substring(0,7); } } } catch {}
+      }
+    } catch {}
+    return new Date().toISOString().replace(/[-:T.Z]/g,'').slice(0,12);
   }
   // Performance sampling
   private perfTimer?: NodeJS.Timeout;
@@ -93,7 +166,7 @@ export class MetricsHttpServer {
   private performanceSnapshot: any = {};
   // Optional periodic PowerShell metrics sampling (aggregated into metricsRegistry) when MCP_CAPTURE_PS_METRICS=1
   private psSampleTimer?: NodeJS.Timeout;
-  private psSampleIntervalMs = 2500;
+  private psSampleIntervalMs = process.env.MCP_PS_SAMPLE_INTERVAL_MS ? Math.max(500, parseInt(process.env.MCP_PS_SAMPLE_INTERVAL_MS,10)) : 2500;
   // Historical data for graphs
   // Store CPU percent and event loop lag (ms) together for combined graph
   private cpuHistory: Array<{timestamp: number, value: number, lag: number, psCpuPct?: number}> = [];
@@ -306,12 +379,27 @@ export class MetricsHttpServer {
       return;
     }
   if (path === '/api/metrics') {
-      const snap = metricsRegistry.snapshot(false);
+      let snap = metricsRegistry.snapshot(false);
       // Ensure psSamples fields are present even if zero (tests rely on property existence)
       if(typeof (snap as any).psSamples === 'undefined'){
         (snap as any).psSamples = 0;
         (snap as any).psCpuSecAvg = 0;
         (snap as any).psWSMBAvg = 0;
+      }
+      // Self-healing fallback: if feature flag enabled but still zero samples, take an on-demand sample.
+      if((snap as any).psSamples === 0 && process.env.MCP_CAPTURE_PS_METRICS === '1'){
+        try {
+          const mem = process.memoryUsage();
+          const wsMB = +(mem.rss/1024/1024).toFixed(2);
+          const cpuUsage = process.cpuUsage();
+          const cpuCumulativeSec = (cpuUsage.user + cpuUsage.system)/1e6;
+          (metricsRegistry as any).capturePsSample(cpuCumulativeSec, wsMB);
+          snap = metricsRegistry.snapshot(false);
+          if(typeof (snap as any).psSamples === 'undefined'){
+            (snap as any).psSamples = 0; (snap as any).psCpuSecAvg = 0; (snap as any).psWSMBAvg = 0;
+          }
+          if(this.debugEnabled){ console.error('[METRICS][API_FALLBACK_SAMPLE] injected one-off sample for empty ps metrics'); }
+        } catch {/* ignore */}
       }
       const perf = this.performanceSnapshot;
       const response = { 
@@ -477,6 +565,8 @@ export class MetricsHttpServer {
   tr.confirmed{background:linear-gradient(90deg,rgba(255,215,0,.22),rgba(255,215,0,.05));border-left:4px solid #ffd700}
   tr.confirmed td.level{color:#ffd700 !important}
   tr.confirmed td{transition:background .3s}
+  tr.requires{background:linear-gradient(90deg,rgba(255,140,0,.18),rgba(255,140,0,.04));border-left:4px solid #ff8c00}
+  tr.requires td.level{color:#ff8c00 !important}
   tr.learn-selected{outline:2px solid #6366f1; box-shadow:0 0 0 2px #6366f1 inset; position:relative;}
   tr.learn-selected:after{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(99,102,241,.15),rgba(99,102,241,0));}
   .bad{color:var(--danger)} .warn{color:var(--risky)} .good{color:var(--safe)}
@@ -493,14 +583,14 @@ export class MetricsHttpServer {
   .graphs-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem;margin-top:1rem}
   @media (max-width:820px){.graphs-row{grid-template-columns:1fr}}
   /* Graph container adjustments */
-  .graph-frame{position:relative;height:140px;border:1px solid #2c3640;background:#0d1116;overflow:hidden;border-radius:6px;}
+  .graph-frame{position:relative;height:140px;border:1px solid #2c3640;background:#12161d;overflow:hidden;border-radius:6px;}
   .graph-frame canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
   /* Button interaction refinements */
   button:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
   button:active{transform:translateY(1px);}
 </style></head><body>
 <header>
-  <h1>PowerShell MCP Dashboard <span class="pill">v${ver}</span> ${debug?'<span class="pill debug">DEBUG</span>':''}</h1>
+  <h1>PowerShell MCP Dashboard <span class="pill">v${ver}<span class="subpill">${this.getBuildId()}</span></span> ${debug?'<span class="pill debug">DEBUG</span>':''}</h1>
   <span class="pill" id="portInfo">Port: ${this.opts.port}</span>
   <span class="pill" id="hbState">HB: --</span>
   <span class="pill" id="uptime">Uptime: --</span>
@@ -530,33 +620,39 @@ export class MetricsHttpServer {
   </div>
   <div id="graphsRow" class="graphs-row">
     <section class="card" id="cpuGraphCard">
-      <h3>CPU % (Last 2 minutes)</h3>
+      <h3>CPU & Lag (Last 2m)</h3>
       <div class="graph-frame"><canvas id="cpuGraph"></canvas></div>
     </section>
     <section class="card" id="memGraphCard">
-      <h3>Memory (MB - Last 2 minutes)</h3>
+      <h3>Memory (MB - Last 2m)</h3>
       <div class="graph-frame"><canvas id="memGraph"></canvas></div>
     </section>
   </div>
+  <!-- Global controls bar (relocated buttons) -->
+  <div id="globalControls" style="display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin-top:.25rem">
+    <button id="clearBtn" title="Clear visible events">Clear</button>
+    ${debug?'\n    <button id="emit">Emit Synthetic</button>':''}
+    <button id="learnBtn" title="Queue selected UNKNOWN row" style="background:#6366f1">Queue Selected</button>
+    <button id="showQueue" style="background:#374151">Queue Panel</button>
+    <span id="learnMsg" style="font-size:.6rem;opacity:.75;min-width:120px"></span>
+    <span style="flex:1"></span>
+    <span style="opacity:.65;font-size:.55rem;padding:.15rem .35rem;border:1px solid #1f2937;border-radius:4px;background:rgba(31,41,55,.35)">Legend: <span style="color:#3b82f6">CPU</span> <span style="color:#f59e0b">Lag</span> <span style="color:#a855f7">PS CPU</span> • <span style="color:#10b981">RSS</span> <span style="color:#6366f1">Heap</span> <span style="color:#f472b6">PS WS</span></span>
+  </div>
   <section class="card" id="eventsPanel">
-    <div id="controls">
-      <div id="filters"></div>
-      <button id="clearBtn" title="Clear visible events">Clear</button>
-      ${debug?'<button id="emit">Emit Synthetic</button>':''}
+    <div id="controls" style="display:flex;flex-wrap:wrap;align-items:center;gap:.4rem">
+      <div id="filters" style="display:flex;gap:.35rem;flex-wrap:wrap"></div>
     </div>
     <div id="eventTableWrap">
-      <table id="eventTable"><thead><tr><th style="width:46px">ID</th><th style="width:78px">Tool</th><th style="width:68px">Level</th><th style="width:70px">Dur</th><th style="width:60px">Code</th><th style="width:55px">OK</th><th style="width:82px">Time</th><th>Details / Preview (ps: cpuSec/wsMB)</th></tr></thead><tbody></tbody></table>
+  <table id="eventTable"><thead><tr><th style="width:46px">ID</th><th style="width:78px">Tool</th><th style="width:68px">Level</th><th style="width:70px">Dur</th><th style="width:60px">Code</th><th style="width:55px">OK</th><th style="width:55px" title="Confirmation (✔ confirmed / ⚠ requires)" >Conf</th><th style="width:82px">Time</th><th>Details / Preview (ps: cpuSec/wsMB)</th></tr></thead><tbody></tbody></table>
       <div id="empty" style="opacity:.6;font-size:.65rem;padding:1rem;text-align:center">No events yet.</div>
     </div>
     <div id="statusBar">
       <span>Last Event: <span id="lastEvtAge">--</span></span>
-      <span>Replay Applied: <span id="replayCount">0</span></span>
-      <span>Default Timeout: ${(ENTERPRISE_CONFIG.limits?.defaultTimeoutMs || 90000)/1000}s</span>
-      <span>WD Enf: ${ENTERPRISE_CONFIG.security?.enforceWorkingDirectory? 'ON':'OFF'}</span>
+      <span>Replay: <span id="replayCount">0</span></span>
+      <span>Timeout: ${(ENTERPRISE_CONFIG.limits?.defaultTimeoutMs || 90000)/1000}s</span>
+      <span>WD: ${ENTERPRISE_CONFIG.security?.enforceWorkingDirectory? 'ON':'OFF'}</span>
       <span style="flex:1"></span>
-      <button id="learnBtn" title="Queue selected UNKNOWN row" style="background:#6366f1">Queue Selected</button>
-      <span id="learnMsg" style="font-size:.6rem;opacity:.75"></span>
-      <button id="showQueue" style="background:#374151">Queue Panel</button>
+  <span style="opacity:.55;font-size:.5rem">v${ver}</span>
     </div>
   </section>
   <section class="card" id="queuePanel" style="display:none;max-height:260px;overflow:auto">
@@ -733,10 +829,10 @@ export class MetricsHttpServer {
   lines.push("function getSelectedUnknown(){return Array.from(document.querySelectorAll('#eventTable tbody tr.learn-selected')).filter(r=>r.dataset.level==='UNKNOWN');}");
     // Row add
     lines.push("function fmtTime(iso){return iso.split('T')[1].replace('Z','');}");
-  lines.push(`function addRow(ev){if(ev.level==='HEARTBEAT')return;emptyEl.style.display='none';const tr=document.createElement('tr');tr.dataset.level=ev.level;tr.className='level-'+ev.level;const preview=(ev.preview||'').replace(/</g,'&lt;');tr.innerHTML='<td>'+ev.id+'</td><td>'+(ev.toolName||'')+'</td><td class="level">'+ev.level+'</td><td>'+ev.durationMs+'ms</td><td>'+(ev.exitCode==null?'':ev.exitCode)+'</td><td>'+(ev.success==null?'':(ev.success?'✔':'✖'))+'</td><td>'+fmtTime(ev.timestamp)+'</td><td>'+(preview||'')+'</td>';tr.addEventListener('click',()=>{tr.classList.toggle('learn-selected');});if(!activeLevels.has(ev.level))tr.style.display='none';tableBody.appendChild(tr);const wrap=document.getElementById('eventTableWrap');if(wrap)wrap.scrollTop=wrap.scrollHeight;if(tableBody.children.length>1000)tableBody.removeChild(tableBody.firstChild);}`);
+  lines.push(`function addRow(ev){if(ev.level==='HEARTBEAT')return;emptyEl.style.display='none';const tr=document.createElement('tr');tr.dataset.level=ev.level;tr.className='level-'+ev.level;let preview=(ev.preview||'').replace(/</g,'&lt;');if(preview.length>400)preview=preview.slice(0,397)+'…';let confCell='';if(ev.confirmed){confCell='✔';tr.classList.add('confirmed');}else if(ev.requiresPrompt){confCell='⚠';tr.classList.add('requires');}tr.innerHTML='<td>'+ev.id+'</td><td>'+(ev.toolName||'')+'</td><td class="level">'+ev.level+'</td><td>'+ev.durationMs+'ms</td><td>'+(ev.exitCode==null?'':ev.exitCode)+'</td><td>'+(ev.success==null?'':(ev.success?'✔':'✖'))+'</td><td>'+confCell+'</td><td>'+fmtTime(ev.timestamp)+'</td><td>'+(preview||'')+'</td>';tr.addEventListener('click',()=>{tr.classList.toggle('learn-selected');});if(!activeLevels.has(ev.level))tr.style.display='none';tableBody.appendChild(tr);const wrap=document.getElementById('eventTableWrap');if(wrap)wrap.scrollTop=wrap.scrollHeight;if(tableBody.children.length>1000)tableBody.removeChild(tableBody.firstChild);}`);
   // Metrics fetch + simple graphs
   lines.push("let psWarned=false;async function refreshMetrics(){try{const r=await fetch('/api/metrics');if(!r.ok)return;const m=await r.json();const setMetric=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=String(val);};setMetric(metricsIds.total,m.totalCommands);setMetric(metricsIds.safe,m.safeCommands);setMetric(metricsIds.risky,m.riskyCommands);setMetric(metricsIds.blocked,m.blockedCommands);if('confirmedRequired'in m)setMetric(metricsIds.confirmed,m.confirmedRequired);if('timeouts'in m)setMetric(metricsIds.timeouts,m.timeouts);setMetric(metricsIds.avg,m.averageDurationMs);setMetric(metricsIds.p95,m.p95DurationMs);const p=m.performance||{};if(p.cpuPercent!=null)setMetric(metricsIds.cpu,p.cpuPercent.toFixed(1));if(p.rssMB!=null)setMetric(metricsIds.rss,p.rssMB.toFixed(0));if(p.heapUsedMB!=null)setMetric(metricsIds.heap,p.heapUsedMB.toFixed(0));if(p.eventLoopLagP95Ms!=null)setMetric(metricsIds.lag,p.eventLoopLagP95Ms.toFixed(1));if('psSamples'in m){setMetric(metricsIds.pssamples,m.psSamples||0);if(m.psCpuSecAvg!=null)setMetric(metricsIds.pscpu,(m.psCpuSecAvg||0).toFixed(2));if(m.psWSMBAvg!=null)setMetric(metricsIds.psws,(m.psWSMBAvg||0).toFixed(1));if((m.psSamples||0)===0 && !psWarned){const cpuEl=document.getElementById('m_pscpu');if(cpuEl){const note=document.createElement('div');note.style.cssText='font-size:.55rem;opacity:.6;margin-top:.3rem';note.textContent='(PS metrics disabled env)';cpuEl.parentElement.appendChild(note);psWarned=true;}}}lastMetricsTs=Date.now();if(uptimeEl)uptimeEl.textContent='Uptime: '+Math.round((Date.now()-Date.parse(m.lastReset))/1000)+'s';drawSimpleGraphs(m);}catch(e){if(DEBUG)console.error('[DASH][METRICS_ERR]',e);} }");
-  lines.push("function drawSimpleGraphs(m){try{const cpu=document.getElementById('cpuGraph');const mem=document.getElementById('memGraph');if(!cpu||!mem)return;const cpuHist=m.cpuHistory||[];const memHist=m.memHistory||[];const cpuCtx=cpu.getContext('2d');const memCtx=mem.getContext('2d');const dpr=window.devicePixelRatio||1;const W=cpu.clientWidth||cpu.parentElement.clientWidth||300;const H=cpu.clientHeight||120;cpu.width=W*dpr;cpu.height=H*dpr;cpuCtx.setTransform(dpr,0,0,dpr,0,0);cpuCtx.clearRect(0,0,W,H);cpuCtx.fillStyle='#111';cpuCtx.fillRect(0,0,W,H);cpuCtx.lineWidth=1.4;const cpuMaxVal=Math.max(1,...cpuHist.map(p=>p.value||0));const cpuScaleMax=cpuMaxVal<20?Math.min(100,Math.max(10,Math.ceil(cpuMaxVal*1.2))):100;cpuCtx.strokeStyle='#3b82f6';cpuCtx.beginPath();cpuHist.forEach((p,i)=>{const x=(i/Math.max(1,cpuHist.length-1))*W;const y=H-((p.value||0)/cpuScaleMax)*H;if(i===0)cpuCtx.moveTo(x,y);else cpuCtx.lineTo(x,y);});cpuCtx.stroke();cpuCtx.strokeStyle='#f59e0b';cpuCtx.beginPath();const lagMax=Math.max(1,Math.max(...cpuHist.map(p=>p.lag||0),50));cpuHist.forEach((p,i)=>{const x=(i/Math.max(1,cpuHist.length-1))*W;const y=H-((p.lag||0)/lagMax)*H;if(i===0)cpuCtx.moveTo(x,y);else cpuCtx.lineTo(x,y);});cpuCtx.stroke();const havePsSamples=m.psSamples>0;const havePsCpuLine=cpuHist.some(p=>typeof p.psCpuPct==='number');if(DEBUG && havePsSamples){console.log('[DASH][PS_CPU] psSamples',m.psSamples,'haveLine',havePsCpuLine,'histLen',cpuHist.length);}if(havePsSamples){cpuCtx.strokeStyle='#a855f7';cpuCtx.beginPath();let first=true;if(havePsCpuLine){cpuHist.forEach((p,i)=>{if(typeof p.psCpuPct!=='number')return;const x=(i/Math.max(1,cpuHist.length-1))*W;const y=H-(Math.min(100,p.psCpuPct)/cpuScaleMax)*H;if(first){cpuCtx.moveTo(x,y);first=false;}else cpuCtx.lineTo(x,y);});}else{const agg=(m.psCpuSecAvg||0);const estPct=Math.min(100,(agg/(m.psSamples||1))*40);const y=H-(estPct/cpuScaleMax)*H;cpuCtx.moveTo(0,y);cpuCtx.lineTo(W,y);}cpuCtx.stroke();}cpuCtx.fillStyle='rgba(0,0,0,0.55)';const legendH=havePsSamples?56:42;cpuCtx.fillRect(4,4,205,legendH);cpuCtx.font='10px monospace';cpuCtx.fillStyle='#fff';cpuCtx.fillText('CPU% (blue)'+(cpuScaleMax!==100?' s:'+cpuScaleMax:''),8,14);cpuCtx.fillStyle='#f59e0b';cpuCtx.fillText('Lag ms (amber)',8,26);if(havePsSamples){cpuCtx.fillStyle='#a855f7';cpuCtx.fillText('PS CPU (violet)',8,38);}const MW=mem.clientWidth||mem.parentElement.clientWidth||300;const MH=mem.clientHeight||120;mem.width=MW*dpr;mem.height=MH*dpr;memCtx.setTransform(dpr,0,0,dpr,0,0);memCtx.clearRect(0,0,MW,MH);memCtx.fillStyle='#111';memCtx.fillRect(0,0,MW,MH);memCtx.lineWidth=1.4;const rssVals=memHist.map(p=>p.rss||0);const heapVals=memHist.map(p=>p.heap||0);const allVals=rssVals.concat(heapVals);const rssMin=Math.min(...allVals,0);const rssMax=Math.max(...allVals,1);const range=Math.max(1,rssMax-rssMin);const useDynamic=range < 10;const normY=(v)=>MH-((v-(useDynamic?rssMin:0))/(useDynamic?range:rssMax))*MH;memCtx.strokeStyle='#10b981';memCtx.beginPath();memHist.forEach((p,i)=>{const x=(i/Math.max(1,memHist.length-1))*MW;const y=normY(p.rss||0);if(i===0)memCtx.moveTo(x,y);else memCtx.lineTo(x,y);});memCtx.stroke();memCtx.strokeStyle='#6366f1';memCtx.beginPath();memHist.forEach((p,i)=>{const x=(i/Math.max(1,memHist.length-1))*MW;const y=normY(p.heap||0);if(i===0)memCtx.moveTo(x,y);else memCtx.lineTo(x,y);});memCtx.stroke();const havePsWSLine=memHist.some(p=>typeof p.psWSMB==='number');if(DEBUG && havePsSamples){console.log('[DASH][PS_WS] psSamples',m.psSamples,'haveLine',havePsWSLine,'histLen',memHist.length);}if(havePsSamples){memCtx.strokeStyle='#f472b6';memCtx.beginPath();let first=true;if(havePsWSLine){memHist.forEach((p,i)=>{if(typeof p.psWSMB!=='number')return;const x=(i/Math.max(1,memHist.length-1))*MW;const y=normY(p.psWSMB);if(first){memCtx.moveTo(x,y);first=false;}else memCtx.lineTo(x,y);});}else{const v=(m.psWSMBAvg||0);const y=normY(v);memCtx.moveTo(0,y);memCtx.lineTo(MW,y);}memCtx.stroke();}memCtx.fillStyle='rgba(0,0,0,0.55)';const mLegendH=havePsSamples?68:54;memCtx.fillRect(4,4,215,mLegendH);memCtx.font='10px monospace';memCtx.fillStyle='#10b981';memCtx.fillText('RSS MB (green)'+(useDynamic?' dyn':''),8,14);memCtx.fillStyle='#6366f1';memCtx.fillText('Heap MB (indigo)',8,26);if(m.psSamples===0){memCtx.fillStyle='#999';memCtx.fillText('PS metrics disabled',8,38);}else{memCtx.fillStyle='#f472b6';memCtx.fillText('PS WS (pink)',8,38);} }catch(ex){if(DEBUG)console.error('[DASH][GRAPH_ERR]',ex);} } ");
+  lines.push("function drawSimpleGraphs(m){try{const cpu=document.getElementById('cpuGraph');const mem=document.getElementById('memGraph');if(!cpu||!mem)return;const cpuHist=m.cpuHistory||[];const memHist=m.memHistory||[];const cpuCtx=cpu.getContext('2d');const memCtx=mem.getContext('2d');const dpr=window.devicePixelRatio||1;const W=cpu.clientWidth||cpu.parentElement.clientWidth||300;const H=cpu.clientHeight||120;cpu.width=W*dpr;cpu.height=H*dpr;cpuCtx.setTransform(dpr,0,0,dpr,0,0);cpuCtx.clearRect(0,0,W,H);cpuCtx.fillStyle='#0f1318';cpuCtx.fillRect(0,0,W,H);cpuCtx.lineWidth=1.3;const cpuMaxVal=Math.max(1,...cpuHist.map(p=>p.value||0));const cpuScaleMax=cpuMaxVal<20?Math.min(100,Math.max(10,Math.ceil(cpuMaxVal*1.2))):100;cpuCtx.strokeStyle='#3b82f6';cpuCtx.beginPath();cpuHist.forEach((p,i)=>{const x=(i/Math.max(1,cpuHist.length-1))*W;const y=H-((p.value||0)/cpuScaleMax)*H;if(i===0)cpuCtx.moveTo(x,y);else cpuCtx.lineTo(x,y);});cpuCtx.stroke();cpuCtx.strokeStyle='#f59e0b';cpuCtx.beginPath();const lagMax=Math.max(1,Math.max(...cpuHist.map(p=>p.lag||0),50));cpuHist.forEach((p,i)=>{const x=(i/Math.max(1,cpuHist.length-1))*W;const y=H-((p.lag||0)/lagMax)*H;if(i===0)cpuCtx.moveTo(x,y);else cpuCtx.lineTo(x,y);});cpuCtx.stroke();const havePsSamples=m.psSamples>0;const havePsCpuLine=cpuHist.some(p=>typeof p.psCpuPct==='number');if(havePsSamples){cpuCtx.strokeStyle='#a855f7';cpuCtx.beginPath();let first=true;if(havePsCpuLine){cpuHist.forEach((p,i)=>{if(typeof p.psCpuPct!=='number')return;const x=(i/Math.max(1,cpuHist.length-1))*W;const y=H-(Math.min(100,p.psCpuPct)/cpuScaleMax)*H;if(first){cpuCtx.moveTo(x,y);first=false;}else cpuCtx.lineTo(x,y);});}else{const agg=(m.psCpuSecAvg||0);const estPct=Math.min(100,(agg/(m.psSamples||1))*40);const y=H-(estPct/cpuScaleMax)*H;cpuCtx.moveTo(0,y);cpuCtx.lineTo(W,y);}cpuCtx.stroke();}/* Legend */cpuCtx.font='10px monospace';const cpuLegendLines=havePsSamples?['CPU'+(cpuScaleMax!==100?' s:'+cpuScaleMax:''),'Lag','PS CPU']:['CPU'+(cpuScaleMax!==100?' s:'+cpuScaleMax:''),'Lag'];let cpuLegendW=0;cpuLegendLines.forEach(t=>{const w=cpuCtx.measureText(t).width;if(w>cpuLegendW)cpuLegendW=w;});cpuLegendW+=14;const cpuLegendH=cpuLegendLines.length*12+8;cpuCtx.fillStyle='rgba(0,0,0,0.35)';cpuCtx.fillRect(4,4,cpuLegendW,cpuLegendH);let yOff=14;cpuCtx.fillStyle='#3b82f6';cpuCtx.fillText(cpuLegendLines[0],8,yOff);yOff+=12;cpuCtx.fillStyle='#f59e0b';cpuCtx.fillText(cpuLegendLines[1],8,yOff);if(havePsSamples){yOff+=12;cpuCtx.fillStyle='#a855f7';cpuCtx.fillText('PS CPU',8,yOff);}/* Memory */const MW=mem.clientWidth||mem.parentElement.clientWidth||300;const MH=mem.clientHeight||120;mem.width=MW*dpr;mem.height=MH*dpr;memCtx.setTransform(dpr,0,0,dpr,0,0);memCtx.clearRect(0,0,MW,MH);memCtx.fillStyle='#0f1318';memCtx.fillRect(0,0,MW,MH);memCtx.lineWidth=1.3;const rssVals=memHist.map(p=>p.rss||0);const heapVals=memHist.map(p=>p.heap||0);const allVals=rssVals.concat(heapVals);const rssMin=Math.min(...allVals,0);const rssMax=Math.max(...allVals,1);const range=Math.max(1,rssMax-rssMin);const useDynamic=range<10;const normY=v=>MH-((v-(useDynamic?rssMin:0))/(useDynamic?range:rssMax))*MH;memCtx.strokeStyle='#10b981';memCtx.beginPath();memHist.forEach((p,i)=>{const x=(i/Math.max(1,memHist.length-1))*MW;const y=normY(p.rss||0);if(i===0)memCtx.moveTo(x,y);else memCtx.lineTo(x,y);});memCtx.stroke();memCtx.strokeStyle='#6366f1';memCtx.beginPath();memHist.forEach((p,i)=>{const x=(i/Math.max(1,memHist.length-1))*MW;const y=normY(p.heap||0);if(i===0)memCtx.moveTo(x,y);else memCtx.lineTo(x,y);});memCtx.stroke();const havePsWSLine=memHist.some(p=>typeof p.psWSMB==='number');if(havePsSamples){memCtx.strokeStyle='#f472b6';memCtx.beginPath();let first=true;if(havePsWSLine){memHist.forEach((p,i)=>{if(typeof p.psWSMB!=='number')return;const x=(i/Math.max(1,memHist.length-1))*MW;const y=normY(p.psWSMB);if(first){memCtx.moveTo(x,y);first=false;}else memCtx.lineTo(x,y);});}else{const v=(m.psWSMBAvg||0);const y=normY(v);memCtx.moveTo(0,y);memCtx.lineTo(MW,y);}memCtx.stroke();}memCtx.font='10px monospace';const memLegendLines=havePsSamples?['RSS'+(useDynamic?' dyn':''),'Heap',m.psSamples===0?'PS off':'PS WS']:['RSS'+(useDynamic?' dyn':''),'Heap'];let memLegendW=0;memLegendLines.forEach(t=>{const w=memCtx.measureText(t).width;if(w>memLegendW)memLegendW=w;});memLegendW+=14;const memLegendH=memLegendLines.length*12+8;memCtx.fillStyle='rgba(0,0,0,0.35)';memCtx.fillRect(4,4,memLegendW,memLegendH);let my=14;memCtx.fillStyle='#10b981';memCtx.fillText(memLegendLines[0],8,my);my+=12;memCtx.fillStyle='#6366f1';memCtx.fillText('Heap',8,my);if(havePsSamples){my+=12;memCtx.fillStyle=(m.psSamples===0?'#999':'#f472b6');memCtx.fillText(memLegendLines[memLegendLines.length-1],8,my);} }catch(ex){if(DEBUG)console.error('[DASH][GRAPH_ERR]',ex);} } ");
   lines.push('setInterval(refreshMetrics,5000); setTimeout(refreshMetrics,500);');
   // Queue / learning simple UI wiring (placeholder impl)
   lines.push("(function(){const lb=document.getElementById('learnBtn');const lm=document.getElementById('learnMsg');if(lb){lb.addEventListener('click',()=>{const sel=getSelectedUnknown();if(!sel.length){if(lm){lm.textContent='No UNKNOWN selected';setTimeout(()=>lm.textContent='',1800);}return;}if(lm){lm.textContent='Queued '+sel.length+' (demo)';setTimeout(()=>lm.textContent='',2200);}sel.forEach(r=>r.classList.remove('learn-selected'));});}const showQ=document.getElementById('showQueue');const qp=document.getElementById('queuePanel');if(showQ&&qp){showQ.addEventListener('click',()=>{qp.style.display=qp.style.display==='none'?'block':'none';});}const refreshQ=document.getElementById('refreshQueue');const qb=document.getElementById('queueBody');if(refreshQ&&qb){refreshQ.addEventListener('click',async()=>{try{refreshQ.disabled=true;const r=await fetch('/api/unknown-candidates?debug=true');if(r.ok){const list=await r.json();qb.innerHTML='';(list||[]).forEach(c=>{const tr=document.createElement('tr');tr.innerHTML=\"<td><input type=\\\"checkbox\\\"></td><td>\"+(c.normalized||'')+\"</td><td>\"+(c.count||1)+\"</td><td>\"+(c.times||1)+\"</td><td>\"+(c.last||'')+\"</td>\";qb.appendChild(tr);});}}catch(ex){ if(DEBUG) console.error('[DASH][QUEUE_REFRESH_ERR]',ex);}finally{refreshQ.disabled=false;}});} })();");

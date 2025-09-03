@@ -343,11 +343,11 @@ export async function runPowerShellTool(args: any){
   if(assessment.blocked){
     auditLog('WARNING','BLOCKED_COMMAND','Blocked by security policy',{ reason: assessment.reason, patterns: assessment.patterns, level: assessment.level });
     // Early publish for blocked attempt
-    publishExecutionAttempt({ toolName:'run-powershell', level: assessment.level, blocked:true, durationMs:0, success:false, exitCode:null, preview: command, reason:'blocked' });
+  publishExecutionAttempt({ toolName:'run-powershell', level: assessment.level, blocked:true, durationMs:0, success:false, exitCode:null, preview: command, reason:'blocked', confirmed:false, requiresPrompt:false });
     return { content:[{ type:'text', text: 'Blocked: '+assessment.reason }], structuredContent:{ success:false, blocked:true, securityAssessment: assessment, exitCode: null } };
   }
   if(assessment.requiresPrompt && !args.confirmed) {
-  publishExecutionAttempt({ toolName:'run-powershell', level: assessment.level, blocked:false, durationMs:0, success:false, exitCode:null, preview: command, reason:'confirmed_required', requiresPrompt:true, incrementConfirmedRequired: !args._unknownTracked });
+  publishExecutionAttempt({ toolName:'run-powershell', level: assessment.level, blocked:false, durationMs:0, success:false, exitCode:null, preview: command, reason:'confirmed_required', requiresPrompt:true, incrementConfirmedRequired: !args._unknownTracked, confirmed:false });
     const cat = assessment.category?.toLowerCase() || 'operation';
   throw new McpError(ErrorCode.InvalidRequest, `requires confirmed:true (${cat})`);
   }
@@ -461,9 +461,15 @@ export async function runPowerShellTool(args: any){
   }
   if(result.timedOut){ try{ metricsRegistry.incrementTimeout(); }catch{} }
   metricsRegistry.record({ level: assessment.level as any, blocked: assessment.blocked, durationMs: result.duration_ms || 0, truncated: !!result.truncated });
-  try { metricsHttpServer.publishExecution({ id:`exec-${Date.now()}`, level: assessment.level, durationMs: result.duration_ms||0, blocked: assessment.blocked, truncated: !!result.truncated, timestamp:new Date().toISOString(), preview: command.substring(0,120), success: result.success, exitCode: result.exitCode, confirmed: args.confirmed||false, timedOut: result.timedOut, toolName: 'run-powershell' }); } catch {}
+  try { metricsHttpServer.publishExecution({ id:`exec-${Date.now()}`, level: assessment.level, durationMs: result.duration_ms||0, blocked: assessment.blocked, truncated: !!result.truncated, timestamp:new Date().toISOString(), preview: command.substring(0,200), success: result.success, exitCode: result.exitCode, confirmed: args.confirmed||false, requiresPrompt: assessment.requiresPrompt, timedOut: result.timedOut, toolName: 'run-powershell' }); } catch {}
   auditLog('INFO','POWERSHELL_EXEC','Command executed', { level: assessment.level, reason: assessment.reason, durationMs: result.duration_ms, success: result.success });
   const responseObject = { ...result, securityAssessment: assessment, originalTimeoutSeconds: timeoutSeconds, warnings };
+  try {
+    const snap:any = (metricsRegistry as any).snapshot ? (metricsRegistry as any).snapshot(false) : {};
+    if(typeof snap.psSamples === 'number'){
+      (responseObject as any).psProcessMetrics = { Samples: snap.psSamples, CpuSecAvg: snap.psCpuSecAvg, WSAvgMB: snap.psWSMBAvg, CpuSecLast: snap.psCpuSecLast };
+    }
+  } catch {}
   // To reduce duplicate rendering in clients that show both `content` and `structuredContent`,
   // only place human-readable stream data in `content` (stdout/stderr) while full metadata lives in structuredContent.
   const content:any[] = [];

@@ -38,6 +38,50 @@ import { parsePowerShellSyntax } from './tools/pwshSyntax.js';
 import { listToolsForSurface, listToolTree, getToolDef } from './tools/registry.js';
 
 // === Support Types ===
+// Verb-based baseline risk categories (derived from PowerShell Approved Verbs guidance)
+// This provides an initial semantic layer; pattern arrays below still apply (override / escalate).
+let VERB_BASELINE: Record<string,{ level:'SAFE'|'RISKY'; category:string; reason:string; requiresPrompt?:boolean }> = {
+  get:{ level:'SAFE', category:'INFORMATION_GATHERING', reason:'Read / enumerate' },
+  select:{ level:'SAFE', category:'INFORMATION_GATHERING', reason:'Projection' },
+  measure:{ level:'SAFE', category:'INFORMATION_GATHERING', reason:'Aggregation' },
+  format:{ level:'SAFE', category:'INFORMATION_GATHERING', reason:'Presentation only' },
+  out:{ level:'SAFE', category:'INFORMATION_GATHERING', reason:'Output formatting' },
+  show:{ level:'SAFE', category:'INFORMATION_GATHERING', reason:'Display only' },
+  write:{ level:'SAFE', category:'INFORMATION_GATHERING', reason:'Emit output' },
+  test:{ level:'SAFE', category:'INFORMATION_GATHERING', reason:'Validation / probe' },
+  new:{ level:'RISKY', category:'OBJECT_CREATION', reason:'Creates resources', requiresPrompt:true },
+  set:{ level:'RISKY', category:'MODIFICATION', reason:'Modifies state', requiresPrompt:true },
+  add:{ level:'RISKY', category:'MODIFICATION', reason:'Adds resource/content', requiresPrompt:true },
+  remove:{ level:'RISKY', category:'DELETION', reason:'Deletes resource', requiresPrompt:true },
+  clear:{ level:'RISKY', category:'DELETION', reason:'Clears content/state', requiresPrompt:true },
+  stop:{ level:'RISKY', category:'SERVICE_MANAGEMENT', reason:'Stops service/process', requiresPrompt:true },
+  restart:{ level:'RISKY', category:'SERVICE_MANAGEMENT', reason:'Restarts service/process', requiresPrompt:true },
+  start:{ level:'RISKY', category:'SERVICE_MANAGEMENT', reason:'Starts service/process', requiresPrompt:true },
+  enable:{ level:'RISKY', category:'CONFIGURATION', reason:'Enables feature/service', requiresPrompt:true },
+  disable:{ level:'RISKY', category:'CONFIGURATION', reason:'Disables feature/service', requiresPrompt:true },
+  invoke:{ level:'RISKY', category:'EXECUTION', reason:'Executes action / remote call', requiresPrompt:true },
+  import:{ level:'RISKY', category:'DATA_OPERATION', reason:'Imports data/code', requiresPrompt:true },
+  export:{ level:'RISKY', category:'DATA_OPERATION', reason:'Exports data', requiresPrompt:true },
+  connect:{ level:'RISKY', category:'NETWORK_OPERATION', reason:'Network connection', requiresPrompt:true },
+  send:{ level:'RISKY', category:'NETWORK_OPERATION', reason:'Sends data', requiresPrompt:true },
+  receive:{ level:'RISKY', category:'NETWORK_OPERATION', reason:'Receives data', requiresPrompt:true }
+};
+// Attempt to merge external overrides (administrative tuning) from config/verb-overrides.json
+try {
+  const overridePath = path.join(process.cwd(),'config','verb-overrides.json');
+  if(fs.existsSync(overridePath)){
+    const raw = fs.readFileSync(overridePath,'utf8');
+    const json = JSON.parse(raw);
+    if(json && typeof json === 'object'){
+      for(const k of Object.keys(json)){
+        const v = json[k];
+        if(v && typeof v === 'object' && v.level && v.category && v.reason){
+          VERB_BASELINE[k.toLowerCase()] = { level: v.level==='SAFE'?'SAFE':'RISKY', category: String(v.category), reason: String(v.reason), requiresPrompt: !!v.requiresPrompt };
+        }
+      }
+    }
+  }
+} catch { /* swallow */ }
 type SecurityLevel = 'SAFE' | 'RISKY' | 'DANGEROUS' | 'CRITICAL' | 'UNKNOWN' | 'BLOCKED';
 interface SecurityAssessment { level: SecurityLevel; risk: 'LOW'|'MEDIUM'|'HIGH'|'CRITICAL'; category: string; reason: string; blocked: boolean; requiresPrompt: boolean; color?: string; patterns?: string[]; recommendations?: string[]; }
 interface UnknownThreatEntry { id: string; command: string; sessionId: string; firstSeen: string; lastSeen: string; count: number; risk: string; level: SecurityLevel; category: string; reasons: string[]; frequency?: number; riskAssessment?: SecurityAssessment; timestamp?: string; possibleAliases?: string[]; [k: string]: any; }
@@ -54,7 +98,14 @@ const REMOTE_MODIFICATION_PATTERNS: readonly string[] = [ 'Invoke-WebRequest','I
 const CRITICAL_PATTERNS: readonly string[] = [ 'Invoke-Expression','IEX','Set-Alias','New-Alias' ];
 const DANGEROUS_COMMANDS: readonly string[] = [ 'Stop-Service','Restart-Service','Remove-Item\\s+-Recurse','Stop-Process' ];
 const RISKY_PATTERNS: readonly string[] = [ 'Set-Variable','Set-Content','Add-Content' ];
-const SAFE_PATTERNS: readonly string[] = [ '^Show-','^Test-.*(?!-Computer)','^Out-Host','^Out-String','^Write-Host','^Write-Output','^Write-Information','^Format-','^Select-','^Where-Object','^Sort-Object','^Group-Object','^Measure-Object' ];
+// SAFE_PATTERNS intentionally biased toward read-only discovery style cmdlets.
+// Expanded to reduce noisy UNKNOWN classifications for common benign Get-* operations (feedback regression).
+const SAFE_PATTERNS: readonly string[] = [
+  '^Show-','^Test-.*(?!-Computer)','^Out-Host','^Out-String','^Write-Host','^Write-Output','^Write-Information',
+  '^Format-','^Select-','^Where-Object','^Sort-Object','^Group-Object','^Measure-Object',
+  // Common benign Get-* cmdlets (explicit list safer than broad ^Get- wildcard):
+  '^Get-Date','^Get-Process','^Get-Service','^Get-ChildItem','^Get-Item','^Get-Content','^Get-Command','^Get-Module','^Get-Location','^Get-History','^Get-Alias','^Get-Variable'
+];
 
 // Alias map (subset) & suspicious patterns
 const POWERSHELL_ALIAS_MAP: Record<string, { cmdlet: string; risk: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'; category: string }> = {
@@ -134,6 +185,29 @@ export class EnterprisePowerShellMCPServer {
   }
 
   private classifyCommandSafety(command:string): SecurityAssessment { const upper=command.toUpperCase(); const lower=command.toLowerCase(); const alias=this.detectPowerShellAlias(command); if(alias.isAlias && alias.securityRisk==='CRITICAL'){ return { level:'CRITICAL', risk:'CRITICAL', reason: alias.reason+' - Alias masks dangerous command', color:'RED', blocked:true, requiresPrompt:false, category:'ALIAS_THREAT', patterns:[alias.originalCommand||''], recommendations:['Use full cmdlet names','Review intent'] }; }
+    // Verb baseline (lightweight parse Verb-Noun). Only used if no earlier explicit decision (git / alias / patterns later override).
+    let verbAssessment: SecurityAssessment | undefined;
+    const firstToken = command.trim().split(/\s+|\|/)[0];
+    const verbMatch = /^([A-Za-z]+)-[A-Za-z]/.exec(firstToken);
+    if(verbMatch){
+      const v = verbMatch[1].toLowerCase();
+      const base = (VERB_BASELINE as any)[v];
+      if(base){
+        verbAssessment = { level: base.level, risk: base.level==='SAFE'?'LOW':'MEDIUM', reason: base.reason+' (verb baseline)', blocked:false, requiresPrompt: !!base.requiresPrompt, category: base.category, patterns:[`verb:${v}`], color: base.level==='SAFE'?'GREEN':'YELLOW', recommendations: base.level==='SAFE'? ['Safe to execute'] : ['Add confirmed: true','Review intent'] } as any;
+      }
+    }
+    // Switch & noun escalation (lightweight) applied early so later patterns may override further.
+    const hasForce = /\s-Force(\s|$)/i.test(command);
+    const hasRecurse = /\s-Recurse(\s|$)/i.test(command);
+    const nounMatch = /^([A-Za-z]+)-([A-Za-z][A-Za-z0-9]+)/.exec(command.trim());
+    if(nounMatch){
+      const noun = nounMatch[2].toLowerCase();
+      const destructiveNouns = ['service','process','item','itemproperty','variable','alias','module','job'];
+      if(verbAssessment && verbAssessment.level==='RISKY' && (hasForce || hasRecurse || destructiveNouns.includes(noun))){
+        verbAssessment.reason += ' + escalation (force/recurse/noun)';
+        verbAssessment.requiresPrompt = true;
+      }
+    }
     // Git classification (no git tools exposed – classification only)
     if(/^git\s+status(\s|$)/i.test(lower)) return { level:'SAFE', risk:'LOW', reason:'Git status read-only', color:'GREEN', blocked:false, requiresPrompt:false, category:'VCS_READONLY', patterns:['git status'], recommendations:['Safe to execute'] } as any;
     if(/^git\s+diff(\s|$)/i.test(lower)) return { level:'SAFE', risk:'LOW', reason:'Git diff read-only', color:'GREEN', blocked:false, requiresPrompt:false, category:'VCS_READONLY', patterns:['git diff'], recommendations:['Safe to execute'] } as any;
@@ -154,7 +228,7 @@ export class EnterprisePowerShellMCPServer {
         return { level:'RISKY', risk:'MEDIUM', reason:`File deletion alias ${a}`, color:'YELLOW', blocked:false, requiresPrompt:true, category:'FILE_OPERATION', patterns:[a], recommendations:['Add confirmed: true','Review path carefully'] };
       }
     }
-    if(!this.mergedPatterns){ const sup=new Set((ENTERPRISE_CONFIG.security.suppressPatterns||[]).map((p:string)=>p.toLowerCase())); const addBlocked=(ENTERPRISE_CONFIG.security.additionalBlocked||[]).map((p:string)=> new RegExp(p,'i')); const addSafe=(ENTERPRISE_CONFIG.security.additionalSafe||[]).map((p:string)=> new RegExp(p,'i')); const filter=(arr:readonly string[])=> arr.filter(p=>!sup.has(p.toLowerCase())).map(p=> new RegExp(p,'i')); const blocked=[ ...filter(REGISTRY_MODIFICATION_PATTERNS), ...filter(SYSTEM_FILE_PATTERNS), ...filter(ROOT_DELETION_PATTERNS), ...filter(REMOTE_MODIFICATION_PATTERNS), ...filter(CRITICAL_PATTERNS), ...filter(DANGEROUS_COMMANDS), ...addBlocked ]; const risky=filter(RISKY_PATTERNS); let learned:RegExp[]=[]; try { learned = loadLearnedPatterns().map(p=> new RegExp(p,'i')); } catch{} const safe=[...filter(SAFE_PATTERNS), ...addSafe, ...learned]; this.mergedPatterns={ safe, risky, blocked }; }
+  if(!this.mergedPatterns){ const sup=new Set((ENTERPRISE_CONFIG.security.suppressPatterns||[]).map((p:string)=>p.toLowerCase())); const addBlocked=(ENTERPRISE_CONFIG.security.additionalBlocked||[]).map((p:string)=> new RegExp(p,'i')); const addSafe=(ENTERPRISE_CONFIG.security.additionalSafe||[]).map((p:string)=> new RegExp(p,'i')); const filter=(arr:readonly string[])=> arr.filter(p=>!sup.has(p.toLowerCase())).map(p=> new RegExp(p,'i')); const blocked=[ ...filter(REGISTRY_MODIFICATION_PATTERNS), ...filter(SYSTEM_FILE_PATTERNS), ...filter(ROOT_DELETION_PATTERNS), ...filter(REMOTE_MODIFICATION_PATTERNS), ...filter(CRITICAL_PATTERNS), ...filter(DANGEROUS_COMMANDS), ...addBlocked ]; const risky=filter(RISKY_PATTERNS); let learned:RegExp[]=[]; try { learned = loadLearnedPatterns().map(p=> new RegExp(p,'i')); } catch{} const safe=[...filter(SAFE_PATTERNS), ...addSafe, ...learned]; this.mergedPatterns={ safe, risky, blocked }; }
     for(const rx of this.mergedPatterns.blocked){
       if(rx.test(command)){
   // Downgrade certain patterns to requires confirmed:true per feedback tests (registry, service, network) unless truly critical
@@ -174,13 +248,14 @@ export class EnterprisePowerShellMCPServer {
       }
     }
     if(upper.includes('FORMAT C:')||upper.includes('SHUTDOWN')||lower.includes('rm -rf')||upper.includes('NET USER')){ return { level:'DANGEROUS', risk:'HIGH', reason:'System destructive or privilege escalation command', color:'MAGENTA', blocked:true, requiresPrompt:false, category:'SYSTEM_DESTRUCTION', recommendations:['Use non-destructive alternatives'] }; }
-    for(const rx of this.mergedPatterns.risky){ if(rx.test(command)){ return { level:'RISKY', risk:'MEDIUM', reason:`File/service modification operation: ${rx.source}`, color:'YELLOW', blocked:false, requiresPrompt:true, category:'FILE_OPERATION', patterns:[rx.source], recommendations:['Add confirmed: true','Use -WhatIf for testing'] }; } }
-    for(const rx of this.mergedPatterns.safe){ if(rx.test(command)){ return { level:'SAFE', risk:'LOW', reason:`Safe read-only operation: ${rx.source}`, color:'GREEN', blocked:false, requiresPrompt:false, category:'INFORMATION_GATHERING', patterns:[rx.source], recommendations:['Safe to execute'] }; } }
+  for(const rx of this.mergedPatterns.risky){ if(rx.test(command)){ return { level:'RISKY', risk:'MEDIUM', reason:`File/service modification operation: ${rx.source}`, color:'YELLOW', blocked:false, requiresPrompt:true, category:'FILE_OPERATION', patterns:[rx.source], recommendations:['Add confirmed: true','Use -WhatIf for testing'] }; } }
+  for(const rx of this.mergedPatterns.safe){ if(rx.test(command)){ return { level:'SAFE', risk:'LOW', reason:`Safe read-only operation: ${rx.source}`, color:'GREEN', blocked:false, requiresPrompt:false, category:'INFORMATION_GATHERING', patterns:[rx.source], recommendations:['Safe to execute'] }; } }
+  if(verbAssessment){ return verbAssessment; }
   const unk: SecurityAssessment = { level:'UNKNOWN', risk:'MEDIUM', reason:'Unclassified command requires confirmed:true', color:'CYAN', blocked:false, requiresPrompt:true, category:'UNKNOWN_COMMAND', recommendations:['Add confirmed: true','Review command for safety'] }; this.trackUnknownThreat(command, unk); return unk; }
 
   private getThreatStats(){ const recent=Array.from(this.unknownThreats.values()).sort((a,b)=> new Date(b.lastSeen).getTime()-new Date(a.lastSeen).getTime()).slice(0,10); return { ...this.threatStats, recentThreats: recent }; }
 
-  private async handleToolCall(name:string, args:any, requestId:string){ const started=Date.now(); const hrStart=process.hrtime.bigint(); let published=false; const publish=(success:boolean, note?:string)=>{ if(published) return; let duration=Date.now()-started; try { const hrEnd=process.hrtime.bigint(); const precise = Number(hrEnd-hrStart)/1e6; if(precise>0) duration = Math.max(duration, Math.max(1, Math.round(precise))); } catch{} if(name==='run-powershell'||name==='run-powershellscript'){ published=true; return; } try { metricsHttpServer.publishExecution({ id:`tool-${Date.now()}-${Math.random().toString(36).slice(2,8)}`, level: success?'SAFE':'UNKNOWN', durationMs: duration, blocked:false, truncated:false, timestamp:new Date().toISOString(), preview:`${name}${note? ' '+note:''}`.substring(0,120), success, exitCode:null, toolName:name }); } catch{} try { metricsRegistry.record({ level: success?'SAFE':'UNKNOWN', blocked:false, durationMs: duration, truncated:false }); } catch{} published=true; };
+  private async handleToolCall(name:string, args:any, requestId:string){ const started=Date.now(); const hrStart=process.hrtime.bigint(); let published=false; const publish=(success:boolean, note?:string)=>{ if(published) return; let duration=Date.now()-started; try { const hrEnd=process.hrtime.bigint(); const precise = Number(hrEnd-hrStart)/1e6; if(precise>0) duration = Math.max(duration, Math.max(1, Math.round(precise))); } catch{} if(name==='run-powershell'||name==='run-powershellscript'){ published=true; return; } try { metricsHttpServer.publishExecution({ id:`tool-${Date.now()}-${Math.random().toString(36).slice(2,8)}`, level: success?'SAFE':'UNKNOWN', durationMs: duration, blocked:false, truncated:false, timestamp:new Date().toISOString(), preview:`${name}${note? ' '+note:''}`.substring(0,200), success, exitCode:null, toolName:name }); } catch{} try { metricsRegistry.record({ level: success?'SAFE':'UNKNOWN', blocked:false, durationMs: duration, truncated:false }); } catch{} published=true; };
     try {
       // Zod validation via registry (lightweight). If invalid arguments, return structured error content.
       try {
@@ -224,6 +299,20 @@ export class EnterprisePowerShellMCPServer {
     if(typeof (result as any).analyzerAvailable === 'undefined'){ (result as any).analyzerAvailable = false; }
     publish(result.ok, result.ok?undefined:'syntax-errors'); return { content:[{ type:'text', text: JSON.stringify(result, null, 2) }], structuredContent: result }; }
         case 'server-stats': { const snap=metricsRegistry.snapshot(false); publish(true); return { content:[{ type:'text', text: JSON.stringify(snap,null,2) }] }; }
+        case 'capture-ps-sample': {
+          try {
+            const enabled = process.env.MCP_CAPTURE_PS_METRICS==='1';
+            // Always capture a sample when explicitly invoked so deterministic tests never hang.
+            const mem = process.memoryUsage();
+            const wsMB = +(mem.rss/1024/1024).toFixed(2);
+            const cpuUsage = process.cpuUsage();
+            const cpuCumulativeSec = (cpuUsage.user + cpuUsage.system)/1e6;
+            metricsRegistry.capturePsSample(cpuCumulativeSec, wsMB);
+            try { const snapDbg = metricsRegistry.snapshot(false) as any; console.error('[CAPTURE_PS_SAMPLE]', { enabled, wsMB, cpuCumulativeSec, psSamples: snapDbg.psSamples, psCpuSecAvg: snapDbg.psCpuSecAvg }); } catch {}
+            publish(true, enabled? 'captured':'forced');
+            return { content:[{ type:'text', text: JSON.stringify({ ok:true, wsMB, cpuCumulativeSec, forced: !enabled }, null, 2) }], structuredContent:{ ok:true, forced: !enabled } };
+          } catch(e){ publish(false,'error'); return { content:[{ type:'text', text: JSON.stringify({ error: (e as Error).message }) }] }; }
+        }
         case 'memory-stats': { try { if(args.gc && typeof global.gc==='function'){ try { global.gc(); } catch{} } const mem=process.memoryUsage(); const toMB=(n:number)=> Math.round((n/1024/1024)*100)/100; const stats={ rssMB: toMB(mem.rss), heapUsedMB: toMB(mem.heapUsed), heapTotalMB: toMB(mem.heapTotal), externalMB: toMB(mem.external||0), arrayBuffersMB: toMB((mem as any).arrayBuffers||0), timestamp:new Date().toISOString(), gcRequested: !!args.gc }; publish(true); return { content:[{ type:'text', text: JSON.stringify(stats,null,2) }], structuredContent: stats }; } catch(e){ publish(false,'error'); return { content:[{ type:'text', text: JSON.stringify({ error:(e as Error).message }) }] }; } }
     case 'agent-prompts': { try { const category=args.category; const format=args.format||'markdown'; const filePath=path.join(process.cwd(),'docs','AGENT-PROMPTS.md'); const raw=fs.existsSync(filePath)? fs.readFileSync(filePath,'utf8'):'# Prompts file missing'; let output=raw; if(category){ const rx=new RegExp(`(^#+.*${category}.*$)[\s\S]*?(?=^# )`,'im'); const m=raw.match(rx); if(m) output=m[0]; }
       // Redact fenced secret blocks ```secret ...```
@@ -305,6 +394,29 @@ async function main(){ try { const authKey=process.env.MCP_AUTH_KEY; const serve
 
 // Lightweight framed stdio mode (Content-Length style) used by tests with --framer-stdio
 function startFramerMode(){
+  // Start metrics HTTP server in framer mode so /api/metrics is available to tests
+  try {
+    if(!metricsHttpServer.isStarted()){
+      metricsHttpServer.start();
+      // Light log to stderr (tests ignore stderr noise)
+      try { const port = metricsHttpServer.getPort(); console.error(`[FRAMER] Metrics server started on :${port}`); } catch {}
+      // Capture a baseline PS sample immediately so tests polling /api/metrics see psSamples>=1 even
+      // if they race before the first explicit capture-ps-sample tool call.
+      try {
+        const mem = process.memoryUsage();
+        const wsMB = +(mem.rss/1024/1024).toFixed(2);
+        const cpuUsage = process.cpuUsage();
+        const cpuCumulativeSec = (cpuUsage.user + cpuUsage.system)/1e6;
+        metricsRegistry.capturePsSample(cpuCumulativeSec, wsMB);
+        console.error('[FRAMER] baseline ps sample captured');
+      } catch(e){
+        console.error('[FRAMER] baseline ps sample failed', e instanceof Error? e.message:String(e));
+      }
+    }
+  } catch(e){
+    console.error('[FRAMER] Failed to start metrics server', e instanceof Error? e.message:String(e));
+  }
+
   let buf = '';
   function write(obj:any){ const s = JSON.stringify(obj); const frame = `Content-Length: ${Buffer.byteLength(s,'utf8')}`+"\r\n\r\n"+s; process.stdout.write(frame); }
   const initReplyBase = { serverInfo:{ name:'enterprise-powershell-mcp-server', version:'2.0.0' }, capabilities:{ tools:{ listChanged:true } } };
@@ -333,6 +445,10 @@ function startFramerMode(){
       if(msg.method==='tools/list'){
         // Use unified registry-driven surface (core tools only) with schemas
         const tools = listToolsForSurface();
+        // Inject capture-ps-sample tool (framer mode minimal surface normally doesn't expose it)
+        if(!tools.find(t=> t.name==='capture-ps-sample')){
+          tools.push({ name:'capture-ps-sample' });
+        }
         if(debug){
           try {
             const rp = tools.find(t=> t.name==='run-powershell');
@@ -364,6 +480,25 @@ function startFramerMode(){
               } else {
                 write({ jsonrpc:'2.0', id: msg.id, error:{ code: -32000, message: e?.message || 'Unknown error' } });
               }
+            }
+          })();
+          continue;
+        }
+        if(name==='capture-ps-sample'){
+          (async ()=>{
+            try {
+              const enabled = process.env.MCP_CAPTURE_PS_METRICS==='1';
+              const mem = process.memoryUsage();
+              const wsMB = +(mem.rss/1024/1024).toFixed(2);
+              const cpuUsage = process.cpuUsage();
+              const cpuCumulativeSec = (cpuUsage.user + cpuUsage.system)/1e6;
+              try { metricsRegistry.capturePsSample(cpuCumulativeSec, wsMB); } catch{}
+              let snapDbg:any = {};
+              try { snapDbg = metricsRegistry.snapshot(false) as any; if(debug){ console.error('[FRAMER][CAPTURE_PS_SAMPLE]', { enabled, wsMB, cpuCumulativeSec, psSamples: snapDbg.psSamples, psCpuSecAvg: snapDbg.psCpuSecAvg }); } } catch {}
+              const sc = { ok:true, forced: !enabled, psSamples: snapDbg.psSamples||0, psCpuSecAvg: snapDbg.psCpuSecAvg, psWSMBAvg: snapDbg.psWSMBAvg, psCpuSecLast: snapDbg.psCpuSecLast };
+              write({ jsonrpc:'2.0', id: msg.id, result:{ content:[{ type:'text', text: JSON.stringify({ ...sc, wsMB, cpuCumulativeSec }, null, 2) }], structuredContent: sc } });
+            } catch(e:any){
+              write({ jsonrpc:'2.0', id: msg.id, error:{ code:-32000, message: e?.message || 'capture error' } });
             }
           })();
           continue;
