@@ -74,10 +74,12 @@ Auth key (when `enforceAuth` true): set `MCP_AUTH_KEY`.
 
 | Tool                   | Purpose                              | Notes                                                       |
 |------------------------|--------------------------------------|-------------------------------------------------------------|
-| run-powershell         | Execute PowerShell                   | Classified; needs `confirmed:true` if RISKY/UNKNOWN          |
-| powershell-syntax-check| Parse & (optional) analyze script    | Native parser + optional analyzer via env                   |
-| server-stats           | Metrics / threat snapshot            | Read-only                                                   |
+| run_powershell         | Execute PowerShell                   | Classified; needs `confirmed:true` if RISKY/UNKNOWN          |
+| powershell_syntax_check| Parse & (optional) analyze script    | Native parser + optional analyzer via env                   |
+| server_stats           | Metrics / threat snapshot            | Read-only                                                   |
 | audit / admin (future) | Administrative introspection         | Gated                                                       |
+
+Transitional Note: A legacy alias `run-powershell` is temporarily accepted for backwards compatibility in v1.3.6 only and scheduled for removal in v1.4.0. New integrations must use `run_powershell` and underscore parameter names (`aiAgentTimeoutSec`, etc.).
 
 ### Classification Flow
 
