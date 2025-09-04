@@ -516,6 +516,27 @@ function startFramerMode(){
           })();
           continue;
         }
+        if(name==='powershell-syntax-check' || name==='powershell_syntax_check'){
+          (async ()=>{
+            try {
+              let script = args.script || '';
+              const fileA = args.file_path || args.filePath;
+              if(!script && fileA && typeof fileA === 'string'){
+                try { if(fs.existsSync(fileA)){ script = fs.readFileSync(fileA,'utf8'); } } catch{}
+              }
+              if(!script){
+                write({ jsonrpc:'2.0', id: msg.id, result:{ content:[{ type:'text', text: JSON.stringify({ ok:false, error:'No script content provided', analyzerAvailable:false }) }] } });
+                return;
+              }
+              const result = await parsePowerShellSyntax(script);
+              if(typeof (result as any).analyzerAvailable === 'undefined'){ (result as any).analyzerAvailable = false; }
+              write({ jsonrpc:'2.0', id: msg.id, result:{ content:[{ type:'text', text: JSON.stringify(result, null, 2) }], structuredContent: result } });
+            } catch(e:any){
+              write({ jsonrpc:'2.0', id: msg.id, error:{ code:-32000, message: e?.message || 'syntax-check error' } });
+            }
+          })();
+          continue;
+        }
         // Fallback minimal stub for other tools in framer mode
         write({ jsonrpc:'2.0', id: msg.id, result:{ content:[{ type:'text', text:`unhandled tool ${name}\n`}] } });
         continue;
