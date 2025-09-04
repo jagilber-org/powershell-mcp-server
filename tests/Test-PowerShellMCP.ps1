@@ -270,7 +270,7 @@ function Start-InteractiveMode {
                 }
                 "^test$" {
                     $params = @{
-                        name = "ai-agent-test"
+                        name = "ai_agent_test"
                         arguments = @{ testSuite = "basic" }
                     }
                     $response = Send-MCPRequest -Process $Process -Method "tools/call" -Params $params -Id $requestId

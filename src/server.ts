@@ -176,7 +176,7 @@ export class EnterprisePowerShellMCPServer {
 
   private detectPowerShellAlias(command:string): AliasDetectionResult { const first=command.trim().split(/\s+/)[0].toLowerCase(); if(POWERSHELL_ALIAS_MAP[first]){ const info=POWERSHELL_ALIAS_MAP[first]; this.threatStats.aliasesDetected++; auditLog('WARNING','ALIAS_DETECTED','Alias detected',{ alias:first, cmdlet:info.cmdlet, risk:info.risk }); return { alias:first, cmdlet:info.cmdlet, risk:info.risk, category:info.category, originalCommand:command, isAlias:true, aliasType:'BUILTIN', securityRisk:info.risk, reason:`Alias '${first}' -> '${info.cmdlet}' (${info.risk})` }; } for(const pat of SUSPICIOUS_ALIAS_PATTERNS){ if(new RegExp(pat,'i').test(command)){ auditLog('CRITICAL','SUSPICIOUS_PATTERN','Pattern detected',{ pattern:pat }); return { alias:first, cmdlet:first, risk:'CRITICAL', category:'SECURITY_THREAT', originalCommand:command, isAlias:false, aliasType:'UNKNOWN', securityRisk:'CRITICAL', reason:`Suspicious pattern: ${pat}` }; } } return { alias:first, cmdlet:first, risk:'LOW', category:'INFORMATION_GATHERING', originalCommand:command, isAlias:false, aliasType:'UNKNOWN', securityRisk:'LOW', reason:'No alias match' }; }
 
-  private trackUnknownThreat(command:string, assessment: SecurityAssessment){ const key=command.toLowerCase().trim(); const now=new Date().toISOString(); if(this.unknownThreats.has(key)){ const ex=this.unknownThreats.get(key)!; ex.frequency++; ex.lastSeen=now; ex.riskAssessment=assessment; return; } this.threatStats.totalUnknownCommands++; this.threatStats.uniqueThreats++; if(assessment.risk==='HIGH'||assessment.risk==='CRITICAL') this.threatStats.highRiskThreats++; const alias=this.detectPowerShellAlias(command); const possible=alias.isAlias?[alias.resolvedCommand||'']:[]; const entry: UnknownThreatEntry = { id:`threat_${Date.now()}_${Math.random().toString(36).slice(2,6)}`, command, sessionId:this.sessionId, firstSeen:now, lastSeen:now, timestamp:now, count:1, risk:assessment.risk, level:assessment.level, category:assessment.category, reasons:[assessment.reason], frequency:1, possibleAliases:possible, riskAssessment:assessment }; this.unknownThreats.set(key, entry); try { recordUnknownCandidate(command, this.sessionId, LEARNING_CONFIG); } catch{} auditLog('WARNING','UNKNOWN_THREAT','New unknown command',{ command, risk:assessment.risk, level:assessment.level }); publishExecutionAttempt({ toolName:'run-powershell', level:'UNKNOWN', blocked:false, durationMs:0, success:false, exitCode:null, preview: command.substring(0,120)+' [UNKNOWN]', truncated:false, candidateNorm: undefined, reason:'unknown', incrementConfirmedRequired:true }); }
+  private trackUnknownThreat(command:string, assessment: SecurityAssessment){ const key=command.toLowerCase().trim(); const now=new Date().toISOString(); if(this.unknownThreats.has(key)){ const ex=this.unknownThreats.get(key)!; ex.frequency++; ex.lastSeen=now; ex.riskAssessment=assessment; return; } this.threatStats.totalUnknownCommands++; this.threatStats.uniqueThreats++; if(assessment.risk==='HIGH'||assessment.risk==='CRITICAL') this.threatStats.highRiskThreats++; const alias=this.detectPowerShellAlias(command); const possible=alias.isAlias?[alias.resolvedCommand||'']:[]; const entry: UnknownThreatEntry = { id:`threat_${Date.now()}_${Math.random().toString(36).slice(2,6)}`, command, sessionId:this.sessionId, firstSeen:now, lastSeen:now, timestamp:now, count:1, risk:assessment.risk, level:assessment.level, category:assessment.category, reasons:[assessment.reason], frequency:1, possibleAliases:possible, riskAssessment:assessment }; this.unknownThreats.set(key, entry); try { recordUnknownCandidate(command, this.sessionId, LEARNING_CONFIG); } catch{} auditLog('WARNING','UNKNOWN_THREAT','New unknown command',{ command, risk:assessment.risk, level:assessment.level }); publishExecutionAttempt({ toolName:'run_powershell', level:'UNKNOWN', blocked:false, durationMs:0, success:false, exitCode:null, preview: command.substring(0,120)+' [UNKNOWN]', truncated:false, candidateNorm: undefined, reason:'unknown', incrementConfirmedRequired:true }); }
 
   /** Invalidate cached patterns to force rebuild on next classification */
   private invalidatePatternCache() {
@@ -267,6 +267,7 @@ export class EnterprisePowerShellMCPServer {
         return { content:[{ type:'text', text: `Invalid arguments for ${name}: ${msg}` }], structuredContent:{ ok:false, error:'INVALID_ARGUMENTS', details: msg } };
       }
       switch(name){
+        case 'emit_log':
         case 'emit-log': {
           // Basic hardened logging: secret redaction + length truncation + explicit status keywords
           let message = (args.message||'(no message)').toString();
@@ -293,12 +294,17 @@ export class EnterprisePowerShellMCPServer {
           const text = `${meta}: ${message}`;
           return { content:[{ type:'text', text }], structuredContent:{ ok:true, truncated, redactions, originalLength, stored:true } };
         }
+  case 'run_powershell':
   case 'run-powershell': { const pre = this.classifyCommandSafety(args.command||args.script||''); const result = await runPowerShellTool({ ...args, _preClassified: pre, _unknownTracked: pre.level==='UNKNOWN' }); published=true; return result; }
-  case 'run-powershellscript': { if(args.scriptFile && !args.script && !args.command){ const fp = path.isAbsolute(args.scriptFile)? args.scriptFile : path.join(args.workingDirectory||process.cwd(), args.scriptFile); if(!fs.existsSync(fp)){ publish(false,'script-file-missing'); return { content:[{ type:'text', text: JSON.stringify({ error:'Script file not found', scriptFile: fp }) }] }; } try { const content=fs.readFileSync(fp,'utf8'); args.script=content; args.command=content; args._sourceFile=fp; } catch(e){ publish(false,'script-read-failed'); return { content:[{ type:'text', text: JSON.stringify({ error:'Failed to read script file', message:(e as Error).message }) }] }; } } else if(args.script && !args.command){ args.command=args.script; } const pre = this.classifyCommandSafety(args.command||args.script||''); const result = await runPowerShellTool({ ...args, _preClassified: pre, _unknownTracked: pre.level==='UNKNOWN' }); if(result?.structuredContent){ result.structuredContent.sourceFile = args._sourceFile; } published=true; return result; }
-  case 'powershell-syntax-check': { const script=args.script || (args.filePath && fs.existsSync(args.filePath)? fs.readFileSync(args.filePath,'utf8'):''); if(!script){ publish(false,'no-script'); return { content:[{ type:'text', text: JSON.stringify({ ok:false, error:'No script content provided', analyzerAvailable:false }) }] }; } const result = await parsePowerShellSyntax(script); // Guarantee analyzerAvailable field always present so tests relying on regex do not race on module load
+  case 'run_powershellscript':
+  case 'run-powershellscript': { if((args.script_file || args.scriptFile) && !args.script && !args.command){ const scriptFileArg = args.script_file || args.scriptFile; const fp = path.isAbsolute(scriptFileArg)? scriptFileArg : path.join(args.working_directory||args.workingDirectory||process.cwd(), scriptFileArg); if(!fs.existsSync(fp)){ publish(false,'script-file-missing'); return { content:[{ type:'text', text: JSON.stringify({ error:'Script file not found', script_file: fp }) }] }; } try { const content=fs.readFileSync(fp,'utf8'); args.script=content; args.command=content; args._sourceFile=fp; } catch(e){ publish(false,'script-read-failed'); return { content:[{ type:'text', text: JSON.stringify({ error:'Failed to read script file', message:(e as Error).message }) }] }; } } else if(args.script && !args.command){ args.command=args.script; } const pre = this.classifyCommandSafety(args.command||args.script||''); const result = await runPowerShellTool({ ...args, _preClassified: pre, _unknownTracked: pre.level==='UNKNOWN' }); if(result?.structuredContent){ result.structuredContent.sourceFile = args._sourceFile; } published=true; return result; }
+  case 'powershell_syntax_check':
+  case 'powershell-syntax-check': { const script=args.script || (args.file_path && fs.existsSync(args.file_path)? fs.readFileSync(args.file_path,'utf8'):'') || (args.filePath && fs.existsSync(args.filePath)? fs.readFileSync(args.filePath,'utf8'):''); if(!script){ publish(false,'no-script'); return { content:[{ type:'text', text: JSON.stringify({ ok:false, error:'No script content provided', analyzerAvailable:false }) }] }; } const result = await parsePowerShellSyntax(script); // Guarantee analyzerAvailable field always present so tests relying on regex do not race on module load
     if(typeof (result as any).analyzerAvailable === 'undefined'){ (result as any).analyzerAvailable = false; }
     publish(result.ok, result.ok?undefined:'syntax-errors'); return { content:[{ type:'text', text: JSON.stringify(result, null, 2) }], structuredContent: result }; }
+        case 'server_stats':
         case 'server-stats': { const snap=metricsRegistry.snapshot(false); publish(true); return { content:[{ type:'text', text: JSON.stringify(snap,null,2) }] }; }
+        case 'capture_ps_sample':
         case 'capture-ps-sample': {
           try {
             const enabled = process.env.MCP_CAPTURE_PS_METRICS==='1';
@@ -313,8 +319,10 @@ export class EnterprisePowerShellMCPServer {
             return { content:[{ type:'text', text: JSON.stringify({ ok:true, wsMB, cpuCumulativeSec, forced: !enabled }, null, 2) }], structuredContent:{ ok:true, forced: !enabled } };
           } catch(e){ publish(false,'error'); return { content:[{ type:'text', text: JSON.stringify({ error: (e as Error).message }) }] }; }
         }
+        case 'memory_stats':
         case 'memory-stats': { try { if(args.gc && typeof global.gc==='function'){ try { global.gc(); } catch{} } const mem=process.memoryUsage(); const toMB=(n:number)=> Math.round((n/1024/1024)*100)/100; const stats={ rssMB: toMB(mem.rss), heapUsedMB: toMB(mem.heapUsed), heapTotalMB: toMB(mem.heapTotal), externalMB: toMB(mem.external||0), arrayBuffersMB: toMB((mem as any).arrayBuffers||0), timestamp:new Date().toISOString(), gcRequested: !!args.gc }; publish(true); return { content:[{ type:'text', text: JSON.stringify(stats,null,2) }], structuredContent: stats }; } catch(e){ publish(false,'error'); return { content:[{ type:'text', text: JSON.stringify({ error:(e as Error).message }) }] }; } }
-    case 'agent-prompts': { try { const category=args.category; const format=args.format||'markdown'; const filePath=path.join(process.cwd(),'docs','AGENT-PROMPTS.md'); const raw=fs.existsSync(filePath)? fs.readFileSync(filePath,'utf8'):'# Prompts file missing'; let output=raw; if(category){ const rx=new RegExp(`(^#+.*${category}.*$)[\s\S]*?(?=^# )`,'im'); const m=raw.match(rx); if(m) output=m[0]; }
+    case 'agent_prompts':
+    case 'agent-prompts': { try { const category=args.category; const format=args.format||'markdown'; const filePath=path.join(process.cwd(),'docs','AGENT-PROMPTS.md'); const raw=fs.existsSync(filePath)? fs.readFileSync(filePath,'utf8'):'# Prompts file missing'; let output=raw; if(category){ const rx=new RegExp(`(^#+.*${category}.*$)[\\s\\S]*?(?=^# )`,'im'); const m=raw.match(rx); if(m) output=m[0]; }
       // Redact fenced secret blocks ```secret ...```
       output = output.replace(/```secret[\r\n]+[\s\S]*?```/gi,'[SECRET BLOCK REDACTED]');
       // Truncate excessively large prompt file for safety
@@ -322,11 +330,16 @@ export class EnterprisePowerShellMCPServer {
       const MAX_PROMPT_CHARS = 4000; // generous; test writes much larger to trigger truncation
       if(output.length > MAX_PROMPT_CHARS){ output = output.slice(0, MAX_PROMPT_CHARS) + truncateIndicator; }
       if(format==='json'){ publish(true); return { content:[{ type:'text', text: JSON.stringify({ category: category||'all', content: output.split(/\r?\n/) }, null, 2) }] }; } publish(true); return { content:[{ type:'text', text: output }] }; } catch(e){ publish(false,'error'); return { content:[{ type:'text', text: JSON.stringify({ error:(e as Error).message }) }] }; } }
-        case 'working-directory-policy': { if(args.action==='get' || !args.action){ publish(true,'get'); return { content:[{ type:'text', text: JSON.stringify(ENTERPRISE_CONFIG.security,null,2) }] }; } else if(args.action==='set'){ if(typeof args.enabled==='boolean') ENTERPRISE_CONFIG.security.enforceWorkingDirectory=args.enabled; if(Array.isArray(args.allowedWriteRoots)) ENTERPRISE_CONFIG.security.allowedWriteRoots=args.allowedWriteRoots; auditLog('INFO','WORKING_DIR_POLICY_UPDATE','Policy updated',{ requestId, enforce: ENTERPRISE_CONFIG.security.enforceWorkingDirectory }); publish(true,'set'); return { content:[{ type:'text', text: JSON.stringify({ ok:true, policy: ENTERPRISE_CONFIG.security },null,2) }] }; } publish(false,'unknown-action'); return { content:[{ type:'text', text: JSON.stringify({ error:'Unknown action' }) }] }; }
+        case 'working_directory_policy':
+        case 'working-directory-policy': { if(args.action==='get' || !args.action){ publish(true,'get'); return { content:[{ type:'text', text: JSON.stringify(ENTERPRISE_CONFIG.security,null,2) }] }; } else if(args.action==='set'){ if(typeof args.enabled==='boolean') ENTERPRISE_CONFIG.security.enforceWorkingDirectory=args.enabled; if(Array.isArray(args.allowed_write_roots)) ENTERPRISE_CONFIG.security.allowedWriteRoots=args.allowed_write_roots; else if(Array.isArray(args.allowedWriteRoots)) ENTERPRISE_CONFIG.security.allowedWriteRoots=args.allowedWriteRoots; auditLog('INFO','WORKING_DIR_POLICY_UPDATE','Policy updated',{ requestId, enforce: ENTERPRISE_CONFIG.security.enforceWorkingDirectory }); publish(true,'set'); return { content:[{ type:'text', text: JSON.stringify({ ok:true, policy: ENTERPRISE_CONFIG.security },null,2) }] }; } publish(false,'unknown-action'); return { content:[{ type:'text', text: JSON.stringify({ error:'Unknown action' }) }] }; }
+        case 'threat_analysis':
         case 'threat-analysis': { const threats=Array.from(this.unknownThreats.values()).sort((a,b)=> b.count-a.count); publish(true); return { content:[{ type:'text', text: JSON.stringify({ summary:this.threatStats, threats }, null, 2) }] }; }
         case 'learn': { const action=args.action; if(action==='list'){ const data=aggregateCandidates(args.limit, args.minCount); publish(true,'list'); return { content:[{ type:'text', text: JSON.stringify({ candidates:data }, null, 2) }] }; } else if(action==='recommend'){ const rec=recommendCandidates(args.limit, args.minCount); publish(true,'recommend'); return { content:[{ type:'text', text: JSON.stringify({ recommendations:rec }, null, 2) }] }; } else if(action==='queue'){ const res=queueCandidates(args.normalized||[]); publish(true,'queue'); return { content:[{ type:'text', text: JSON.stringify({ queued:res }, null, 2) }] }; } else if(action==='approve'){ const res=approveQueuedCandidates(args.normalized||[]); if(res.promoted > 0) this.invalidatePatternCache(); publish(true,'approve'); return { content:[{ type:'text', text: JSON.stringify({ approved:res }, null, 2) }] }; } else if(action==='remove'){ const res=removeFromQueue(args.normalized||[]); publish(true,'remove'); return { content:[{ type:'text', text: JSON.stringify({ removed:res }, null, 2) }] }; } publish(false,'unknown-learn-action'); return { content:[{ type:'text', text: JSON.stringify({ error:'Unknown learn action' }) }] }; }
-  case 'help': { const topic=(args.topic||'').toLowerCase(); const help:Record<string,string>={ security:'Security classification system: SAFE,RISKY,DANGEROUS,CRITICAL,UNKNOWN,BLOCKED.', monitoring:'Use server-stats for metrics; threat-analysis for unknown commands.', authentication:'Set MCP_AUTH_KEY env var to enable key requirement.', examples:'run-powershell { command:"Get-Process | Select -First 1" }', 'working-directory':'Policy enforced roots: '+(ENTERPRISE_CONFIG.security.allowedWriteRoots||[]).join(', '), timeouts:'Timeout parameter is timeoutSeconds (seconds). Default=' + ((ENTERPRISE_CONFIG.limits.defaultTimeoutMs||90000)/1000)+'s. No other timeout fields accepted.' }; if(topic && help[topic]){ publish(true,'topic'); return { content:[{ type:'text', text: help[topic] }] }; } publish(true,'all'); return { content:[{ type:'text', text: JSON.stringify(help,null,2) }] }; }
+        case 'ai_agent_tests':
+        case 'ai-agent-tests': { const testSuite = args.test_suite || args.testSuite || 'default'; const skipDangerous = args.skip_dangerous ?? args.skipDangerous ?? true; try { const filePath=path.join(process.cwd(),'data','ai-agent-tests.json'); const raw=fs.existsSync(filePath)? fs.readFileSync(filePath,'utf8'):'{}'; const tests=JSON.parse(raw)[testSuite]||[]; const results=[]; for(const t of tests){ if(skipDangerous && t.risk==='HIGH') continue; try{ const fakeReq = { command:t.command, confirmed:true, _skipUnknownTracking:true }; const res = await runPowerShellTool(fakeReq); results.push({ ...t, passed: !!res?.structuredContent?.success }); } catch(e){ results.push({ ...t, passed:false, error:(e as Error).message }); } } const report={ testSuite, total:results.length, passed:results.filter(r=>r.passed).length, results }; publish(true); return { content:[{ type:'text', text: JSON.stringify(report,null,2) }], structuredContent: report }; } catch(e){ publish(false,'error'); return { content:[{ type:'text', text: JSON.stringify({ error:(e as Error).message }) }] }; } }
+  case 'help': { const topic=(args.topic||'').toLowerCase(); const help:Record<string,string>={ security:'Security classification system: SAFE,RISKY,DANGEROUS,CRITICAL,UNKNOWN,BLOCKED.', monitoring:'Use server_stats for metrics; threat_analysis for unknown commands.', authentication:'Set MCP_AUTH_KEY env var to enable key requirement.', examples:'run_powershell { command:"Get-Process | Select -First 1" }', 'working_directory':'Policy enforced roots: '+(ENTERPRISE_CONFIG.security.allowedWriteRoots||[]).join(', '), timeouts:'Timeout parameter is timeout_seconds (seconds). Default=' + ((ENTERPRISE_CONFIG.limits.defaultTimeoutMs||90000)/1000)+'s. No other timeout fields accepted.' }; if(topic && help[topic]){ publish(true,'topic'); return { content:[{ type:'text', text: help[topic] }] }; } publish(true,'all'); return { content:[{ type:'text', text: JSON.stringify(help,null,2) }] }; }
   case 'health': { const mem=process.memoryUsage(); const uptimeSec = Math.round((Date.now()-this.startTime.getTime())/1000); const json={ uptimeSec, memory:{ rss: mem.rss, heapUsed: mem.heapUsed, heapTotal: mem.heapTotal }, config:{ timeoutMs: ENTERPRISE_CONFIG.limits.defaultTimeoutMs || 90000 } }; publish(true); return { content:[{ type:'text', text: JSON.stringify(json) }], structuredContent: json }; }
+  case 'tool_tree':
   case 'tool-tree': { const tree=listToolTree(); publish(true); return { content:[{ type:'text', text: JSON.stringify(tree,null,2) }], structuredContent: tree }; }
         default: publish(false,'unknown-tool'); return { content:[{ type:'text', text: JSON.stringify({ error:'Unknown tool: '+name }) }] }; }
     } catch(error){
@@ -359,14 +372,14 @@ export class EnterprisePowerShellMCPServer {
       properties:{
         command:{ type:'string' },
         script:{ type:'string' },
-        workingDirectory:{ type:'string' },
-        timeoutSeconds:{ type:'number' },
+        working_directory:{ type:'string' },
+        timeout_seconds:{ type:'number' },
         confirmed:{ type:'boolean' },
-        adaptiveTimeout:{ type:'boolean' }
+        adaptive_timeout:{ type:'boolean' }
       }
     };
-    return [ 'run-powershell','powershell-syntax-check','emit-log','working-directory-policy','server-stats','help' ]
-      .map(n=> n==='run-powershell' ? { name:n, inputSchema: runPsSchema } : { name:n });
+    return [ 'run_powershell','powershell_syntax_check','emit_log','working_directory_policy','server_stats','help' ]
+      .map(n=> n==='run_powershell' ? { name:n, inputSchema: runPsSchema } : { name:n });
   }
   
   /** Explicit initialize handler to guarantee timely handshake even under load */
@@ -374,7 +387,7 @@ export class EnterprisePowerShellMCPServer {
     protocolVersion: '2024-11-05',
     capabilities: { tools: { listChanged: true } },
     serverInfo: { name: 'enterprise-powershell-mcp-server', version: '2.0.0' },
-  instructions: 'Call tools/list for core tools. Hidden admin tools (memory-stats, threat-analysis, learn, health, ai-agent-tests) are callable directly. Use tools/call { name, arguments }. Provide confirmed:true for RISKY or UNKNOWN.'
+  instructions: 'Call tools/list for core tools. Hidden admin tools (memory_stats, threat_analysis, learn, health, ai_agent_tests) are callable directly. Use tools/call { name, arguments }. Provide confirmed:true for RISKY or UNKNOWN.'
   })); } catch {} return true; })();
 
   async start(){
@@ -462,7 +475,7 @@ function startFramerMode(){
       if(msg.method==='tools/call'){
         const name = msg.params?.name;
         const args = msg.params?.arguments || {};
-        if(name==='run-powershell'){
+    if(name==='run-powershell' || name==='run_powershell'){
           if(tokens<=0){
             if(debug){ console.error('[FRAMER][RATE_LIMIT]'); }
             write({ jsonrpc:'2.0', id: msg.id, error:{ code: -32001, message: 'rate limit exceeded', data:{ retryMs: 1000, agentFriendly:true } } });
@@ -471,7 +484,7 @@ function startFramerMode(){
           tokens--;
           (async ()=>{
             try {
-              const result = await runPowerShellTool(args);
+      const result = await runPowerShellTool(args);
               write({ jsonrpc:'2.0', id: msg.id, result });
             } catch(e:any){
               if(debug){ console.error('[FRAMER][ERR]', e?.message); }

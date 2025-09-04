@@ -1,8 +1,8 @@
-#  Knowledge Index
+# Knowledge Index
 
 > Key Learning: The `activate_<category>_tools` functions are the reliable method for MCP tool enablement in VS Code environments, especially for automated/agent workflows.
 
->  ULTRA-CRITICAL ENFORCEMENT BANNER (DO NOT BYPASS) 
+> ULTRA-CRITICAL ENFORCEMENT BANNER (DO NOT BYPASS)
 >
 > ABSOLUTE RULE: **DO NOT ISSUE RAW TERMINAL COMMANDS WHEN AN MCP TOOL CAN ACHIEVE THE OUTCOME. ALWAYS ROUTE THROUGH A REGISTERED MCP SERVER TOOL INSTEAD OF DIRECT TERMINAL.**
 >
@@ -16,8 +16,8 @@
 >
 > MCP GATING CHECKLIST (ALL must be NO to even CONSIDER terminal) -- evaluate across ALL registered MCP servers (aggregate tool surface):
 >
-> 1. Exists specialized MCP tool (on any registered server: e.g., Git server tools, log-test, server-stats, ai-agent-test, GitHub/Issue tools, etc.)?
-> 2. Can generic `powershell-command` run the shell/PowerShell you were about to run? (Usually YES.)
+> 1. Exists specialized MCP tool (on any registered server: e.g., Git server tools, log_test, server_stats, ai_agent_test, GitHub/Issue tools, etc.)?
+> 2. Can generic `powershell_command` run the shell/PowerShell you were about to run? (Usually YES.)
 > 3. Would using terminal cause loss of audit/metrics/security classification? (If YES -> BLOCK.)
 > 4. Is this routine repo hygiene (git ops) now covered by git-* tools? (If YES -> use tools.)
 > 5. Has a similar prior terminal attempt been replaced by a tool this session? (If YES -> use tool.)

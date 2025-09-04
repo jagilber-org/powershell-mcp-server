@@ -23,7 +23,7 @@ This document details the secure, human-in-the-loop pipeline for evolving UNKNOW
    - distinct session IDs
    - sample redacted variant (for UI display only)
 
-### Tool: `list-unknown-candidates`
+### Tool: `list_unknown_candidates`
 
 Returns aggregated candidates (redacted + normalized) for manual review.
 
@@ -112,23 +112,23 @@ When approving, each normalized string is transformed into an anchored case-inse
 List candidates:
 
 ```json
-{"jsonrpc":"2.0","id":41,"method":"tools/call","params":{"name":"list-unknown-candidates","arguments":{"limit":10}}}
+{"jsonrpc":"2.0","id":41,"method":"tools/call","params":{"name":"list_unknown_candidates","arguments":{"limit":10}}}
 ```
 
 Recommend:
 
 ```json
-{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"recommend-unknown-candidates","arguments":{"limit":5,"minCount":1}}}
+{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"recommend_unknown_candidates","arguments":{"limit":5,"minCount":1}}}
 ```
 
 Queue then Approve:
 
 ```json
-{"jsonrpc":"2.0","id":43,"method":"tools/call","params":{"name":"queue-learn-candidates","arguments":{"normalized":["get-process obf_path"]}}}
+{"jsonrpc":"2.0","id":43,"method":"tools/call","params":{"name":"queue_learn_candidates","arguments":{"normalized":["get-process obf_path"]}}}
 ```
 
 ```json
-{"jsonrpc":"2.0","id":44,"method":"tools/call","params":{"name":"approve-learn-queue","arguments":{"normalized":["get-process obf_path"]}}}
+{"jsonrpc":"2.0","id":44,"method":"tools/call","params":{"name":"approve_learn_queue","arguments":{"normalized":["get-process obf_path"]}}}
 ```
 
 ## Review Checklist for Approval

@@ -250,7 +250,7 @@ class MCPClient {
                         }
                     }
                     "^test$" {
-                        $result = $this.CallTool("ai-agent-test", @{ testSuite = "basic" })
+                        $result = $this.CallTool("ai_agent_test", @{ testSuite = "basic" })
                         if ($result.content) {
                             Write-Host $result.content[0].text -ForegroundColor White
                         }
@@ -331,11 +331,11 @@ function Test-ToolsCommunication {
     
     # Test syntax check
     Write-Host "`n🔍 Testing syntax check tool..." -ForegroundColor Yellow
-    $syntaxResult = $client.CallTool("powershell-syntax-check", @{ content = "Get-Process" })
+    $syntaxResult = $client.CallTool("powershell_syntax_check", @{ content = "Get-Process" })
     
     # Test safe command
     Write-Host "`n⚡ Testing safe PowerShell command..." -ForegroundColor Yellow
-    $cmdResult = $client.CallTool("powershell-command", @{ command = "Get-Date" })
+    $cmdResult = $client.CallTool("powershell_command", @{ command = "Get-Date" })
     
     Write-Host "✅ Tools communication test completed!" -ForegroundColor Green
 }
@@ -350,7 +350,7 @@ function Test-Comprehensive {
     
     # Test AI agent validation
     Write-Host "`n🤖 Testing AI agent validation..." -ForegroundColor Yellow
-    $testResult = $client.CallTool("ai-agent-test", @{ testSuite = "basic"; skipDangerous = $true })
+    $testResult = $client.CallTool("ai_agent_test", @{ testSuite = "basic"; skipDangerous = $true })
     
     Write-Host "✅ Comprehensive test completed!" -ForegroundColor Green
 }

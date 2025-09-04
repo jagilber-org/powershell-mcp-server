@@ -24,10 +24,10 @@ This guide provides deterministic steps to diagnose common runtime observability
 
 ```json
 X Wrong:
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run-powershell","arguments":{"command":"git commit","confirmed":true}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run_powershell","arguments":{"command":"git commit","confirmed":true}}}
 
 * Correct:
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run-powershell","arguments":{"command":"git commit","confirmed":true}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run_powershell","arguments":{"command":"git commit","confirmed":true}}}
 ```
 
 **Why This Happens**: The server code checks `args.confirmed`, but many users intuitively try `confirmed`, `confirmed`, or other variants.
@@ -49,7 +49,7 @@ X Wrong:
 ```json
 {
   "command": "Get-ChildItem *.ps1", 
-  "workingDirectory": "C:\\Your\\Actual\\Workspace\\Path"
+  "working_directory": "C:\\Your\\Actual\\Workspace\\Path"
 }
 ```
 
@@ -77,7 +77,7 @@ Then send a JSON-RPC call (simplest):
 
 ```json
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"diag"},"capabilities":{}}}
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run-powershell","arguments":{"command":"Get-Date","confirmed":true}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run_powershell","arguments":{"command":"Get-Date","confirmed":true}}}
 ```
 
 Check /api/metrics (curl or browser) for `psSamples: 1`.

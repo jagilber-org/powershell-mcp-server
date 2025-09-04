@@ -39,11 +39,11 @@ async function runSuite(){
       const tools = toolsResp?.tools || [];
       state.tools = tools.map(t=> t.name);
       // Minimal core tool invocations
-      request('stats','tools/call',{ name:'server-stats', arguments:{} });
+      request('stats','tools/call',{ name:'server_stats', arguments:{} });
       request('help','tools/call',{ name:'help', arguments:{ topic:'security' } });
-      request('syntax','tools/call',{ name:'powershell-syntax-check', arguments:{ script:'Get-Process | Select -First 1' } });
-      request('run','tools/call',{ name:'run-powershell', arguments:{ command:'Write-Output "hello-enterprise"' } });
-      request('threat','tools/call',{ name:'threat-analysis', arguments:{} });
+      request('syntax','tools/call',{ name:'powershell_syntax_check', arguments:{ script:'Get-Process | Select -First 1' } });
+      request('run','tools/call',{ name:'run_powershell', arguments:{ command:'Write-Output "hello-enterprise"' } });
+      request('threat','tools/call',{ name:'threat_analysis', arguments:{} });
       setTimeout(finish, 1200);
     }, 300);
   }
@@ -53,7 +53,7 @@ async function runSuite(){
     const summary = {
       serverStarted: state.ready,
       toolCount: state.tools.length,
-      invoked: ['server-stats','help','powershell-syntax-check','run-powershell','threat-analysis'].filter(t=> !!Object.values(state.responses).find(r=> r?.content?.[0]?.text?.includes?.(t)===false || true)),
+      invoked: ['server_stats','help','powershell_syntax_check','run_powershell','threat_analysis'].filter(t=> !!Object.values(state.responses).find(r=> r?.content?.[0]?.text?.includes?.(t)===false || true)),
       outputs: Object.fromEntries(Object.entries(state.responses).map(([k,v])=>[k, typeof v==='object'? Object.keys(v): typeof v]))
     };
     console.log(JSON.stringify({ enterpriseSuite: summary, timestamp:new Date().toISOString() }, null, 2));

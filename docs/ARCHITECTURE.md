@@ -166,7 +166,7 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A{workingDirectory provided?} -->|No| SKIP[Skip Enforcement]
+    A{working_directory provided?} -->|No| SKIP[Skip Enforcement]
     A -->|Yes| RESOLVE[Resolve Real Path]
     RESOLVE --> VALID{Path Starts With Allowed Root?}
     VALID -->|No| BLOCK[VIOLATION]
@@ -175,8 +175,8 @@ flowchart TD
 
 Enforcement toggled via tools:
 
-- `enforce-working-directory` (enable/disable)
-- `get-working-directory-policy` (status + allowed roots)
+- `enforce_working_directory` (enable/disable)
+- `get_working_directory_policy` (status + allowed roots)
 
 ---
 
@@ -280,9 +280,9 @@ Supported formats:
 
 | Tool | Purpose | Schema Validation | Typical Use |
 |------|---------|-------------------|-------------|
-| `run-powershell` | Execute PowerShell command/script | Zod schema with security classification | Command execution, script automation |
+| `run_powershell` | Execute PowerShell command/script | Zod schema with security classification | Command execution, script automation |
 | `admin` | Administrative operations via hierarchical actions | Unified schema covering all admin functions | Server management, security policy, learning |
-| `syntax-check` | Validate PowerShell syntax without execution | Script or filePath validation | Pre-flight syntax validation |
+| `syntax_check` | Validate PowerShell syntax without execution | Script or filePath validation | Pre-flight syntax validation |
 | `help` | Interactive help and documentation | Topic-based help retrieval | User assistance, capability discovery |
 
 ### Administrative Tool Hierarchy (`admin`)
@@ -322,9 +322,9 @@ classDiagram
         +int totalBytes
         +object psProcessMetrics
         +SecurityAssessment securityAssessment
-        +int originalTimeoutSeconds
+        +int original_timeout_seconds
         +string[] warnings
-        +string workingDirectory
+        +string working_directory
         +object[] chunks
         +string reason
     }
@@ -468,7 +468,7 @@ Additional nuance as of Aug 2025:
 | Element | Behavior |
 |---------|----------|
 | Internal Self-Destruct | Injected timer (unless MCP_DISABLE_SELF_DESTRUCT=1) exits PowerShell (exit 124) shortly before external timeout / adaptive horizon. |
-| External Timeout | Initial window derived from timeoutSeconds. |
+| External Timeout | Initial window derived from timeout_seconds. |
 | Adaptive Window | When remaining <= extendWindowMs AND recent output activity, extend by extendStepMs. |
 | Cap | Never extends beyond adaptiveMaxTotalMs (derived from user input or 3x base timeout, capped at 180s). |
 | terminationReason | Derived atomically at finish(): `completed` \| `timeout` \| `killed` \| `output_overflow`. |
@@ -489,13 +489,13 @@ Additional nuance as of Aug 2025:
 
 ## 16.3 Timeout Parameter Aliases & Deprecations
 
-Canonical field: timeoutSeconds (seconds).
+Canonical field: timeout_seconds (seconds).
 
 Accepted aliases (with warnings):
 
 | Alias | Status | Warning Text |
 |-------|--------|--------------|
-| timeoutSeconds | Active | Primary timeout parameter (seconds). |
+| timeout_seconds | Active | Primary timeout parameter (seconds). |
 
 Long timeouts (>=60s) add a performance responsiveness warning.
 

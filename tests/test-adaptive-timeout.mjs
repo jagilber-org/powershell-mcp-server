@@ -13,7 +13,7 @@ server.stdout.on('data', data => {
     if(!line) return; let msg; try{ msg = JSON.parse(line); }catch{return; }
     if(msg.id===1){
       start = Date.now();
-  send(server,{ jsonrpc:'2.0', id:2, method:'tools/call', params:{ name:'run-powershell', arguments:{ command:'1..12 | ForEach-Object { Start-Sleep -Milliseconds 900; Write-Output "STEP$_" }', confirmed:true, timeoutSeconds:5, adaptiveTimeout:true, adaptiveExtendWindowMs:1500, adaptiveExtendStepMs:3000, adaptiveMaxTotalSec:20 }}});
+  send(server,{ jsonrpc:'2.0', id:2, method:'tools/call', params:{ name:'run_powershell', arguments:{ command:'1..12 | ForEach-Object { Start-Sleep -Milliseconds 900; Write-Output "STEP$_" }', confirmed:true, timeout_seconds:5, adaptiveTimeout:true, adaptiveExtendWindowMs:1500, adaptiveExtendStepMs:3000, adaptiveMaxTotalSec:20 }}});
     } else if(msg.id===2){
       const sc = msg.result?.structuredContent || {};
       const elapsed = Date.now()-start;

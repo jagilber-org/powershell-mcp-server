@@ -62,6 +62,11 @@ export class MCPCompliantPowerShellServer {
           inputSchema: zodToJsonSchema(RunPowerShellSchema),
         },
         {
+          name: 'run_powershell', // alias (underscore) transitional surface
+          description: 'Alias for run-powershell (underscore canonical migration)',
+          inputSchema: zodToJsonSchema(RunPowerShellSchema),
+        },
+        {
           name: 'admin',
           description: 'Administrative operations: server stats, security policy, learning system, and audit functions',
           inputSchema: zodToJsonSchema(AdminSchema),
@@ -95,6 +100,7 @@ export class MCPCompliantPowerShellServer {
       try {
         switch (name) {
           case 'run-powershell':
+          case 'run_powershell': // transitional alias underscore
             return await this.handleRunPowerShell(args, requestId);
           
           case 'admin':

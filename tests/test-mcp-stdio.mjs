@@ -104,7 +104,7 @@ setTimeout(() => {
     // Test 4: Call another PowerShell tool
     console.log('\n4️⃣ Calling PowerShell script tool...');
     sendMcpRequest('tools/call', {
-      name: 'powershell-script',
+      name: 'powershell_script',
       arguments: {
         authKey: authKey,
         script: '$PSVersionTable.PSVersion'

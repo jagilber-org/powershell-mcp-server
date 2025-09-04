@@ -51,7 +51,7 @@ Implement src/server.ts exporting async start(): create MCP Server (name/version
 ## Phase 2 – Command Execution Engine
 
 ```text
-Add executePowerShellCommand(command, timeoutMs, workingDirectory?). Use powershell.exe -NoProfile -NonInteractive. Capture stdout/stderr, exitCode, duration. Enforce limits (config object): maxOutputKB, maxLines with truncateIndicator. Return { success, stdout, stderr, exitCode, duration_ms, error? }. Add minimal test script invoking Get-Date. Verification: run sample command; confirmed truncation logic works with large output.
+Add executePowerShellCommand(command, timeoutMs, working_directory?). Use powershell.exe -NoProfile -NonInteractive. Capture stdout/stderr, exitCode, duration. Enforce limits (config object): maxOutputKB, maxLines with truncateIndicator. Return { success, stdout, stderr, exitCode, duration_ms, error? }. Add minimal test script invoking Get-Date. Verification: run sample command; confirmed truncation logic works with large output.
 ```
 
 ## Phase 3 – Security Classification
@@ -69,7 +69,7 @@ Implement auditLog(level, category, message, metadata?). Outputs to stderr + fil
 ## Phase 5 – Core Tool Suite
 
 ```text
-Register tools: powershell-command, powershell-script, powershell-file, powershell-syntax-check, help. Use zod schemas → JSON. On command/script/file: classify then enforce (block if blocked; require confirmed for requiresPrompt). Include securityAssessment in structured output + audit log entry. help tool returns markdown topics (overview, security, monitoring, authentication, examples, capabilities, ai-agents, working-directory). Verification: ListTools output includes all; sample help length > 500 chars.
+Register tools: powershell_command, powershell_script, powershell_file, powershell_syntax_check, help. Use zod schemas → JSON. On command/script/file: classify then enforce (block if blocked; require confirmed for requiresPrompt). Include securityAssessment in structured output + audit log entry. help tool returns markdown topics (overview, security, monitoring, authentication, examples, capabilities, ai-agents, working-directory). Verification: ListTools output includes all; sample help length > 500 chars.
 ```
 
 ## Phase 6 – Threat & Alias Tracking
@@ -105,13 +105,13 @@ Add tests/ scripts: Quick-MCPTest (basic tool calls), test-rate-limit, test-mcp-
 ## Phase 11 – Hardening & Dynamic Pattern Overrides
 
 ```text
-Support dynamic pattern arrays in config: additionalSafe, additionalBlocked, suppressPatterns (removes built-ins). Merge lazily. Track metrics for confirmed-required events & truncations. Extend server-stats tool to include dynamicPatterns + rateLimit snapshot. Verification: inject a blocked pattern via config; confirmed classification changes.
+Support dynamic pattern arrays in config: additionalSafe, additionalBlocked, suppressPatterns (removes built-ins). Merge lazily. Track metrics for confirmed-required events & truncations. Extend server_stats tool to include dynamicPatterns + rateLimit snapshot. Verification: inject a blocked pattern via config; confirmed classification changes.
 ```
 
 ## Phase 12 – Prompt Retrieval Tool
 
 ```text
-Add agent-prompts tool: reads docs/AGENT-PROMPTS.md, extracts headings (## <Title>), optional category filter (case-insensitive substring), format=markdown|json. Output { format, categories[], category?, content }. Add 'prompts' topic to help tool listing purpose & example invocation. Verification: agent-prompts returns categories list containing "Phase 0".
+Add agent_prompts tool: reads docs/AGENT-PROMPTS.md, extracts headings (## <Title>), optional category filter (case-insensitive substring), format=markdown|json. Output { format, categories[], category?, content }. Add 'prompts' topic to help tool listing purpose & example invocation. Verification: agent_prompts returns categories list containing "Phase 0".
 ```
 
 ## Phase 13 – Rebuild Manifest & Integrity Verification

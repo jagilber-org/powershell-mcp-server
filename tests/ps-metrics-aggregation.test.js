@@ -21,7 +21,7 @@ function waitForLine(ps, matcher, timeout = 12000) {
 }
 
 function callTool(ps, id, command) {
-  const req = { jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'run-powershell', arguments: { command, confirmed: true } } };
+  const req = { jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'run_powershell', arguments: { command, confirmed: true } } };
   ps.stdin.write(JSON.stringify(req) + '\n');
 }
 

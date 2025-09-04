@@ -47,11 +47,11 @@ async function run() {
   setTimeout(()=> send({ jsonrpc:'2.0', id:2, method:'tools/list', params:{} }, server), 1000);
   // Enable working directory enforcement first using correct tool name
   setTimeout(()=> {
-    send({ jsonrpc:'2.0', id:3, method:'tools/call', params:{ name:'enforce-working-directory', arguments:{ enabled:true } } }, server);
+    send({ jsonrpc:'2.0', id:3, method:'tools/call', params:{ name:'enforce_working_directory', arguments:{ enabled:true } } }, server);
   }, 1800);
   // Then attempt command in disallowed directory to trigger violation
   setTimeout(()=> {
-    send({ jsonrpc:'2.0', id:4, method:'tools/call', params:{ name:'powershell-command', arguments:{ command:'Get-ChildItem', workingDirectory:'C:/Windows/System32' } } }, server);
+    send({ jsonrpc:'2.0', id:4, method:'tools/call', params:{ name:'powershell_command', arguments:{ command:'Get-ChildItem', working_directory:'C:/Windows/System32' } } }, server);
   }, 2600);
 }
 run();

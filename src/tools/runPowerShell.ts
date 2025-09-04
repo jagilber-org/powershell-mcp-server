@@ -312,8 +312,8 @@ export async function runPowerShellTool(args: any){
         properties: {
           command: { type: 'string', description: 'Inline PowerShell to execute' },
           script: { type: 'string', description: 'Alternate field name; treated same as command' },
-          workingDirectory: { type: 'string', description: 'Absolute path for execution context (optional)' },
-          timeoutSeconds: { type: 'number', description: 'Max execution time in seconds (optional)' },
+          working_directory: { type: 'string', description: 'Absolute path for execution context (optional)' },
+          timeout_seconds: { type: 'number', description: 'Max execution time in seconds (optional)' },
           confirmed: { type: 'boolean', description: 'Must be true for RISKY / UNKNOWN commands' }
         },
         anyOf: [ { required: ['command'] }, { required: ['script'] } ]
@@ -352,21 +352,25 @@ export async function runPowerShellTool(args: any){
   throw new McpError(ErrorCode.InvalidRequest, `requires confirmed:true (${cat})`);
   }
   // Timeout handling with backward-compatible aliases + warnings
-    // Canonical: timeoutSeconds. Deprecated aliases: aiAgentTimeoutSec, aiAgentTimeout, timeout
-    // We surface deprecation warnings when aliases used OR when canonical exceeds thresholds with legacy fields present.
-  let timeoutSeconds = args.timeoutSeconds;
+    // Canonical: timeout_seconds. Support legacy camelCase for backward compatibility
+  let timeoutSeconds = args.timeout_seconds || args.timeoutSeconds;
   const warnings: string[] = [];
   if(typeof timeoutSeconds !== 'number'){
-      if(typeof args.aiAgentTimeoutSec === 'number') {
-        timeoutSeconds = args.aiAgentTimeoutSec;
-        warnings.push("Parameter 'aiAgentTimeoutSec' is deprecated; use 'timeoutSeconds'.");
+      if(typeof args.ai_agent_timeout_sec === 'number') {
+        timeoutSeconds = args.ai_agent_timeout_sec;
+        warnings.push("Parameter 'ai_agent_timeout_sec' is deprecated; use 'timeout_seconds'.");
       }
-    else if(typeof args.aiAgentTimeout === 'number') { timeoutSeconds = args.aiAgentTimeout; warnings.push("Parameter 'aiAgentTimeout' is deprecated; use 'timeoutSeconds'."); }
-    else if(typeof args.timeout === 'number') { timeoutSeconds = args.timeout; warnings.push("Parameter 'timeout' is deprecated; use 'timeoutSeconds'."); }
+    else if(typeof args.aiAgentTimeoutSec === 'number') {
+      timeoutSeconds = args.aiAgentTimeoutSec;
+      warnings.push("Parameter 'aiAgentTimeoutSec' is deprecated; use 'timeout_seconds'.");
+    }
+    else if(typeof args.ai_agent_timeout === 'number') { timeoutSeconds = args.ai_agent_timeout; warnings.push("Parameter 'ai_agent_timeout' is deprecated; use 'timeout_seconds'."); }
+    else if(typeof args.aiAgentTimeout === 'number') { timeoutSeconds = args.aiAgentTimeout; warnings.push("Parameter 'aiAgentTimeout' is deprecated; use 'timeout_seconds'."); }
+    else if(typeof args.timeout === 'number') { timeoutSeconds = args.timeout; warnings.push("Parameter 'timeout' is deprecated; use 'timeout_seconds'."); }
   } else {
     // If canonical provided but deprecated also present, still warn once for clarity
-    if(typeof args.aiAgentTimeout === 'number') warnings.push("Parameter 'aiAgentTimeout' is deprecated; prefer 'timeoutSeconds'.");
-    if(typeof args.timeout === 'number') warnings.push("Parameter 'timeout' is deprecated; prefer 'timeoutSeconds'.");
+    if(typeof args.aiAgentTimeout === 'number') warnings.push("Parameter 'aiAgentTimeout' is deprecated; prefer 'timeout_seconds'.");
+    if(typeof args.timeout === 'number') warnings.push("Parameter 'timeout' is deprecated; prefer 'timeout_seconds'.");
   }
   const MAX_TIMEOUT_SECONDS = ENTERPRISE_CONFIG.limits?.maxTimeoutSeconds ?? 600;
   if(typeof timeoutSeconds !== 'number' || timeoutSeconds <= 0){
@@ -383,21 +387,21 @@ export async function runPowerShellTool(args: any){
   if(timeoutSeconds >= 60){ warnings.push(`Long timeout ${timeoutSeconds}s may reduce responsiveness.`); }
   const timeout = Math.round(timeoutSeconds * 1000);
   // Adaptive timeout configuration
-  const adaptiveEnabled = !!args.adaptiveTimeout || !!args.progressAdaptive;
+  const adaptiveEnabled = !!args.adaptive_timeout || !!args.adaptiveTimeout || !!args.progress_adaptive || !!args.progressAdaptive;
   let adaptiveConfig: AdaptiveConfig | undefined = undefined;
   if(adaptiveEnabled){
-    const maxTotalSec = args.adaptiveMaxTotalSec || args.adaptiveMaxSec || Math.min(timeoutSeconds*3, 180); // cap 3x or 180s
+    const maxTotalSec = args.adaptive_max_total_sec || args.adaptiveMaxTotalSec || args.adaptive_max_sec || args.adaptiveMaxSec || Math.min(timeoutSeconds*3, 180); // cap 3x or 180s
     adaptiveConfig = {
       enabled: true,
-      extendWindowMs: (args.adaptiveExtendWindowMs || 2000),
-      extendStepMs: (args.adaptiveExtendStepMs || 5000),
+      extendWindowMs: (args.adaptive_extend_window_ms || args.adaptiveExtendWindowMs || 2000),
+      extendStepMs: (args.adaptive_extend_step_ms || args.adaptiveExtendStepMs || 5000),
       maxTotalMs: Math.round(maxTotalSec*1000)
     };
   }
   // If confirmed provided, propagate internal bypass flag to skip early pre-exec confirmed interception
   const execOpts: any = adaptiveConfig ? { adaptive: adaptiveConfig } : {};
   if(args.confirmed) execOpts._bypassConfirm = true;
-  let result = await executePowerShell(command, timeout, args.workingDirectory, execOpts);
+  let result = await executePowerShell(command, timeout, args.working_directory || args.workingDirectory, execOpts);
   // High-resolution duration overwrite (ns -> ms) for accuracy
   try {
     const hrEnd = process.hrtime.bigint();

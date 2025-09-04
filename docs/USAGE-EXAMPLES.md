@@ -8,24 +8,24 @@ This file contains correct usage patterns to avoid common errors.
 
 ```json
 // Wrong parameter name
-{"name":"run-powershell","arguments":{"command":"git commit","confirmed":true}}
+{"name":"run_powershell","arguments":{"command":"git commit","confirmed":true}}
 
 // Wrong parameter name variations
-{"name":"run-powershell","arguments":{"command":"git commit","confirmed":true}}
-{"name":"run-powershell","arguments":{"command":"git commit","approve":true}}
+{"name":"run_powershell","arguments":{"command":"git commit","confirmed":true}}
+{"name":"run_powershell","arguments":{"command":"git commit","approve":true}}
 ```
 
 ### * Correct Usage
 
 ```json
 // Correct: Use "confirmed" parameter
-{"name":"run-powershell","arguments":{"command":"git commit","confirmed":true}}
+{"name":"run_powershell","arguments":{"command":"git commit","confirmed":true}}
 
 // With working directory
-{"name":"run-powershell","arguments":{"command":"Get-ChildItem *.ps1","workingDirectory":"C:\\Your\\Project","confirmed":true}}
+{"name":"run_powershell","arguments":{"command":"Get-ChildItem *.ps1","working_directory":"C:\\Your\\Project","confirmed":true}}
 
 // Script execution
-{"name":"run-powershellscript","arguments":{"scriptFile":"build.ps1","workingDirectory":"C:\\Your\\Project","confirmed":true}}
+{"name":"run_powershellscript","arguments":{"scriptFile":"build.ps1","working_directory":"C:\\Your\\Project","confirmed":true}}
 ```
 
 ## Working Directory Examples
@@ -36,20 +36,20 @@ When using a global MCP server (configured in VS Code settings), always specify 
 
 ```json
 // X Wrong: Relative path (resolved against server startup directory)
-{"name":"run-powershell","arguments":{"command":"Get-ChildItem","workingDirectory":"./src"}}
+{"name":"run_powershell","arguments":{"command":"Get-ChildItem","working_directory":"./src"}}
 
 // * Correct: Absolute path to actual workspace
-{"name":"run-powershell","arguments":{"command":"Get-ChildItem","workingDirectory":"C:\\Code\\MyProject\\src"}}
+{"name":"run_powershell","arguments":{"command":"Get-ChildItem","working_directory":"C:\\Code\\MyProject\\src"}}
 ```
 
 ### Security Policy Examples
 
 ```json
 // Check current policy
-{"name":"working-directory-policy","arguments":{"action":"get"}}
+{"name":"working_directory_policy","arguments":{"action":"get"}}
 
 // Update allowed roots for global server
-{"name":"working-directory-policy","arguments":{
+{"name":"working_directory_policy","arguments":{
   "action":"set",
   "allowedWriteRoots":["C:\\Code","C:\\Projects","${TEMP}"],
   "enabled":true
@@ -62,10 +62,10 @@ When using a global MCP server (configured in VS Code settings), always specify 
 
 ```json
 {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
-  "name":"run-powershell",
+  "name":"run_powershell",
   "arguments":{
     "command":"Get-ChildItem *.ps1 | Select-Object Name,Length",
-    "workingDirectory":"C:\\Your\\Workspace"
+    "working_directory":"C:\\Your\\Workspace"
   }
 }}
 ```
@@ -74,10 +74,10 @@ When using a global MCP server (configured in VS Code settings), always specify 
 
 ```json
 {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{
-  "name":"run-powershell",
+  "name":"run_powershell",
   "arguments":{
     "command":"git add . && git commit -m 'update files'",
-    "workingDirectory":"C:\\Your\\Workspace",
+    "working_directory":"C:\\Your\\Workspace",
     "confirmed":true
   }
 }}
@@ -87,10 +87,10 @@ When using a global MCP server (configured in VS Code settings), always specify 
 
 ```json
 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
-  "name":"run-powershell",
+  "name":"run_powershell",
   "arguments":{
     "command":"custom-tool.exe --process-data",
-    "workingDirectory":"C:\\Your\\Workspace",
+    "working_directory":"C:\\Your\\Workspace",
     "confirmed":true
   }
 }}
@@ -101,10 +101,10 @@ When using a global MCP server (configured in VS Code settings), always specify 
 ```json
 // After the custom-tool.exe is learned and approved via learning system:
 {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{
-  "name":"run-powershell",
+  "name":"run_powershell",
   "arguments":{
     "command":"custom-tool.exe --process-data",
-    "workingDirectory":"C:\\Your\\Workspace"
+    "working_directory":"C:\\Your\\Workspace"
     // No "confirmed": true needed - now classified as SAFE
   }
 }}
@@ -113,12 +113,12 @@ When using a global MCP server (configured in VS Code settings), always specify 
 ### Script File Execution
 ```json
 {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{
-  "name":"run-powershellscript",
+  "name":"run_powershellscript",
   "arguments":{
     "scriptFile":"scripts/deploy.ps1",
-    "workingDirectory":"C:\\Your\\Workspace",
+    "working_directory":"C:\\Your\\Workspace",
     "confirmed":true,
-  "timeoutSeconds":120
+  "timeout_seconds":120
   }
 }}
 ```
@@ -149,7 +149,7 @@ When using a global MCP server (configured in VS Code settings), always specify 
 ### Server Statistics
 ```json
 {"jsonrpc":"2.0","id":7,"method":"tools/call","params":{
-  "name":"server-stats",
+  "name":"server_stats",
   "arguments":{"verbose":true}
 }}
 ```
@@ -157,7 +157,7 @@ When using a global MCP server (configured in VS Code settings), always specify 
 ### Security Assessment Preview
 ```json
 {"jsonrpc":"2.0","id":8,"method":"tools/call","params":{
-  "name":"powershell-syntax-check",
+  "name":"powershell_syntax_check",
   "arguments":{"script":"Remove-Item ./temp.txt"}
 }}
 ```

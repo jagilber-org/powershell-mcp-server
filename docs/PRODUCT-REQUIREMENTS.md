@@ -25,7 +25,7 @@ Provide reliable, explainable, and enforceable execution lifecycle guarantees fo
 
 ## 4. Scope
 In-Scope:
-- `run-powershell` execution model changes
+- `run_powershell` execution model changes
 - Timeout classification rewrite + terminationReason
 - Adaptive extension loop & fields (effectiveTimeoutMs, adaptiveExtensions)
 - Test coverage additions (hang, adaptive, fast-exit)
@@ -82,7 +82,7 @@ Out-of-Scope (Phase Deferred):
 
 ## 8. Assumptions
 
-- Unified timeout parameter: timeoutSeconds only (legacy fields removed).
+- Unified timeout parameter: timeout_seconds only (legacy fields removed).
 - Adaptive extension only matters for interactive or streaming output tasks.
 - Termination reasons are sufficient without detail codes initially.
 

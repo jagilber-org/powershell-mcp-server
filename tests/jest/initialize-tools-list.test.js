@@ -54,10 +54,10 @@ describe('initialize + tools/list compliance (framed protocol only)', ()=>{
     const tools = listMsg.result.tools;
     expect(Array.isArray(tools)).toBe(true);
     const names = tools.map(t=> t.name).sort();
-    const expected = ['run-powershell','powershell-syntax-check','emit-log','working-directory-policy','server-stats','help'];
+    const expected = ['run_powershell','powershell_syntax_check','emit_log','working_directory_policy','server_stats','help'];
     for(const n of expected){ expect(names).toContain(n); }
     expect(names).not.toContain('tool-tree');
-    const rp = tools.find(t=> t.name==='run-powershell');
+    const rp = tools.find(t=> t.name==='run_powershell');
     expect(rp).toBeTruthy();
     expect(rp.inputSchema && typeof rp.inputSchema === 'object').toBe(true);
     const propCount = Object.keys(rp.inputSchema.properties||{}).length;

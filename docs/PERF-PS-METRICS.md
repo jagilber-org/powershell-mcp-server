@@ -2,7 +2,7 @@
 
 Feature flag: limits.capturePsProcessMetrics (env override MCP_CAPTURE_PS_METRICS=1)
 
-When enabled, each run-powershell tool invocation appends a lightweight PowerShell snippet that emits a JSON sentinel containing CPU and Working Set metrics for the current PowerShell host process performing the command.
+When enabled, each run_powershell tool invocation appends a lightweight PowerShell snippet that emits a JSON sentinel containing CPU and Working Set metrics for the current PowerShell host process performing the command.
 
 Sentinel shape (internal):
 

@@ -42,8 +42,8 @@ describe('attempt event publishing', ()=>{
       if(!metricsPortReady) await new Promise(r=> setTimeout(r,120));
     }
     // Now issue commands after metrics server confirmed so attempts are captured
-    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'git push --force' }},'blk');
-    rpc(srv,'tools/call',{ name:'run-powershell', arguments:{ command:'git commit -m "t"' }},'risky');
+    rpc(srv,'tools/call',{ name:'run_powershell', arguments:{ command:'git push --force' }},'blk');
+    rpc(srv,'tools/call',{ name:'run_powershell', arguments:{ command:'git commit -m "t"' }},'risky');
     const endResp = Date.now()+4000;
     while(Date.now()<endResp){ if(responses['blk'] && responses['risky']) break; await new Promise(r=> setTimeout(r,80)); }
   expect(responses['blk']).toBeTruthy();

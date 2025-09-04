@@ -1,6 +1,6 @@
 {
   "name": "powershell-mcp-server",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "description": "MCP-compliant PowerShell server with enterprise security and hierarchical tool structure",
   "main": "dist/mcpServer.js",
   "type": "module",
