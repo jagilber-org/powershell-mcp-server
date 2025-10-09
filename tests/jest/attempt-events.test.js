@@ -36,7 +36,7 @@ describe('attempt event publishing', ()=>{
     let metricsPortReady = null; let snapEarly=null;
     const startDeadline = Date.now()+5000;
     while(Date.now()<startDeadline && !metricsPortReady){
-      for(let p=9090;p<=9105;p++){
+      for(let p=9300;p<=9350;p++){
         try { const s = await fetchJson(p,'/api/metrics'); if(s && typeof s.totalCommands==='number'){ metricsPortReady=p; snapEarly=s; break; } } catch{}
       }
       if(!metricsPortReady) await new Promise(r=> setTimeout(r,120));

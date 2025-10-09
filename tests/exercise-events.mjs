@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
  * Exercise the PowerShell MCP server and generate real events for the dashboard.
- * Starts its own server (port 9090 unless occupied -> auto-increment) then issues several tool calls.
+ * Starts its own server (port 9300 unless occupied -> auto-increment) then issues several tool calls.
  */
 import { spawn } from 'child_process';
 import readline from 'readline';
 
 const SERVER_ARGS = ['dist/server.js'];
-process.env.METRICS_PORT = process.env.METRICS_PORT || '9090';
+process.env.METRICS_PORT = process.env.METRICS_PORT || '9300';
 
 console.log('👉 Launching server with METRICS_PORT=' + process.env.METRICS_PORT);
 const server = spawn('node', SERVER_ARGS, { stdio: ['pipe','pipe','pipe'] });

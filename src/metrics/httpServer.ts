@@ -27,6 +27,10 @@ const _moduleDir: string = (typeof __dirname !== 'undefined') ? __dirname : path
 // Lazy-load learning module functions on demand to avoid import cost during initial MCP handshake path.
 // They are only used when learning-related HTTP endpoints are hit.
 type LearningModule = typeof import('../learning.js');
+export interface LearningUpdateEvent {
+  action: 'queue' | 'approve' | 'remove';
+  payload: any;
+}
 let _learningMod: LearningModule | null = null;
 async function getLearning(){
   if(!_learningMod){
@@ -79,6 +83,7 @@ export class MetricsHttpServer {
   private debugEnabled = process.env.METRICS_DEBUG === 'true';
   // Separate flag controlling verbose dashboard client logging (front-end). Allows server debug without noisy UI.
   private dashDebugEnabled = (process.env.METRICS_DASH_DEBUG === '1' || process.env.METRICS_DASH_DEBUG === 'true');
+  private learningObservers: Array<(event: LearningUpdateEvent) => void> = [];
   // Cache package version (lazy loaded) for /version and dashboard banner.
   private cachedVersion: string | undefined;
   private getVersion(): string {
@@ -187,10 +192,10 @@ export class MetricsHttpServer {
     const tryListen = () => {
       this.server = http.createServer((req, res) => this.route(req, res));
       this.server.once('error', (err: any) => {
-        if (err && err.code === 'EADDRINUSE' && attempts < maxOffset) {
+        if (err && (err.code === 'EADDRINUSE' || err.code === 'EACCES') && attempts < maxOffset) {
           attempts++;
           attemptPort++;
-          console.error(`[METRICS] Port ${attemptPort - 1} in use; trying ${attemptPort}`);
+          console.error(`[METRICS] Port ${attemptPort - 1} unavailable (${err.code}); trying ${attemptPort}`);
           setTimeout(tryListen, 150);
         } else {
           console.error(`[METRICS] Failed to bind metrics server: ${err?.message || err}`);
@@ -353,6 +358,23 @@ export class MetricsHttpServer {
     this.emitter.emit('exec', ev);
     if (this.debugEnabled) {
       try { console.error(`[METRICS][EVENT][PUBLISH] id=${ev.id} level=${ev.level} blocked=${ev.blocked} truncated=${ev.truncated} tool=${ev.toolName||''}`); } catch {}
+    }
+  }
+
+  public registerLearningObserver(handler: (event: LearningUpdateEvent) => void): void {
+    this.learningObservers.push(handler);
+  }
+
+  public emitLearningUpdate(event: LearningUpdateEvent): void {
+    if (!this.learningObservers.length) return;
+    for (const observer of this.learningObservers) {
+      try {
+        observer(event);
+      } catch (err) {
+        if (this.debugEnabled) {
+          try { console.error('[METRICS][LEARNING_OBSERVER_ERROR]', err); } catch {}
+        }
+      }
     }
   }
 
@@ -676,7 +698,7 @@ export class MetricsHttpServer {
       <button id="removeSelected" style="background:#dc2626">Remove Selected</button>
       <span id="queueMsg" style="font-size:.6rem;opacity:.75"></span>
     </div>
-    <table style="width:100%;border-collapse:collapse;font-size:.62rem"><thead><tr><th></th><th>Normalized</th><th>Queued</th><th>Times</th><th>Last</th></tr></thead><tbody id="queueBody"></tbody></table>
+  <table style="width:100%;border-collapse:collapse;font-size:.62rem"><thead><tr><th></th><th>Normalized</th><th>Pattern</th><th>Queued</th><th>Times</th><th>Last</th><th>Source</th></tr></thead><tbody id="queueBody"></tbody></table>
   </section>
 </main>
 <script>(()=>{const oid='dashEarlyErrOv';function get(){let d=document.getElementById(oid);if(!d){d=document.createElement('div');d.id=oid;d.style.cssText='position:fixed;top:0;left:0;right:0;background:#7f1d1d;color:#fff;font:11px monospace;z-index:10000;padding:4px 6px;display:none;white-space:pre-wrap;max-height:45vh;overflow:auto;cursor:pointer';d.title='Early error overlay (click to hide)';d.addEventListener('click',()=>{d.style.display='none';});document.body.appendChild(d);}return d;}function append(msg){const o=get();o.style.display='block';o.textContent+=(o.textContent?'\n':'')+msg;}window.addEventListener('error',e=>{append('['+new Date().toISOString()+'] JS ERROR: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'')+ (e.colno?':'+e.colno:''));});window.addEventListener('unhandledrejection',e=>{let r=e.reason;let msg;try{if(r&&typeof r==='object'){msg=r.stack||r.message||JSON.stringify(r);}else{msg=String(r);} }catch{msg=String(r);}append('['+new Date().toISOString()+'] PROMISE REJECTION: '+msg);});const origErr=console.error;console.error=function(...a){try{append('[console.error] '+a.map(x=>{if(typeof x==='string')return x;try{return JSON.stringify(x);}catch{return String(x);} }).join(' '));}catch{}return origErr.apply(console,a);};document.addEventListener('DOMContentLoaded',()=>append('['+new Date().toISOString()+'] DOMContentLoaded (early overlay active)'));})();</script>
@@ -698,6 +720,32 @@ export class MetricsHttpServer {
       })();
       return;
     }
+    if (path === '/api/learn-candidate' && req.method === 'POST') {
+      let body='';
+      req.on('data',d=> body+=d);
+      req.on('end', ()=>{
+        (async()=>{
+          try {
+            const payload = JSON.parse(body||'{}');
+            const list = Array.isArray(payload?.normalized) ? payload.normalized : [];
+            if(!list.length){
+              res.writeHead(400,{ 'Content-Type':'application/json'});
+              res.end(JSON.stringify({ error:'normalized_required' }));
+              return;
+            }
+            const lm = await getLearning();
+            const result = lm.queueCandidates(list,'dashboard');
+            this.emitLearningUpdate({ action:'queue', payload: result });
+            this.writeJson(res, result);
+          } catch(e:any){
+            const status = e?.name === 'LearningValidationError' ? 400 : 500;
+            res.writeHead(status,{ 'Content-Type':'application/json'});
+            res.end(JSON.stringify({ error: status===400?'invalid_pattern':'queue_failed', message: e?.message || String(e) }));
+          }
+        })();
+      });
+      return;
+    }
     if (path.startsWith('/api/learn-candidate')) {
       const q = this.parseQuery(url);
       const norm = q.normalized || '';
@@ -710,6 +758,7 @@ export class MetricsHttpServer {
         try {
           const lm = await getLearning();
           const queued = lm.queueCandidates([norm], 'dashboard');
+          this.emitLearningUpdate({ action:'queue', payload: queued });
           console.error('[LEARN] Queued normalized candidate via dashboard:', norm, queued);
           this.writeJson(res, { ok: true, normalized: norm, queued: true, added: queued.added, skipped: queued.skipped, total: queued.total });
         } catch (e:any) {
@@ -721,8 +770,8 @@ export class MetricsHttpServer {
       return;
     }
   if (path === '/api/learn-queue') { (async()=>{ try { const lm = await getLearning(); this.writeJson(res, { queued: lm.listQueuedCandidates() }); } catch(e:any){ res.writeHead(500,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({ error:'queue_list_failed', message:e?.message })); } })(); return; }
-  if (path === '/api/learn-queue/approve' && req.method==='POST') { let body=''; req.on('data',d=> body+=d); req.on('end', ()=>{ (async()=>{ try { const j=JSON.parse(body||'{}'); if(!Array.isArray(j.normalized)){ res.writeHead(400,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'normalized_required'})); return;} const lm = await getLearning(); const r=lm.approveQueuedCandidates(j.normalized,'dashboard'); this.writeJson(res,r); } catch(e:any){ res.writeHead(500,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'approve_failed', message:e?.message })); } })(); }); return; }
-  if (path === '/api/learn-queue/remove' && req.method==='POST') { let body=''; req.on('data',d=> body+=d); req.on('end', ()=>{ (async()=>{ try { const j=JSON.parse(body||'{}'); if(!Array.isArray(j.normalized)){ res.writeHead(400,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'normalized_required'})); return;} const lm = await getLearning(); const r=lm.removeFromQueue(j.normalized); this.writeJson(res,r); } catch(e:any){ res.writeHead(500,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'remove_failed', message:e?.message })); } })(); }); return; }
+  if (path === '/api/learn-queue/approve' && req.method==='POST') { let body=''; req.on('data',d=> body+=d); req.on('end', ()=>{ (async()=>{ try { const j=JSON.parse(body||'{}'); const entries = Array.isArray(j.entries)? j.entries : (Array.isArray(j.normalized)? j.normalized : []); if(!entries.length){ res.writeHead(400,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'normalized_required'})); return;} const lm = await getLearning(); const r=lm.approveQueuedCandidates(entries,'dashboard'); this.emitLearningUpdate({ action:'approve', payload:r }); this.writeJson(res,r); } catch(e:any){ const status=e?.name==='LearningValidationError'?400:500; res.writeHead(status,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error: status===400?'invalid_pattern':'approve_failed', message:e?.message })); } })(); }); return; }
+  if (path === '/api/learn-queue/remove' && req.method==='POST') { let body=''; req.on('data',d=> body+=d); req.on('end', ()=>{ (async()=>{ try { const j=JSON.parse(body||'{}'); const entries = Array.isArray(j.entries)? j.entries : (Array.isArray(j.normalized)? j.normalized : []); if(!entries.length){ res.writeHead(400,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'normalized_required'})); return;} const normalized = entries.map((n:any)=> typeof n==='string'? n : n?.normalized).filter((v:any)=> !!v); const lm = await getLearning(); const r=lm.removeFromQueue(normalized); this.emitLearningUpdate({ action:'remove', payload:r }); this.writeJson(res,r); } catch(e:any){ res.writeHead(500,{ 'Content-Type':'application/json'}); res.end(JSON.stringify({error:'remove_failed', message:e?.message })); } })(); }); return; }
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'not found' }));
   }
@@ -846,7 +895,8 @@ export class MetricsHttpServer {
     if(ev.level==='HEARTBEAT')return;
     emptyEl.style.display='none';
     const tr=document.createElement('tr');
-    tr.dataset.level=ev.level;tr.className='level-'+ev.level;
+  tr.dataset.level=ev.level;tr.className='level-'+ev.level;
+  if(ev.candidateNorm){ tr.dataset.normalized = ev.candidateNorm; }
     let preview=(ev.preview||'').replace(/</g,'&lt;');
     if(preview.length>400)preview=preview.slice(0,397)+'…';
     let confCell='';
@@ -878,8 +928,197 @@ export class MetricsHttpServer {
   lines.push("let psWarned=false;async function refreshMetrics(){try{const r=await fetch('/api/metrics');if(!r.ok)return;const m=await r.json();const setMetric=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=String(val);};setMetric(metricsIds.total,m.totalCommands);setMetric(metricsIds.safe,m.safeCommands);setMetric(metricsIds.risky,m.riskyCommands);setMetric(metricsIds.blocked,m.blockedCommands);if('confirmedRequired'in m)setMetric(metricsIds.confirmed,m.confirmedRequired);if('timeouts'in m)setMetric(metricsIds.timeouts,m.timeouts);setMetric(metricsIds.avg,m.averageDurationMs);setMetric(metricsIds.p95,m.p95DurationMs);const p=m.performance||{};if(p.cpuPercent!=null)setMetric(metricsIds.cpu,p.cpuPercent.toFixed(1));if(p.rssMB!=null)setMetric(metricsIds.rss,p.rssMB.toFixed(0));if(p.heapUsedMB!=null)setMetric(metricsIds.heap,p.heapUsedMB.toFixed(0));if(p.eventLoopLagP95Ms!=null)setMetric(metricsIds.lag,p.eventLoopLagP95Ms.toFixed(1));if('psSamples'in m){setMetric(metricsIds.pssamples,m.psSamples||0);if(m.psCpuSecAvg!=null)setMetric(metricsIds.pscpu,(m.psCpuSecAvg||0).toFixed(2));if(m.psWSMBAvg!=null)setMetric(metricsIds.psws,(m.psWSMBAvg||0).toFixed(1));if((m.psSamples||0)===0 && !psWarned){const cpuEl=document.getElementById('m_pscpu');if(cpuEl){const note=document.createElement('div');note.style.cssText='font-size:.55rem;opacity:.6;margin-top:.3rem';note.textContent='(PS metrics disabled env)';cpuEl.parentElement.appendChild(note);psWarned=true;}}}lastMetricsTs=Date.now();if(uptimeEl)uptimeEl.textContent='Uptime: '+Math.round((Date.now()-Date.parse(m.lastReset))/1000)+'s';drawSimpleGraphs(m);}catch(e){if(DEBUG)console.error('[DASH][METRICS_ERR]',e);} }");
   lines.push("function drawSimpleGraphs(m){try{const cpu=document.getElementById('cpuGraph');const mem=document.getElementById('memGraph');if(!cpu||!mem)return;const cpuHist=m.cpuHistory||[];const memHist=m.memHistory||[];const cpuCtx=cpu.getContext('2d');const memCtx=mem.getContext('2d');const dpr=window.devicePixelRatio||1;const W=cpu.clientWidth||cpu.parentElement.clientWidth||300;const H=cpu.clientHeight||120;cpu.width=W*dpr;cpu.height=H*dpr;cpuCtx.setTransform(dpr,0,0,dpr,0,0);cpuCtx.clearRect(0,0,W,H);cpuCtx.fillStyle='#0f1318';cpuCtx.fillRect(0,0,W,H);cpuCtx.lineWidth=1.3;const cpuMaxVal=Math.max(1,...cpuHist.map(p=>p.value||0));const cpuScaleMax=cpuMaxVal<20?Math.min(100,Math.max(10,Math.ceil(cpuMaxVal*1.2))):100;cpuCtx.strokeStyle='#3b82f6';cpuCtx.beginPath();cpuHist.forEach((p,i)=>{const x=(i/Math.max(1,cpuHist.length-1))*W;const y=H-((p.value||0)/cpuScaleMax)*H;if(i===0)cpuCtx.moveTo(x,y);else cpuCtx.lineTo(x,y);});cpuCtx.stroke();cpuCtx.strokeStyle='#f59e0b';cpuCtx.beginPath();const lagMax=Math.max(1,Math.max(...cpuHist.map(p=>p.lag||0),50));cpuHist.forEach((p,i)=>{const x=(i/Math.max(1,cpuHist.length-1))*W;const y=H-((p.lag||0)/lagMax)*H;if(i===0)cpuCtx.moveTo(x,y);else cpuCtx.lineTo(x,y);});cpuCtx.stroke();const havePsSamples=m.psSamples>0;const havePsCpuLine=cpuHist.some(p=>typeof p.psCpuPct==='number');if(havePsSamples){cpuCtx.strokeStyle='#a855f7';cpuCtx.beginPath();let first=true;if(havePsCpuLine){cpuHist.forEach((p,i)=>{if(typeof p.psCpuPct!=='number')return;const x=(i/Math.max(1,cpuHist.length-1))*W;const y=H-(Math.min(100,p.psCpuPct)/cpuScaleMax)*H;if(first){cpuCtx.moveTo(x,y);first=false;}else cpuCtx.lineTo(x,y);});}else{const agg=(m.psCpuSecAvg||0);const estPct=Math.min(100,(agg/(m.psSamples||1))*40);const y=H-(estPct/cpuScaleMax)*H;cpuCtx.moveTo(0,y);cpuCtx.lineTo(W,y);}cpuCtx.stroke();}/* Legend */cpuCtx.font='10px monospace';const cpuLegendLines=havePsSamples?['CPU'+(cpuScaleMax!==100?' s:'+cpuScaleMax:''),'Lag','PS CPU']:['CPU'+(cpuScaleMax!==100?' s:'+cpuScaleMax:''),'Lag'];let cpuLegendW=0;cpuLegendLines.forEach(t=>{const w=cpuCtx.measureText(t).width;if(w>cpuLegendW)cpuLegendW=w;});cpuLegendW+=14;const cpuLegendH=cpuLegendLines.length*12+8;cpuCtx.fillStyle='rgba(0,0,0,0.35)';cpuCtx.fillRect(4,4,cpuLegendW,cpuLegendH);let yOff=14;cpuCtx.fillStyle='#3b82f6';cpuCtx.fillText(cpuLegendLines[0],8,yOff);yOff+=12;cpuCtx.fillStyle='#f59e0b';cpuCtx.fillText(cpuLegendLines[1],8,yOff);if(havePsSamples){yOff+=12;cpuCtx.fillStyle='#a855f7';cpuCtx.fillText('PS CPU',8,yOff);}/* Memory */const MW=mem.clientWidth||mem.parentElement.clientWidth||300;const MH=mem.clientHeight||120;mem.width=MW*dpr;mem.height=MH*dpr;memCtx.setTransform(dpr,0,0,dpr,0,0);memCtx.clearRect(0,0,MW,MH);memCtx.fillStyle='#0f1318';memCtx.fillRect(0,0,MW,MH);memCtx.lineWidth=1.3;const rssVals=memHist.map(p=>p.rss||0);const heapVals=memHist.map(p=>p.heap||0);const allVals=rssVals.concat(heapVals);const rssMin=Math.min(...allVals,0);const rssMax=Math.max(...allVals,1);const range=Math.max(1,rssMax-rssMin);const useDynamic=range<10;const normY=v=>MH-((v-(useDynamic?rssMin:0))/(useDynamic?range:rssMax))*MH;memCtx.strokeStyle='#10b981';memCtx.beginPath();memHist.forEach((p,i)=>{const x=(i/Math.max(1,memHist.length-1))*MW;const y=normY(p.rss||0);if(i===0)memCtx.moveTo(x,y);else memCtx.lineTo(x,y);});memCtx.stroke();memCtx.strokeStyle='#6366f1';memCtx.beginPath();memHist.forEach((p,i)=>{const x=(i/Math.max(1,memHist.length-1))*MW;const y=normY(p.heap||0);if(i===0)memCtx.moveTo(x,y);else memCtx.lineTo(x,y);});memCtx.stroke();const havePsWSLine=memHist.some(p=>typeof p.psWSMB==='number');if(havePsSamples){memCtx.strokeStyle='#f472b6';memCtx.beginPath();let first=true;if(havePsWSLine){memHist.forEach((p,i)=>{if(typeof p.psWSMB!=='number')return;const x=(i/Math.max(1,memHist.length-1))*MW;const y=normY(p.psWSMB);if(first){memCtx.moveTo(x,y);first=false;}else memCtx.lineTo(x,y);});}else{const v=(m.psWSMBAvg||0);const y=normY(v);memCtx.moveTo(0,y);memCtx.lineTo(MW,y);}memCtx.stroke();}memCtx.font='10px monospace';const memLegendLines=havePsSamples?['RSS'+(useDynamic?' dyn':''),'Heap',m.psSamples===0?'PS off':'PS WS']:['RSS'+(useDynamic?' dyn':''),'Heap'];let memLegendW=0;memLegendLines.forEach(t=>{const w=memCtx.measureText(t).width;if(w>memLegendW)memLegendW=w;});memLegendW+=14;const memLegendH=memLegendLines.length*12+8;memCtx.fillStyle='rgba(0,0,0,0.35)';memCtx.fillRect(4,4,memLegendW,memLegendH);let my=14;memCtx.fillStyle='#10b981';memCtx.fillText(memLegendLines[0],8,my);my+=12;memCtx.fillStyle='#6366f1';memCtx.fillText('Heap',8,my);if(havePsSamples){my+=12;memCtx.fillStyle=(m.psSamples===0?'#999':'#f472b6');memCtx.fillText(memLegendLines[memLegendLines.length-1],8,my);} }catch(ex){if(DEBUG)console.error('[DASH][GRAPH_ERR]',ex);} } ");
   lines.push('setInterval(refreshMetrics,5000); setTimeout(refreshMetrics,500);');
-  // Queue / learning simple UI wiring (placeholder impl)
-  lines.push("(function(){const lb=document.getElementById('learnBtn');const lm=document.getElementById('learnMsg');if(lb){lb.addEventListener('click',()=>{const sel=getSelectedUnknown();if(!sel.length){if(lm){lm.textContent='No UNKNOWN selected';setTimeout(()=>lm.textContent='',1800);}return;}if(lm){lm.textContent='Queued '+sel.length+' (demo)';setTimeout(()=>lm.textContent='',2200);}sel.forEach(r=>r.classList.remove('learn-selected'));});}const showQ=document.getElementById('showQueue');const qp=document.getElementById('queuePanel');if(showQ&&qp){showQ.addEventListener('click',()=>{qp.style.display=qp.style.display==='none'?'block':'none';});}const refreshQ=document.getElementById('refreshQueue');const qb=document.getElementById('queueBody');if(refreshQ&&qb){refreshQ.addEventListener('click',async()=>{try{refreshQ.disabled=true;const r=await fetch('/api/unknown-candidates?debug=true');if(r.ok){const list=await r.json();qb.innerHTML='';(list||[]).forEach(c=>{const tr=document.createElement('tr');tr.innerHTML=\"<td><input type=\\\"checkbox\\\"></td><td>\"+(c.normalized||'')+\"</td><td>\"+(c.count||1)+\"</td><td>\"+(c.times||1)+\"</td><td>\"+(c.last||'')+\"</td>\";qb.appendChild(tr);});}}catch(ex){ if(DEBUG) console.error('[DASH][QUEUE_REFRESH_ERR]',ex);}finally{refreshQ.disabled=false;}});} })();");
+  // Queue / learning UI wiring
+  lines.push(`(function(){
+    const lb=document.getElementById('learnBtn');
+    const lm=document.getElementById('learnMsg');
+    const showQueueBtn=document.getElementById('showQueue');
+    const queuePanel=document.getElementById('queuePanel');
+    const refreshQueueBtn=document.getElementById('refreshQueue');
+    const approveBtn=document.getElementById('approveSelected');
+    const removeBtn=document.getElementById('removeSelected');
+    const queueMsg=document.getElementById('queueMsg');
+    const queueBody=document.getElementById('queueBody');
+    let queueLoaded=false;
+    const messageToken=new WeakMap();
+    function showMessage(el,text,ttl){
+      if(!el) return;
+      const value=text==null?'':String(text);
+      el.textContent=value;
+      if(!ttl) ttl=2800;
+      const token={};
+      messageToken.set(el,token);
+      if(!value) return;
+      setTimeout(()=>{ if(messageToken.get(el)===token){ el.textContent=''; messageToken.delete(el); } },ttl);
+    }
+    function defaultPattern(normalized){
+      const value=normalized||'';
+  const escaped=value.replace(/[-\/\\^$*+?.()|\[\]{}]/g,'\\$&');
+      return '^'+escaped.replace(/\s+/g,'\\s+')+'$';
+    }
+    function fmtIso(iso){
+      if(!iso) return '';
+      return iso.replace('T',' ').replace('Z','');
+    }
+    function getSelectedUnknown(){
+      return Array.from(document.querySelectorAll('#eventTable tbody tr.learn-selected')).filter(r=>r.dataset.level==='UNKNOWN');
+    }
+    async function queueSelected(){
+      const rows=getSelectedUnknown();
+      if(!rows.length){ showMessage(lm,'No UNKNOWN selected',1800); return; }
+      const norms=Array.from(new Set(rows.map(r=>r.dataset.normalized).filter(Boolean)));
+      if(!norms.length){ showMessage(lm,'Selected rows missing normalized form',2200); return; }
+      try{
+        if(lb) lb.disabled=true;
+        showMessage(lm,'Queuing '+norms.length+'...');
+        const resp=await fetch('/api/learn-candidate',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ normalized:norms }) });
+        const body=await resp.json().catch(()=>({}));
+        if(!resp.ok){ showMessage(lm, body?.message || 'Queue failed',3200); return; }
+        showMessage(lm,'Queued '+norms.length+' candidate'+(norms.length>1?'s':''),2400);
+        rows.forEach(r=> r.classList.remove('learn-selected'));
+        queueLoaded=false;
+        if(queuePanel && queuePanel.style.display!=='none'){ loadQueue(); }
+      } catch(err){
+        if(DEBUG) console.error('[DASH][QUEUE_SELECTED_ERR]',err);
+        showMessage(lm,(err && err.message) || 'Queue failed',3200);
+      } finally {
+        if(lb) lb.disabled=false;
+      }
+    }
+    async function loadQueue(){
+      if(!queueBody) return;
+      try{
+        if(refreshQueueBtn) refreshQueueBtn.disabled=true;
+        showMessage(queueMsg,'Loading...',2000);
+        const resp=await fetch('/api/learn-queue');
+        const payload=await resp.json().catch(()=>({}));
+        if(!resp.ok){ throw new Error(payload?.message || ('HTTP '+resp.status)); }
+        const list=Array.isArray(payload?.queued)?payload.queued:[];
+        queueBody.innerHTML='';
+        if(!list.length){
+          const empty=document.createElement('tr');
+          const td=document.createElement('td');
+          td.colSpan=7;
+          td.style.opacity='0.65';
+          td.style.padding='0.35rem';
+          td.textContent='Queue empty';
+          empty.appendChild(td);
+          queueBody.appendChild(empty);
+        } else {
+          list.forEach(entry=>{
+            const tr=document.createElement('tr');
+            tr.dataset.normalized=entry.normalized||'';
+            const selTd=document.createElement('td');
+            const selCb=document.createElement('input');
+            selCb.type='checkbox';
+            selTd.appendChild(selCb);
+            tr.appendChild(selTd);
+            const normTd=document.createElement('td');
+            normTd.textContent=entry.normalized||'';
+            normTd.style.maxWidth='260px';
+            normTd.style.wordBreak='break-word';
+            tr.appendChild(normTd);
+            const patternTd=document.createElement('td');
+            patternTd.style.minWidth='220px';
+            const patternInput=document.createElement('input');
+            patternInput.type='text';
+            patternInput.className='patternInput';
+            const defaultVal=defaultPattern(entry.normalized||'');
+            patternInput.value=entry.pattern || defaultVal;
+            patternInput.style.width='100%';
+            patternInput.dataset.default=defaultVal;
+            patternInput.addEventListener('dblclick',()=>{ patternInput.value=patternInput.dataset.default||patternInput.value; });
+            patternTd.appendChild(patternInput);
+            tr.appendChild(patternTd);
+            const addedTd=document.createElement('td');
+            addedTd.textContent=fmtIso(entry.added||'');
+            tr.appendChild(addedTd);
+            const timesTd=document.createElement('td');
+            timesTd.textContent=String(entry.timesQueued||1);
+            tr.appendChild(timesTd);
+            const lastTd=document.createElement('td');
+            lastTd.textContent=fmtIso(entry.lastQueued||'');
+            tr.appendChild(lastTd);
+            const sourceTd=document.createElement('td');
+            sourceTd.textContent=entry.source||'';
+            tr.appendChild(sourceTd);
+            queueBody.appendChild(tr);
+          });
+        }
+        queueLoaded=true;
+        const rowCount=list.length;
+        showMessage(queueMsg,'Loaded '+rowCount+' entr'+(rowCount===1?'y':'ies'),2200);
+      } catch(err){
+        if(DEBUG) console.error('[DASH][QUEUE_LOAD_ERR]',err);
+        showMessage(queueMsg,(err && err.message) || 'Failed to load queue',3200);
+      } finally {
+        if(refreshQueueBtn) refreshQueueBtn.disabled=false;
+      }
+    }
+    function getSelectedQueueRows(){
+      if(!queueBody) return [];
+      return Array.from(queueBody.querySelectorAll('tr')).filter(row=>{
+        const cb=row.querySelector('input[type="checkbox"]');
+        return cb && cb.checked;
+      });
+    }
+    async function approveSelected(){
+      const rows=getSelectedQueueRows();
+      if(!rows.length){ showMessage(queueMsg,'Select at least one entry',2200); return; }
+      const entries=rows.map(row=>{
+        const normalized=row.dataset.normalized||'';
+        const patternInput=row.querySelector('.patternInput');
+        const pattern=patternInput && patternInput.value ? patternInput.value.trim() : '';
+        return pattern ? { normalized, pattern } : { normalized };
+      }).filter(item=>item.normalized);
+      try{
+        if(approveBtn) approveBtn.disabled=true;
+        showMessage(queueMsg,'Approving...',2000);
+        const resp=await fetch('/api/learn-queue/approve',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ entries }) });
+        const body=await resp.json().catch(()=>({}));
+        if(!resp.ok){ showMessage(queueMsg, body?.message || 'Approve failed',3600); return; }
+        showMessage(queueMsg,'Approved '+(body.promoted||0)+' ('+(body.patterns?body.patterns.length:0)+' patterns)',2800);
+        queueLoaded=false;
+        loadQueue();
+      } catch(err){
+        if(DEBUG) console.error('[DASH][QUEUE_APPROVE_ERR]',err);
+        showMessage(queueMsg,(err && err.message) || 'Approve failed',3600);
+      } finally {
+        if(approveBtn) approveBtn.disabled=false;
+      }
+    }
+    async function removeSelected(){
+      const rows=getSelectedQueueRows();
+      if(!rows.length){ showMessage(queueMsg,'Select entries to remove',2200); return; }
+      const normalized=rows.map(row=>row.dataset.normalized).filter(Boolean);
+      try{
+        if(removeBtn) removeBtn.disabled=true;
+        showMessage(queueMsg,'Removing...',2000);
+        const resp=await fetch('/api/learn-queue/remove',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ normalized }) });
+        const body=await resp.json().catch(()=>({}));
+        if(!resp.ok){ showMessage(queueMsg, body?.message || 'Remove failed',3200); return; }
+        showMessage(queueMsg,'Removed '+(body.removed||0),2200);
+        queueLoaded=false;
+        loadQueue();
+      } catch(err){
+        if(DEBUG) console.error('[DASH][QUEUE_REMOVE_ERR]',err);
+        showMessage(queueMsg,(err && err.message) || 'Remove failed',3200);
+      } finally {
+        if(removeBtn) removeBtn.disabled=false;
+      }
+    }
+    if(lb){ lb.addEventListener('click', queueSelected); }
+    if(showQueueBtn && queuePanel){
+      showQueueBtn.addEventListener('click',()=>{
+        const show=queuePanel.style.display==='none';
+        queuePanel.style.display=show?'block':'none';
+        if(show && !queueLoaded){ loadQueue(); }
+      });
+    }
+    if(refreshQueueBtn){ refreshQueueBtn.addEventListener('click', loadQueue); }
+    if(approveBtn){ approveBtn.addEventListener('click', approveSelected); }
+    if(removeBtn){ removeBtn.addEventListener('click', removeSelected); }
+  })();`);
   // Emit synthetic button (debug mode only)
     lines.push("if(DEBUG){try{const eb=document.getElementById('emit');if(eb){eb.addEventListener('click',async()=>{try{eb.disabled=true;eb.textContent='Emitting...';const r=await fetch('/api/debug/emit?debug=true&level=SAFE&durationMs=5');if(r.ok){const js=await r.json();if(js.synthetic){addRow(js.synthetic);} } }catch(ex){if(DEBUG)console.error('[DASH][EMIT_ERR]',ex);}finally{eb.disabled=false;eb.textContent='Emit Synthetic';}});} }catch(ex){if(DEBUG)console.error('[DASH][EMIT_INIT_ERR]',ex);} }");
   // SSE
@@ -1013,6 +1252,6 @@ export class MetricsHttpServer {
   }
 }
 
-const port = process.env.METRICS_PORT ? parseInt(process.env.METRICS_PORT,10) : 9090;
-const scanMaxOffset = process.env.METRICS_PORT_SCAN_MAX ? parseInt(process.env.METRICS_PORT_SCAN_MAX,10) : 10;
+const port = process.env.METRICS_PORT ? parseInt(process.env.METRICS_PORT,10) : 9300;
+const scanMaxOffset = process.env.METRICS_PORT_SCAN_MAX ? parseInt(process.env.METRICS_PORT_SCAN_MAX,10) : 50;
 export const metricsHttpServer = new MetricsHttpServer({ port, enabled: true, scanMaxOffset, autoDisableOnFailure: true });

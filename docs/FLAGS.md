@@ -9,7 +9,7 @@ Unless noted, flags apply when launching via `node dist/server.js` or the packag
 | Flag | Alias | Description | Side Effects / Env Bridge |
 |------|-------|-------------|----------------------------|
 | `-k, --key <key>` | -- | Sets authentication key used to require `key` param on initialize / tool calls. | Sets `MCP_AUTH_KEY` in-process. |
-| `--metrics-port <port>` | -- | Preferred starting port for metrics HTTP server (scans upward if busy). Default 9090. | Sets `METRICS_PORT`. |
+| `--metrics-port <port>` | -- | Preferred starting port for metrics HTTP server (scans upward if busy). Default 9300. | Sets `METRICS_PORT`. |
 | `--no-metrics` | -- | Disables in-memory metrics registry & dashboard. | Forces `cfg.metrics.enable=false`. |
 | `--dump-config` | -- | Prints merged runtime configuration JSON then exits. | No server start. |
 | `--dry-run` | -- | Validates configuration & exits (health check for deployment). | No server start. |
@@ -35,8 +35,8 @@ Note: Some flags (`--minimal-stdio`, `--disable-self-destruct`, etc.) are refere
 | `METRICS_DEBUG` | Verbose metrics registry & baseline PS sample logs. | `false` | `registry.ts`, `runPowerShell.ts`, `httpServer.ts` |
 | `MCP_FRAMER_DEBUG` | Verbose output for framing transport (if framed mode). | `0` | `server.ts` (framer mode) |
 | `MCP_FRAMED_STDIO` | Force framed stdio transport (Content-Length). | `0` | `server.ts` |
-| `METRICS_PORT` | Starting port for metrics HTTP server. | `9090` | `httpServer.ts`, `cli.ts` |
-| `METRICS_PORT_SCAN_MAX` | Max additional ports to try if starting port busy. | `10` | `httpServer.ts` |
+| `METRICS_PORT` | Starting port for metrics HTTP server. | `9300` | `httpServer.ts`, `cli.ts` |
+| `METRICS_PORT_SCAN_MAX` | Max additional ports to try if starting port busy. | `50` | `httpServer.ts` |
 | `MCP_METRICS_ENABLE` | Override metrics enable in config (`true`/`false`). | Config default | `config.ts` |
 | `MCP_ENFORCE_AUTH` | Force auth required even if config disables. | Config default | `config.ts` |
 | `UNKNOWN_LEARN_SECRET` | Secret for securing unknown learning endpoints. | `dev-secret` | `learning.ts` |

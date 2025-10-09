@@ -35,7 +35,7 @@ function fetchJsonOnce(path, port) {
 
 async function fetchJsonMulti(path, detectedPort) {
   const tried = new Set();
-  const ports = [detectedPort, ...Array.from({ length: 10 }, (_, i) => 9090 + i)];
+  const ports = [detectedPort, ...Array.from({ length: 10 }, (_, i) => 9300 + i)];
   for (const p of ports) {
     if (p == null || tried.has(p)) continue; tried.add(p);
     try {

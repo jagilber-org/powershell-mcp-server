@@ -4,7 +4,7 @@ const { startServer, waitForReady, collect, rpc, request } = require('./util');
 function getMetrics(){
   return new Promise((resolve,reject)=>{
     const http = require('http');
-    http.get({ host:'127.0.0.1', port:9090, path:'/api/metrics' }, res=>{
+    http.get({ host:'127.0.0.1', port:9300, path:'/api/metrics' }, res=>{
       let data=''; res.on('data',d=> data+=d); res.on('end',()=>{ try{ resolve(JSON.parse(data)); }catch(e){ reject(e); } });
     }).on('error',reject);
   });
