@@ -357,6 +357,41 @@ The PowerShell MCP Server enables AI assistants to safely execute PowerShell com
 - PowerShell DSC (Desired State Configuration) automation
 - Cross-platform command translation (Windows → Linux)
 
+
+## Integration Points
+
+### MCP Index Server Patterns
+
+The powershell-mcp-server's tool execution patterns and security classification system informed the design of the [mcp-index-server](https://github.com/jagilber/mcp-index-server)'s instruction catalog governance. Both projects share MCP protocol best practices for tool lifecycle management, audit logging, and observability.
+
+**Cross-Project Value**:
+- Consistent MCP protocol implementation across portfolio (290+ and 108+ hours combined)
+- Shared observability patterns (metrics, health checks, audit trails)
+- Enterprise-grade governance and security standards
+
+**Technical Patterns Shared**:
+- Tool registration and discovery mechanisms
+- Structured audit logging with timestamps and classifications
+- Health check and metrics endpoints
+- Deterministic error handling and retry policies
+
+### Obfuscate MCP Server Integration
+
+The powershell-mcp-server uses PII detection from the [obfuscate-mcp-server](https://github.com/jagilber/obfuscate-mcp-server) for security hardening. PII patterns are integrated into the security classification engine and pre-commit hooks, demonstrating portfolio-wide commitment to privacy and security.
+
+**Cross-Project Value**:
+- Automated PII protection in PowerShell execution contexts
+- Security classification informed by PII risk levels
+- Compliance enforcement (GDPR, CCPA, HIPAA, SOX)
+
+### Related Portfolio Projects
+
+- **[obfuscate-mcp-server](https://github.com/jagilber/obfuscate-mcp-server)**: PII detection and obfuscation with dogfooding story (45+ hours)
+- **[mcp-index-server](https://github.com/jagilber/mcp-index-server)**: Enterprise instruction indexing with governance (108+ hours)
+- **[kusto-dashboard-manager](https://github.com/jagilber/kusto-dashboard-manager)**: Azure Data Explorer dashboard management
+- **[chrome-screenshot-sanitizer-pr](https://github.com/jagilber/chrome-screenshot-sanitizer-pr)**: Automated screenshot capture with PII sanitization
+
+
 ## Dependencies
 
 **Required:**
