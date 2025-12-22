@@ -389,7 +389,7 @@ The powershell-mcp-server uses PII detection from the [obfuscate-mcp-server](htt
 - **[obfuscate-mcp-server](https://github.com/jagilber/obfuscate-mcp-server)**: PII detection and obfuscation with dogfooding story (45+ hours)
 - **[mcp-index-server](https://github.com/jagilber/mcp-index-server)**: Enterprise instruction indexing with governance (108+ hours)
 - **[kusto-dashboard-manager](https://github.com/jagilber/kusto-dashboard-manager)**: Azure Data Explorer dashboard management
-- **[chrome-screenshot-sanitizer-pr](https://github.com/jagilber/chrome-screenshot-sanitizer-pr)**: Automated screenshot capture with PII sanitization
+- **[chrome-screenshot-sanitizer](https://github.com/jagilber/chrome-screenshot-sanitizer)**: Automated screenshot capture with PII sanitization
 
 
 ## Dependencies
