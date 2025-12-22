@@ -47,6 +47,25 @@ set MCP_AUTH_KEY="your-strong-key"   # Windows (PowerShell: $env:MCP_AUTH_KEY="y
 npm start
 ```
 
+## Portfolio Context
+
+This project is part of the [jagilber-org portfolio](https://github.com/jagilber-org), demonstrating enterprise-grade MCP server development.
+
+**Cross-Project Integration**:
+- Foundation for **kusto-dashboard-manager** PowerShell automation
+- Powers **obfuscate-mcp-server** file operations and transformations
+- Enables **chrome-screenshot-sanitizer** configuration management
+- Reference implementation for secure PowerShell MCP integration
+
+**Portfolio Highlights**:
+- Production-ready security classification system (SAFE → DANGEROUS → BLOCKED)
+- Enterprise configuration management patterns
+- Comprehensive test coverage (50+ Jest tests)
+- Progressive hardening and audit logging
+- TypeScript MCP server architecture
+
+[View Full Portfolio](https://github.com/jagilber-org) | [Integration Examples](https://github.com/jagilber-org#cross-project-integration)
+
 CLI examples (after build):
 
 ```bash
