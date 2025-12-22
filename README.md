@@ -1,5 +1,7 @@
 # PowerShell MCP Server
 
+> **Portfolio Project** | [View Full Portfolio](https://github.com/jagilber-org) | [Specifications](docs/specs/)
+
 Enterprise-ready Model Context Protocol (MCP) server exposing secure, policy-aware PowerShell automation and supporting tooling (syntax analysis, metrics, audit, deployment helpers). Designed for AI agent integration, reproducible observability, and progressive hardening.
 
 ## ✨ Key Features
@@ -79,7 +81,7 @@ Auth key (when `enforceAuth` true): set `MCP_AUTH_KEY`.
 | server_stats           | Metrics / threat snapshot            | Read-only                                                   |
 | audit / admin (future) | Administrative introspection         | Gated                                                       |
 
-Transitional Note: A legacy alias `run-powershell` is temporarily accepted for backwards compatibility in v1.3.6 only and scheduled for removal in v1.4.0. New integrations must use `run_powershell` and underscore parameter names (`aiAgentTimeoutSec`, etc.).
+Breaking Change: Legacy hyphenated name `run-powershell` removed. Use `run_powershell` and underscore parameter names (`aiAgentTimeoutSec`, etc.).
 
 ### Classification Flow
 
@@ -199,3 +201,15 @@ Open a GitHub Issue (choose a template) or read `docs/TROUBLESHOOTING.md`.
 ---
 **Status:** Phase 1 foundation. Interfaces & configuration may evolve (semantic versioning respected for published releases).
 
+
+
+## 📚 Documentation
+
+### Specifications
+
+- **[Product Specification](docs/specs/spec.md)** - User scenarios, functional requirements, success criteria, integration points
+- **[Technical Plan](docs/specs/plan.md)** - Architecture, implementation phases, performance benchmarks
+
+### Project Documentation
+
+- [Full Documentation Index](docs/) - Comprehensive guides and references
