@@ -4,6 +4,27 @@
 
 Enterprise-ready Model Context Protocol (MCP) server exposing secure, policy-aware PowerShell automation and supporting tooling (syntax analysis, metrics, audit, deployment helpers). Designed for AI agent integration, reproducible observability, and progressive hardening.
 
+## 🔐 Security Notice
+
+This repository follows [GitHub Spec-Kit](https://github.com/ambie-inc) security standards:
+
+- **Pre-commit hooks**: Prevents accidental commit of credentials, API keys, and sensitive configuration
+- **Environment variables**: Use `.env.example` as template, never commit actual `.env`
+- **Config files**: `config/*.example.json` files are templates; actual config files are gitignored
+- **Auth keys**: Never commit `MCP_AUTH_KEY` values or authentication tokens
+- **PowerShell scripts**: All examples use placeholder paths (e.g., `C:\Example\Path`, generic commands)
+- **Learned patterns**: Sanitize `data/learned-safe.json` before committing (use generic command examples)
+- **Audit logs**: All `logs/*.log` files are gitignored (may contain command history)
+
+**PowerShell Safety**:
+- Commands classified by security level (SAFE → RISKY → DANGEROUS → BLOCKED)
+- RISKY/UNKNOWN commands require explicit `confirmed: true` in API calls
+- All PowerShell execution is audited with timestamps and safety classifications
+
+**For contributors**: Review security guidelines in the Contributing section before making changes.
+
+---
+
 ## ✨ Key Features
 
 - Hierarchical security levels: SAFE -> RISKY -> DANGEROUS (reserved) -> CRITICAL -> BLOCKED -> UNKNOWN (learning path)
@@ -32,21 +53,6 @@ tests/                   Jest tests
 tools/                   Auxiliary analysis scripts
 ```
 
-## 🚀 Quick Start
-
-```bash
-npm install
-npm run build
-npm start            # Starts MCP server
-```
-
-Optional auth key:
-
-```bash
-set MCP_AUTH_KEY="your-strong-key"   # Windows (PowerShell: $env:MCP_AUTH_KEY="your-strong-key")
-npm start
-```
-
 ## Portfolio Context
 
 This project is part of the [jagilber-org portfolio](https://github.com/jagilber-org), demonstrating enterprise-grade MCP server development.
@@ -65,6 +71,77 @@ This project is part of the [jagilber-org portfolio](https://github.com/jagilber
 - TypeScript MCP server architecture
 
 [View Full Portfolio](https://github.com/jagilber-org) | [Integration Examples](https://github.com/jagilber-org#cross-project-integration)
+
+## 🚀 Quick Start
+
+### First-Time Setup
+
+**Prerequisites:**
+- Node.js 18 or higher
+- PowerShell 5.1+ (Windows) or PowerShell Core 7+ (cross-platform)
+- TypeScript 5+ (installed via npm)
+- VS Code recommended for development
+
+**Initial Setup:**
+
+```bash
+# Clone the repository
+git clone https://github.com/jagilber-org/powershell-mcp-server.git
+cd powershell-mcp-server
+
+# Install dependencies
+npm install
+
+# Build the TypeScript source
+npm run build
+
+# Verify build completed successfully
+ls dist/  # Should show compiled JavaScript files
+```
+
+**Optional: Configure Authentication:**
+
+```powershell
+# Windows PowerShell
+$env:MCP_AUTH_KEY="your-strong-key-here"
+
+# Windows Command Prompt
+set MCP_AUTH_KEY=your-strong-key-here
+
+# Linux/macOS
+export MCP_AUTH_KEY="your-strong-key-here"
+```
+
+**Start the MCP Server:**
+
+```bash
+npm start            # Starts MCP server with default configuration
+```
+
+**Verify Installation:**
+
+```bash
+# Check configuration
+node dist/cli.js --dump-config
+
+# Test syntax checker
+node dist/cli.js --no-metrics --dry-run
+```
+
+### Basic Usage
+
+```bash
+npm install
+npm run build
+npm start            # Starts MCP server
+```
+
+Optional auth key:
+
+```bash
+set MCP_AUTH_KEY="your-strong-key"   # Windows (PowerShell: $env:MCP_AUTH_KEY="your-strong-key")
+npm start
+```
 
 CLI examples (after build):
 
@@ -201,13 +278,118 @@ See `docs/HARDENING-DESIGN.md` for details.
 
 ## 🤝 Contributing
 
-1. Fork & branch (`feat/<name>`)
-2. `npm install && npm run build`
-3. Add / update tests
-4. Ensure hooks pass
-5. Open PR with concise summary & risk notes
+### Code Standards
 
-Refer to `CONTRIBUTING.md` & `CODE_OF_CONDUCT.md`.
+This project follows strict TypeScript and PowerShell development standards:
+
+- **TypeScript Strict**: All code uses TypeScript strict mode with full type safety
+- **ESLint Configuration**: Follow ESLint rules defined in `.eslintrc.js`
+- **PowerShell Best Practices**: Use approved verbs, proper error handling, comment-based help
+- **Testing**: All features require Jest test coverage before merge (maintain 50+ passing tests)
+- **MCP Compliance**: Follow Model Context Protocol specifications (JSON-RPC 2.0)
+- **Security Classification**: All PowerShell commands must have security level classification
+- **Code Review**: All changes undergo peer review
+
+**Testing Requirements:**
+- Run `npm run test:jest` before committing
+- Add tests for new MCP tools and PowerShell patterns
+- Test security classification for new command patterns
+- Verify pre-commit hooks pass (no skipped tests)
+
+**Build Process:**
+```bash
+npm install              # Install dependencies
+npm run build           # Compile TypeScript
+npm run test:jest       # Run test suite
+node dist/cli.js --dump-config  # Verify configuration
+```
+
+### Repository Ownership Policy
+
+This repository follows strict contribution guidelines per [GitHub Spec-Kit](https://github.com/ambie-inc) standards:
+
+- **No automatic PRs**: Contributors must have explicit permission before creating pull requests
+- **Manual review required**: All contributions undergo code review and security audit
+- **Testing mandatory**: All changes must pass Jest test suite and add appropriate test coverage
+- **Documentation required**: Update relevant documentation with changes
+
+**Before contributing:**
+1. Open an issue to discuss proposed changes
+2. Wait for maintainer approval
+3. Follow code standards and testing requirements
+4. Ensure all CI checks pass
+
+### Documentation Standards
+
+**IMPORTANT**: Follow these documentation practices:
+
+- ✅ **Use placeholder values** in all examples:
+  - File paths: `C:\Example\Path\script.ps1`, `/home/user/example/`
+  - Commands: `Get-Example`, `Write-SampleOutput`, generic cmdlets
+  - Module names: `ExampleModule`, `SamplePowerShellModule`
+  - Auth keys: `your-strong-key-here`, `example-auth-key-123`
+  - URLs: `https://example.com`, `http://api.example.org`
+  - Server names: `example-server`, `contoso.local`
+
+- ❌ **Never include**:
+  - Real credentials, API keys, or auth tokens
+  - Actual file paths from development machines
+  - Production server names or internal hostnames
+  - Company-specific PowerShell modules or scripts
+  - Personal information or actual usernames
+  - Real command history from audit logs
+
+- ✅ **Do document**:
+  - Security classification levels and criteria
+  - Configuration options and environment variables
+  - MCP tool parameters and response formats
+  - PowerShell execution patterns and best practices
+  - Error handling and timeout behavior
+
+**Security in Documentation:**
+- Review security guidelines before documenting features
+- Never document internal security bypass mechanisms
+- Use generic examples for PowerShell command patterns
+- Sanitize any logs or traces containing command history
+- Redact learned-safe.json examples (use generic commands)
+
+### Development Workflow
+
+1. **Fork the repository**
+
+2. **Create a feature branch**:
+
+   ```bash
+   git checkout -b feat/my-new-feature
+   ```
+
+3. **Make your changes**:
+   - Write code following existing style (TypeScript strict mode)
+   - Add security classification for new PowerShell patterns
+   - Add tests for new functionality
+   - Update documentation
+
+4. **Run tests**:
+
+   ```bash
+   npm run test:jest
+   ```
+
+5. **Commit changes**:
+
+   ```bash
+   git commit -am "feat: Add new feature description"
+   ```
+
+6. **Push to your fork**:
+
+   ```bash
+   git push origin feat/my-new-feature
+   ```
+
+7. **Create Pull Request**
+
+Refer to `CONTRIBUTING.md` & `CODE_OF_CONDUCT.md` for detailed guidelines.
 
 ## 📄 License
 
@@ -216,11 +398,6 @@ See `LICENSE`.
 ## 📬 Support / Questions
 
 Open a GitHub Issue (choose a template) or read `docs/TROUBLESHOOTING.md`.
-
----
-**Status:** Phase 1 foundation. Interfaces & configuration may evolve (semantic versioning respected for published releases).
-
-
 
 ## 📚 Documentation
 
@@ -232,3 +409,6 @@ Open a GitHub Issue (choose a template) or read `docs/TROUBLESHOOTING.md`.
 ### Project Documentation
 
 - [Full Documentation Index](docs/) - Comprehensive guides and references
+
+---
+**Status:** Phase 1 foundation. Interfaces & configuration may evolve (semantic versioning respected for published releases).
