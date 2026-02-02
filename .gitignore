@@ -6,12 +6,66 @@ yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
 
+# ===================================================================
+# RUNTIME ARTIFACTS - NEVER COMMIT
+# ===================================================================
+# These directories contain runtime-generated data, test artifacts,
+# and temporary files that MUST NEVER be committed to the repository.
+
+# Temporary directories and scratch space (ALL test artifacts)
+tmp/
+tmp/**
+tmp/**/*.tmp
+temp/
+temp/**
+
+# Runtime data and state directories
+data/
+data/**
+!data/.keep
+memory/
+memory/**
+!memory/.keep
+metrics/
+metrics/**
+!metrics/.keep
+
+# Log files and runtime logs
+logs/
+logs/**
+!logs/.keep
+*.ndjson
+!logs/trace/.keep
+
+# Test run sentinel / status markers (ALL test markers)
+.test-run-complete.*.marker
+.test-run-complete.*
+.test-run-status.json
+.test-run-complete.latest
+.baseline.sentinel
+test-results/
+test-results/**
+
+# Coverage reports
+coverage/
+coverage/**
+.nyc_output/
+*.lcov
+
+# Backup directories
+backups/
+*_backup_*/
+
+# Sandbox and working directories
+sandbox-test-wd/
+wd-allowed/**/*.txt
+!wd-allowed/.keep
+
 # Compiled output
 dist/*
 out/
 
 # Temporary files and build artifacts
-temp/
 *.tmp
 *.temp
 .cache/
@@ -26,22 +80,9 @@ pids
 *.seed
 *.pid.lock
 
-# Logs
-logs/*.log
-logs/*.ndjson
-*.log
-trace.log
-
-# Coverage directory used by tools like istanbul
-coverage/
-*.lcov
+# Additional coverage formats
 coverage.xml
 testResults.xml
-
-# Data files (should be backed up separately)
-data/learned-safe.json
-data/learnCandidates.jsonl
-data/api-metrics.json
 
 # Deployment artifacts
 deploy/*.tgz
@@ -140,10 +181,6 @@ public
 .yarn/install-state.gz
 .pnp.*
 
-# Logs
-logs/
-*.log
-
 # OS generated files
 .DS_Store
 .DS_Store?
@@ -157,7 +194,7 @@ Thumbs.db
 Desktop.ini
 .BIN/
 
-# MCP Server specific  
+# MCP Server specific
 # Keep logs/ out since they contain runtime information
 # Keep any auth tokens or credentials out
 *.key
@@ -172,11 +209,7 @@ credentials.json
 *.swo
 *~
 
-# Temporary files
-*.tmp
-*.temp
-
-# Added tmp adaptive artifact
+# Additional temporary patterns and specific exclusions
 tmp-adaptive.json
 tmp_*.json
 tmp_*.txt
